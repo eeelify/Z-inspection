@@ -1,23 +1,12 @@
 import React, { useState } from 'react';
-import {
-  Plus,
-  Folder,
-  MessageSquare,
-  Users,
-  LogOut,
-  Search,
-  BarChart3,
-  AlertTriangle,
-  UserPlus,
-  X,
-} from 'lucide-react';
+import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, AlertTriangle, UserPlus, X, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
-import { mockUseCases } from '../utils/mockData';
 
 interface AdminDashboardEnhancedProps {
   currentUser: User;
   projects: Project[];
   users: User[];
+  useCases?: UseCase[];
   onViewProject: (project: Project) => void;
   onStartEvaluation: (project: Project) => void;
   onCreateProject: (project: Partial<Project>) => void;
@@ -28,136 +17,120 @@ interface AdminDashboardEnhancedProps {
 const statusColors = {
   ongoing: { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
   proven: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
-  disproven: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
+  disproven: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' }
 };
 
-const stageLabels: Record<string, string> = {
+const stageLabels = {
   'set-up': 'Set-up',
-  assess: 'Assess',
-  resolve: 'Resolve',
+  assess: 'Assess', 
+  resolve: 'Resolve'
 };
 
-const useCaseStatusColors: Record<
-  UseCase['status'],
-  { bg: string; text: string }
-> = {
-  assigned: { bg: 'bg-blue-100', text: 'text-blue-800' },
+const useCaseStatusColors = {
+  'assigned': { bg: 'bg-blue-100', text: 'text-blue-800' },
   'in-review': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
-  completed: { bg: 'bg-green-100', text: 'text-green-800' },
+  'completed': { bg: 'bg-green-100', text: 'text-green-800' }
 };
 
 export function AdminDashboardEnhanced({
   currentUser,
   projects,
   users,
+  useCases = [],
   onViewProject,
   onStartEvaluation,
   onCreateProject,
   onNavigate,
-  onLogout,
+  onLogout
 }: AdminDashboardEnhancedProps) {
-  const [activeTab, setActiveTab] =
-    useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports'>(
-      'dashboard',
-    );
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAssignExpertsModal, setShowAssignExpertsModal] = useState(false);
-  const [selectedUseCaseForAssignment, setSelectedUseCaseForAssignment] =
-    useState<UseCase | null>(null);
-  const [useCases, setUseCases] = useState<UseCase[]>(mockUseCases);
+  const [selectedUseCaseForAssignment, setSelectedUseCaseForAssignment] = useState<UseCase | null>(null);
 
-  const filteredProjects = projects.filter((p) =>
-    p.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  const filteredProjects = projects.filter(p =>
+    p.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const riskLevels = [
-    { level: 'Critical', count: 2, color: 'bg-red-500', percentage: 15 },
+    { level: 'Critical', count: projects.filter(p => p.status === 'disproven').length, color: 'bg-red-500', percentage: 15 },
     { level: 'High', count: 5, color: 'bg-orange-500', percentage: 35 },
-    { level: 'Medium', count: 8, color: 'bg-yellow-500', percentage: 50 },
-    { level: 'Low', count: 12, color: 'bg-green-500', percentage: 80 },
+    { level: 'Medium', count: projects.filter(p => p.status === 'ongoing').length, color: 'bg-yellow-500', percentage: 50 },
+    { level: 'Low', count: projects.filter(p => p.status === 'proven').length, color: 'bg-green-500', percentage: 80 }
   ];
 
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        {/* Role Color Bar */}
         <div className="h-1 bg-gradient-to-r from-blue-600 to-blue-800" />
-
+        
         <div className="p-6 border-b border-gray-200">
-          <div className="text-xl text-gray-900 mb-1">Z-Inspection</div>
-          <div className="text-xs text-gray-600">Admin Portal</div>
+          <div className="text-xl font-bold text-gray-900 mb-1">Z-Inspection</div>
+          <div className="text-xs text-gray-500 uppercase tracking-wider">Admin Portal</div>
         </div>
 
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-6 border-b border-gray-200">
           <div className="flex items-center">
-            <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center text-white mr-3">
+            <div className="w-10 h-10 bg-gray-900 rounded-full flex items-center justify-center text-white font-medium mr-3">
               {currentUser.name.charAt(0)}
             </div>
-            <div className="text-sm">
-              <div className="text-gray-900">{currentUser.name}</div>
-              <div className="text-gray-500">Admin</div>
+            <div className="text-sm overflow-hidden">
+              <div className="text-gray-900 font-medium truncate">{currentUser.name}</div>
+              <div className="text-gray-500 text-xs">Administrator</div>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 px-3 py-6 space-y-1">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full px-4 py-3 mb-2 flex items-center rounded-lg ${
-              activeTab === 'dashboard'
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-700 hover:bg-gray-100'
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <Folder className="h-4 w-4 mr-3" />
+            <Folder className="h-5 w-5 mr-3" />
             Dashboard
           </button>
           <button
             onClick={() => setActiveTab('use-case-assignments')}
-            className={`w-full px-4 py-3 mb-2 flex items-center rounded-lg ${
-              activeTab === 'use-case-assignments'
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-700 hover:bg-gray-100'
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'use-case-assignments' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <UserPlus className="h-4 w-4 mr-3" />
-            Use Case Assignments
+            <UserPlus className="h-5 w-5 mr-3" />
+            Assignments
           </button>
           <button
             onClick={() => setActiveTab('project-creation')}
-            className={`w-full px-4 py-3 mb-2 flex items-center rounded-lg ${
-              activeTab === 'project-creation'
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-700 hover:bg-gray-100'
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'project-creation' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <Plus className="h-4 w-4 mr-3" />
-            Project Creation
+            <Plus className="h-5 w-5 mr-3" />
+            Create Project
           </button>
           <button
             onClick={() => onNavigate('other-members')}
-            className="w-full px-4 py-3 mb-2 flex items-center text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <Users className="h-4 w-4 mr-3" />
+            <Users className="h-5 w-5 mr-3" />
             Members
           </button>
           <button
             onClick={() => setActiveTab('reports')}
-            className={`w-full px-4 py-3 mb-2 flex items-center rounded-lg ${
-              activeTab === 'reports'
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-gray-700 hover:bg-gray-100'
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <BarChart3 className="h-4 w-4 mr-3" />
-            Reports
+            <BarChart3 className="h-5 w-5 mr-3" />
+            Analytics
           </button>
           <button
             onClick={() => onNavigate('shared-area')}
-            className="w-full px-4 py-3 mb-2 flex items-center text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <MessageSquare className="h-4 w-4 mr-3" />
+            <MessageSquare className="h-5 w-5 mr-3" />
             Shared Area
           </button>
         </nav>
@@ -165,24 +138,24 @@ export function AdminDashboardEnhanced({
         <div className="p-4 border-t border-gray-200">
           <button
             onClick={onLogout}
-            className="w-full px-4 py-3 flex items-center text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="w-full px-4 py-2 flex items-center text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
           >
-            <LogOut className="h-4 w-4 mr-3" />
+            <LogOut className="h-5 w-5 mr-3" />
             Logout
           </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto bg-gray-50">
         {activeTab === 'dashboard' && (
           <DashboardTab
             projects={filteredProjects}
-            users={users}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             onViewProject={onViewProject}
             riskLevels={riskLevels}
+            onCreateNew={() => setActiveTab('project-creation')}
           />
         )}
 
@@ -190,7 +163,7 @@ export function AdminDashboardEnhanced({
           <UseCaseAssignmentsTab
             useCases={useCases}
             users={users}
-            onAssignExperts={(useCase) => {
+            onAssignExperts={(useCase: UseCase) => {
               setSelectedUseCaseForAssignment(useCase);
               setShowAssignExpertsModal(true);
             }}
@@ -198,11 +171,18 @@ export function AdminDashboardEnhanced({
         )}
 
         {activeTab === 'project-creation' && (
-          <ProjectCreationTab users={users} onCreateProject={onCreateProject} />
+          <ProjectCreationTab
+            users={users}
+            useCases={useCases}
+            onCreateProject={onCreateProject}
+          />
         )}
 
         {activeTab === 'reports' && (
-          <ReportsTab projects={projects} riskLevels={riskLevels} />
+          <ReportsTab
+            projects={projects}
+            riskLevels={riskLevels}
+          />
         )}
       </div>
 
@@ -215,19 +195,24 @@ export function AdminDashboardEnhanced({
             setShowAssignExpertsModal(false);
             setSelectedUseCaseForAssignment(null);
           }}
-          onAssign={(expertIds, notes) => {
-            setUseCases((prev) =>
-              prev.map((uc) =>
-                uc.id === selectedUseCaseForAssignment.id
-                  ? {
-                      ...uc,
-                      assignedExperts: expertIds,
-                      adminNotes: notes,
-                      status: 'in-review',
-                    }
-                  : uc,
-              ),
-            );
+          onAssign={async (expertIds, notes) => {
+             try {
+              const response = await fetch(`http://127.0.0.1:5000/api/use-cases/${selectedUseCaseForAssignment.id}/assign`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  assignedExperts: expertIds,
+                  adminNotes: notes
+                })
+              });
+
+              if (response.ok) {
+                alert("Experts assigned successfully!");
+              }
+            } catch (error) {
+              console.error("Assignment error:", error);
+              alert("Failed to assign experts.");
+            }
             setShowAssignExpertsModal(false);
             setSelectedUseCaseForAssignment(null);
           }}
@@ -237,61 +222,54 @@ export function AdminDashboardEnhanced({
   );
 }
 
-// Dashboard Tab Component
-function DashboardTab({
-  projects,
-  users,
-  searchQuery,
-  setSearchQuery,
-  onViewProject,
-  riskLevels,
-}: any) {
+// --- SUB COMPONENTS ---
+
+function DashboardTab({ projects, searchQuery, setSearchQuery, onViewProject, riskLevels, onCreateNew }: any) {
   return (
     <>
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl text-gray-900 mb-2">Admin Dashboard</h1>
-            <p className="text-gray-600">Manage and oversee all AI evaluation projects</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Overview</h1>
+            <p className="text-gray-600">Monitor all evaluation projects and risk assessments</p>
           </div>
-          <button className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 flex items-center">
+          <button 
+            onClick={onCreateNew}
+            className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 flex items-center shadow-sm"
+          >
             <Plus className="h-4 w-4 mr-2" />
             New Project
           </button>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search projects..."
-            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
       </div>
 
-      {/* AI Ethics Heatmap */}
-      <div className="px-8 py-6 bg-gradient-to-br from-blue-50 to-purple-50 border-b border-gray-200">
-        <h2 className="text-lg text-gray-900 mb-4 flex items-center">
-          <AlertTriangle className="h-5 w-5 mr-2 text-orange-600" />
-          AI Ethics Risk Heatmap
+      <div className="px-8 py-6 bg-gray-50/50 border-b border-gray-200">
+        <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center uppercase tracking-wider">
+          <AlertTriangle className="h-4 w-4 mr-2 text-orange-600" />
+          Risk Distribution
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {riskLevels.map((risk: any) => (
-            <div
-              key={risk.level}
-              className="bg-white rounded-lg p-4 border border-gray-200"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-gray-600">{risk.level} Risk</span>
-                <div className={`w-3 h-3 rounded-full ${risk.color}`} />
+            <div key={risk.level} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-600">{risk.level}</span>
+                <div className={`w-2 h-2 rounded-full ${risk.color}`} />
               </div>
-              <div className="text-2xl text-gray-900 mb-2">{risk.count}</div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="text-2xl font-bold text-gray-900 mb-2">{risk.count}</div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5">
                 <div
-                  className={`${risk.color} h-2 rounded-full`}
+                  className={`${risk.color} h-1.5 rounded-full`}
                   style={{ width: `${risk.percentage}%` }}
                 />
               </div>
@@ -300,51 +278,48 @@ function DashboardTab({
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-8 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project: Project) => (
             <div
               key={project.id}
               onClick={() => onViewProject(project)}
-              className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow cursor-pointer"
+              className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-all cursor-pointer group"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h3 className="text-lg text-gray-900 mb-2">{project.title}</h3>
-                  <p className="text-sm text-gray-600 line-clamp-2">
-                    {project.shortDescription}
-                  </p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
+                    {project.title}
+                  </h3>
+                  <p className="text-sm text-gray-500 line-clamp-2 h-10">{project.shortDescription}</p>
                 </div>
               </div>
 
               <div className="flex items-center space-x-2 mb-4">
-                <span
-                  className={`px-2 py-1 text-xs rounded-full ${
-                    statusColors[project.status].bg
-                  } ${statusColors[project.status].text}`}
-                >
+                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
                   {project.status.toUpperCase()}
                 </span>
-                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
+                <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
                   {stageLabels[project.stage]}
                 </span>
               </div>
 
               <div className="mb-4">
-                <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                   <span>Progress</span>
-                  <span>{project.progress}%</span>
+                  <span className="font-medium text-gray-700">{project.progress}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-100 rounded-full h-1.5">
                   <div
-                    className="bg-blue-600 h-2 rounded-full"
+                    className="bg-blue-600 h-1.5 rounded-full transition-all"
                     style={{ width: `${project.progress}%` }}
                   />
                 </div>
               </div>
 
-              <div className="text-xs text-gray-500">
-                Last updated: {new Date(project.createdAt).toLocaleDateString()}
+              <div className="pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+                <span>Updated: {new Date(project.createdAt).toLocaleDateString()}</span>
+                {project.isNew && <span className="text-blue-600 font-medium">New Project</span>}
               </div>
             </div>
           ))}
@@ -354,109 +329,79 @@ function DashboardTab({
   );
 }
 
-// Use Case Assignments Tab
 function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
   return (
     <>
       <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <h1 className="text-2xl text-gray-900 mb-2">Use Case Assignments</h1>
-        <p className="text-gray-600">Assign experts to evaluate use cases</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Use Case Assignments</h1>
+        <p className="text-gray-600">Manage expert assignments for specific use cases</p>
       </div>
 
       <div className="px-8 py-6">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">
-                  Title
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">
-                  Owner
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">
-                  Assigned Team
-                </th>
-                <th className="px-6 py-3 text-left text-xs text-gray-600 uppercase tracking-wider">
-                  Progress
-                </th>
-                <th className="px-6 py-3 text-right text-xs text-gray-600 uppercase tracking-wider">
-                  Actions
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Use Case</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Owner</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned Experts</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {useCases.map((useCase: UseCase) => {
-                const owner = users.find((u: User) => u.id === useCase.ownerId);
-                const assignedExperts = users.filter((u: User) =>
-                  useCase.assignedExperts?.includes(u.id),
-                );
-
-                return (
-                  <tr key={useCase.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{useCase.title}</div>
-                      <div className="text-xs text-gray-500">
-                        {useCase.aiSystemCategory}
-                      </div>
+              {useCases.length === 0 ? (
+                 <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                        No use cases found. Use Case Owners need to create them first.
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {owner?.name || 'Unknown'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          useCaseStatusColors[useCase.status].bg
-                        } ${useCaseStatusColors[useCase.status].text}`}
-                      >
-                        {useCase.status.replace('-', ' ').toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex -space-x-2">
-                        {assignedExperts.slice(0, 3).map((expert: User) => (
-                          <div
-                            key={expert.id}
-                            className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 border-2 border-white flex items-center justify-center text-white text-xs"
-                            title={expert.name}
-                          >
-                            {expert.name.charAt(0)}
-                          </div>
-                        ))}
-                        {assignedExperts.length > 3 && (
-                          <div className="w-8 h-8 rounded-full bg-gray-300 border-2 border-white flex items-center justify-center text-gray-600 text-xs">
-                            +{assignedExperts.length - 3}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full"
-                            style={{ width: `${useCase.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-600">
-                          {useCase.progress}%
+                 </tr>
+              ) : (
+                useCases.map((useCase: UseCase) => {
+                    const owner = users.find((u: User) => u.id === useCase.ownerId);
+                    const assignedExperts = users.filter((u: User) => useCase.assignedExperts?.includes(u.id));
+                    
+                    return (
+                    <tr key={useCase.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">{useCase.title}</div>
+                        <div className="text-xs text-gray-500">{useCase.aiSystemCategory || 'No category'}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Unknown'}</td>
+                        <td className="px-6 py-4">
+                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status]?.text || 'text-gray-800'}`}>
+                            {useCase.status.replace('-', ' ').toUpperCase()}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => onAssignExperts(useCase)}
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                      >
-                        Assign Experts
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                        </td>
+                        <td className="px-6 py-4">
+                        <div className="flex -space-x-2">
+                            {assignedExperts.length === 0 ? (
+                                <span className="text-xs text-gray-400 italic">None</span>
+                            ) : (
+                                assignedExperts.map((expert: User) => (
+                                <div
+                                    key={expert.id}
+                                    className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                    title={`${expert.name} (${expert.role})`}
+                                >
+                                    {expert.name.charAt(0)}
+                                </div>
+                                ))
+                            )}
+                        </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                        <button
+                            onClick={() => onAssignExperts(useCase)}
+                            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                        >
+                            Manage Team
+                        </button>
+                        </td>
+                    </tr>
+                    );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -465,112 +410,170 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
   );
 }
 
-// Project Creation Tab
-function ProjectCreationTab({ users, onCreateProject }: any) {
+function ProjectCreationTab({ users, useCases = [], onCreateProject }: any) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [targetDate, setTargetDate] = useState('');
-  const [selectedOwner, setSelectedOwner] = useState('');
+  const [selectedUseCaseId, setSelectedUseCaseId] = useState('');
+  const [selectedTeam, setSelectedTeam] = useState<string[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (selectedTeam.length === 0) {
+      alert("Please assign at least one team member (Expert or Owner) to create a project.");
+      return;
+    }
+
     onCreateProject({
       title,
       shortDescription: description.substring(0, 100),
       fullDescription: description,
       targetDate,
-      assignedUsers: selectedOwner ? [selectedOwner] : [],
+      assignedUsers: selectedTeam,
+      useCase: selectedUseCaseId || undefined
     });
+    
     setTitle('');
     setDescription('');
     setTags('');
     setTargetDate('');
-    setSelectedOwner('');
+    setSelectedUseCaseId('');
+    setSelectedTeam([]);
   };
 
-  // Admin olmayan herkesi (Uzmanları, Use Case sahiplerini vs.) listeye ekle
-  const useOwners = users.filter((u: User) => u.role !== 'admin');
+  const toggleUser = (userId: string) => {
+    if (selectedTeam.includes(userId)) {
+      setSelectedTeam(selectedTeam.filter(id => id !== userId));
+    } else {
+      setSelectedTeam([...selectedTeam, userId]);
+    }
+  };
+
+  const experts = users.filter((u: User) => u.role !== 'admin');
 
   return (
     <>
       <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <h1 className="text-2xl text-gray-900 mb-2">Create New Project</h1>
-        <p className="text-gray-600">Set up a new AI evaluation project</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Create New Project</h1>
+        <p className="text-gray-600">Initialize a new evaluation project linked to a Use Case</p>
       </div>
 
-      <div className="px-8 py-6">
-        <div className="max-w-3xl mx-auto">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white rounded-lg border border-gray-200 p-8 space-y-6"
-          >
-            <div>
-              <label className="block text-sm mb-2 text-gray-700">Project Title *</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter project title..."
-                required
-              />
+      <div className="px-8 py-8">
+        <div className="max-w-2xl mx-auto mb-20"> 
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
+              
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <label className="block text-sm font-medium mb-2 text-blue-900 flex items-center">
+                  <LinkIcon className="h-4 w-4 mr-2" />
+                  Link to a Use Case (Optional)
+                </label>
+                <select
+                  value={selectedUseCaseId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedUseCaseId(id);
+                    if (id) {
+                      const uc = useCases.find((u: UseCase) => u.id === id);
+                      if (uc) {
+                        setTitle(uc.title);
+                        setDescription(uc.description);
+                      }
+                    }
+                  }}
+                  className="w-full px-4 py-2.5 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-blue-900"
+                >
+                  <option value="">Select a submitted Use Case...</option>
+                  {useCases.map((uc: UseCase) => (
+                    <option key={uc.id} value={uc.id}>
+                      {uc.title} (Owner: {users.find((u: User) => u.id === uc.ownerId)?.name || 'Unknown'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Project Title *</label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Cardiac AI Diagnosis System"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Description *</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Describe the AI system and evaluation goals..."
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Target Date *</label>
+                  <input
+                    type="date"
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Category Tags</label>
+                  <input
+                    type="text"
+                    value={tags}
+                    onChange={(e) => setTags(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="medical, finance..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-3 text-gray-700">
+                    Assign Evaluation Team (Experts & Owners)
+                </label>
+                <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  {experts.map((user: User) => (
+                    <label key={user.id} className={`flex items-center p-2 rounded cursor-pointer transition-colors ${selectedTeam.includes(user.id) ? 'bg-blue-50 border-blue-100' : 'hover:bg-gray-50'}`}>
+                      <input
+                        type="checkbox"
+                        checked={selectedTeam.includes(user.id)}
+                        onChange={() => toggleUser(user.id)}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3"
+                      />
+                      <div className="flex items-center">
+                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 mr-2 font-medium">
+                          {user.name.charAt(0)}
+                        </div>
+                        <span className="text-sm text-gray-900">{user.name}</span>
+                        <span className="text-xs text-gray-500 ml-2 bg-gray-100 px-2 py-0.5 rounded-full capitalize">
+                            {user.role.replace('-', ' ')}
+                        </span>
+                      </div>
+                      {selectedTeam.includes(user.id) && <CheckCircle2 className="w-4 h-4 text-blue-600 ml-auto" />}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm mb-2 text-gray-700">Description *</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={5}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Describe the AI system and evaluation objectives..."
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2 text-gray-700">Tags</label>
-              <input
-                type="text"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="healthcare, medical, diagnostics (comma-separated)"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2 text-gray-700">Target Date *</label>
-              <input
-                type="date"
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2 text-gray-700">Assign Use-case Owner</label>
-              <select
-                value={selectedOwner}
-                onChange={(e) => setSelectedOwner(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select an owner...</option>
-                {useOwners.map((user: User) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name} - {user.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="pt-4">
+            <div className="flex justify-end pb-8">
               <button
                 type="submit"
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 shadow-lg transition-all transform hover:-translate-y-0.5"
               >
                 Create Project
               </button>
@@ -582,72 +585,11 @@ function ProjectCreationTab({ users, onCreateProject }: any) {
   );
 }
 
-// Reports Tab
 function ReportsTab({ projects, riskLevels }: any) {
   return (
-    <>
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <h1 className="text-2xl text-gray-900 mb-2">Reports & Analytics</h1>
-        <p className="text-gray-600">Overview of platform metrics and insights</p>
-      </div>
-
-      <div className="px-8 py-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-sm text-gray-600 mb-2">Total Projects</div>
-            <div className="text-3xl text-gray-900">{projects.length}</div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-sm text-gray-600 mb-2">In Progress</div>
-            <div className="text-3xl text-yellow-600">
-              {projects.filter((p: Project) => p.status === 'ongoing').length}
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-sm text-gray-600 mb-2">Completed</div>
-            <div className="text-3xl text-green-600">
-              {projects.filter((p: Project) => p.status === 'proven').length}
-            </div>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="text-sm text-gray-600 mb-2">Average Progress</div>
-            <div className="text-3xl text-blue-600">
-              {projects.length
-                ? Math.round(
-                    projects.reduce(
-                      (acc: number, p: Project) => acc + p.progress,
-                      0,
-                    ) / projects.length,
-                  )
-                : 0}
-              %
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg text-gray-900 mb-4">Risk Distribution</h2>
-          <div className="space-y-4">
-            {riskLevels.map((risk: any) => (
-              <div key={risk.level}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-700">{risk.level} Risk</span>
-                  <span className="text-sm text-gray-900">
-                    {risk.count} projects
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className={`${risk.color} h-3 rounded-full`}
-                    style={{ width: `${risk.percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </>
+    <div className="flex items-center justify-center h-full text-gray-500">
+        Reports module coming soon...
+    </div>
   );
 }
 
@@ -659,24 +601,15 @@ interface AssignExpertsModalProps {
   onAssign: (expertIds: string[], notes: string) => void;
 }
 
-function AssignExpertsModal({
-  useCase,
-  users,
-  onClose,
-  onAssign,
-}: AssignExpertsModalProps) {
-  const [selectedExperts, setSelectedExperts] = useState<string[]>(
-    useCase.assignedExperts || [],
-  );
+function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExpertsModalProps) {
+  const [selectedExperts, setSelectedExperts] = useState<string[]>(useCase.assignedExperts || []);
   const [adminNotes, setAdminNotes] = useState(useCase.adminNotes || '');
 
-  const experts = users.filter(
-    (u) => u.role === 'ethical-expert' || u.role === 'medical-expert',
-  );
+  const experts = users.filter(u => u.role !== 'admin' && u.role !== 'use-case-owner');
 
   const toggleExpert = (expertId: string) => {
     if (selectedExperts.includes(expertId)) {
-      setSelectedExperts(selectedExperts.filter((id) => id !== expertId));
+      setSelectedExperts(selectedExperts.filter(id => id !== expertId));
     } else {
       setSelectedExperts([...selectedExperts, expertId]);
     }
@@ -688,78 +621,76 @@ function AssignExpertsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl text-gray-900">Assign Experts</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+          <h2 className="text-lg font-bold text-gray-900">Assign Evaluation Team</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div>
-            <div className="text-sm text-gray-600 mb-1">Use Case</div>
-            <div className="text-lg text-gray-900">{useCase.title}</div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Target Use Case</div>
+            <div className="text-base font-medium text-gray-900">{useCase.title}</div>
           </div>
 
           <div>
-            <label className="block text-sm mb-3 text-gray-700">
-              Select Experts *
-            </label>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {experts.map((expert) => (
-                <label
-                  key={expert.id}
-                  className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedExperts.includes(expert.id)}
-                    onChange={() => toggleExpert(expert.id)}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm text-gray-900">{expert.name}</div>
-                    <div className="text-xs text-gray-600 capitalize">
-                      {expert.role.replace('-', ' ')}
+            <label className="block text-sm font-medium mb-3 text-gray-700">Select Experts</label>
+            <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-2 bg-gray-50">
+              {experts.length === 0 ? (
+                  <div className="text-sm text-gray-500 text-center py-2">No experts available to assign.</div>
+              ) : (
+                experts.map(expert => (
+                    <label
+                    key={expert.id}
+                    className={`flex items-center p-3 rounded-lg cursor-pointer transition-all ${
+                        selectedExperts.includes(expert.id) 
+                        ? 'bg-blue-50 border border-blue-200' 
+                        : 'hover:bg-white border border-transparent'
+                    }`}
+                    >
+                    <input
+                        type="checkbox"
+                        checked={selectedExperts.includes(expert.id)}
+                        onChange={() => toggleExpert(expert.id)}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3 border-gray-300"
+                    />
+                    <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">{expert.name}</div>
+                        <div className="text-xs text-gray-500 capitalize">{expert.role.replace('-', ' ')}</div>
                     </div>
-                  </div>
-                </label>
-              ))}
+                    </label>
+                ))
+              )}
             </div>
           </div>
 
           <div>
-            <label className="block text-sm mb-2 text-gray-700">
-              Admin Notes
-            </label>
+            <label className="block text-sm font-medium mb-2 text-gray-700">Instructions / Notes</label>
             <textarea
               value={adminNotes}
               onChange={(e) => setAdminNotes(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Add priority notes or instructions for the experts..."
+              rows={3}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              placeholder="Specific instructions for the evaluation team..."
             />
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
+          <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 text-gray-600 hover:text-gray-800 rounded-lg"
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={selectedExperts.length === 0}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors"
             >
-              Save & Notify
+              Confirm Assignment
             </button>
           </div>
         </form>

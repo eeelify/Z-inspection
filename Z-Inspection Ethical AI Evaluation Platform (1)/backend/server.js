@@ -6,56 +6,46 @@ require('dotenv').config();
 const app = express();
 const PORT = 5000;
 
-// --- 1. AYARLAR VE MIDDLEWARE ---
-app.use(cors()); // Frontend (3000) ve Backend (5000) iletişimine izin ver
-app.use(express.json()); // JSON veri formatını kabul et
+app.use(cors());
+app.use(express.json());
 
-// --- 2. MONGODB BAĞLANTISI ---
-// Yerel MongoDB kullanıyorsan: 'mongodb://localhost:27017/zinspection'
-// Atlas kullanıyorsan bağlantı stringini buraya yapıştır.
+// Veritabanı Bağlantısı
 const MONGO_URI = 'mongodb://localhost:27017/zinspection';
-
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
   .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
 
-// --- 3. VERİTABANI MODELLERİ (SCHEMAS) ---
+// --- ŞEMALAR ---
 
-// Kullanıcı Modeli (LoginScreen.tsx ve OtherMembers.tsx için)
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Not: Prodüksiyonda şifrelenmelidir (bcrypt)
-  role: { 
-    type: String, 
-    enum: ['admin', 'ethical-expert', 'medical-expert', 'use-case-owner', 'education-expert'],
-    required: true 
-  },
+  password: { type: String, required: true },
+  role: { type: String, required: true },
   isOnline: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now }
 });
 const User = mongoose.model('User', UserSchema);
 
-// Proje Modeli (AdminDashboardEnhanced.tsx ve ProjectDetail.tsx için)
 const ProjectSchema = new mongoose.Schema({
-  title: { type: String, required: true },
+  title: String,
   shortDescription: String,
   fullDescription: String,
-  status: { type: String, default: 'ongoing' }, // ongoing, proven, disproven
-  stage: { type: String, default: 'set-up' }, // set-up, assess, resolve
+  status: { type: String, default: 'ongoing' },
+  stage: { type: String, default: 'set-up' },
   targetDate: String,
   progress: { type: Number, default: 0 },
-  assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // User ID'leri
+  assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  useCase: { type: String }, 
   createdAt: { type: Date, default: Date.now }
 });
 const Project = mongoose.model('Project', ProjectSchema);
 
-// Use Case (Kullanım Durumu) Modeli (UseCaseAssignmentsTab ve UseCaseOwnerDashboard.tsx için)
 const UseCaseSchema = new mongoose.Schema({
   title: String,
   description: String,
   aiSystemCategory: String,
-  status: { type: String, default: 'assigned' }, // assigned, in-review, completed
+  status: { type: String, default: 'assigned' },
   progress: { type: Number, default: 0 },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   assignedExperts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -65,227 +55,132 @@ const UseCaseSchema = new mongoose.Schema({
 });
 const UseCase = mongoose.model('UseCase', UseCaseSchema);
 
-// Değerlendirme Formu Modeli (EvaluationForm.tsx için)
-const EvaluationSchema = new mongoose.Schema({
-  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  role: String,
-  stage: String, // set-up, assess, resolve
-  answers: { type: Map, of: mongoose.Schema.Types.Mixed }, // Soru ID ve Cevapları
-  riskLevel: { type: String, default: 'medium' },
-  isDraft: { type: Boolean, default: true },
-  updatedAt: { type: Date, default: Date.now }
-});
-const Evaluation = mongoose.model('Evaluation', EvaluationSchema);
-
-// Etik Gerilimler (EthicalTensionSelector.tsx için)
 const TensionSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
   principle1: String,
   principle2: String,
-  description: String,
+  claimStatement: String, 
+  description: String,    
+  evidenceDescription: String,
+  evidenceFileName: String,
   severity: Number,
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  
+  // OYLAMA SİSTEMİ
+  votes: [{
+    userId: String,
+    voteType: { type: String, enum: ['agree', 'disagree'] }
+  }],
+  
+  // YORUMLAR SİSTEMİ
+  comments: [{
+    id: String,
+    text: String,
+    author: String,
+    date: { type: Date, default: Date.now }
+  }]
 });
 const Tension = mongoose.model('Tension', TensionSchema);
 
-// --- 4. API UÇLARI (ROUTES) ---
+// --- ROUTES ---
 
-// === AUTH (KİMLİK DOĞRULAMA) ===
-
-// Kayıt Ol
-app.post('/api/register', async (req, res) => {
+// 1. OYLAMA ROUTE'U (GELİŞMİŞ TOGGLE MANTIĞI)
+app.post('/api/tensions/:id/vote', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
-    // Email kontrolü
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: "Bu email zaten kayıtlı." });
+    const { userId, voteType } = req.body;
+    const tension = await Tension.findById(req.params.id);
+    if (!tension) return res.status(404).send('Tension not found');
 
-    const newUser = new User({ name, email, password, role, isOnline: true });
-    await newUser.save();
-    res.status(201).json(newUser);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    if (!tension.votes) tension.votes = [];
 
-// Giriş Yap
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
-    const user = await User.findOne({ email, password, role });
-    
-    if (user) {
-      user.isOnline = true;
-      await user.save();
-      res.json(user);
+    // Kullanıcı daha önce oy vermiş mi?
+    const existingVoteIndex = tension.votes.findIndex(v => v.userId === userId);
+
+    if (existingVoteIndex > -1) {
+      // Zaten oyu var
+      if (tension.votes[existingVoteIndex].voteType === voteType) {
+        // Aynı butona bastı -> Oyu Geri Çek (Sil)
+        tension.votes.splice(existingVoteIndex, 1);
+      } else {
+        // Farklı butona bastı -> Oyu Değiştir
+        tension.votes[existingVoteIndex].voteType = voteType;
+      }
     } else {
-      res.status(401).json({ message: "Geçersiz email, şifre veya rol." });
+      // Yeni oy ekle
+      tension.votes.push({ userId, voteType });
     }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-// Çıkış Yap (Opsiyonel: Online durumu güncellemek için)
-app.post('/api/logout', async (req, res) => {
-  try {
-    const { userId } = req.body;
-    await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
-    res.json({ message: "Çıkış başarılı" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+    await tension.save();
 
-// Tüm Kullanıcıları Getir (OtherMembers.tsx ve dropdownlar için)
-app.get('/api/users', async (req, res) => {
-  try {
-    const users = await User.find({}, '-password'); // Şifreleri gönderme
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// === PROJELER ===
-
-// Projeleri Getir
-app.get('/api/projects', async (req, res) => {
-  try {
-    const projects = await Project.find();
-    res.json(projects);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Yeni Proje Oluştur
-app.post('/api/projects', async (req, res) => {
-  try {
-    const newProject = new Project(req.body);
-    await newProject.save();
-    res.status(201).json(newProject);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Proje Detayı Getir
-app.get('/api/projects/:id', async (req, res) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    res.json(project);
-  } catch (err) {
-    res.status(404).json({ message: "Proje bulunamadı" });
-  }
-});
-
-// === USE CASES (KULLANIM DURUMLARI) ===
-
-// Use Case'leri Getir
-app.get('/api/use-cases', async (req, res) => {
-  try {
-    const useCases = await UseCase.find();
-    res.json(useCases);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Yeni Use Case Ekle
-app.post('/api/use-cases', async (req, res) => {
-  try {
-    const newUseCase = new UseCase(req.body);
-    await newUseCase.save();
-    res.status(201).json(newUseCase);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Uzman Ata (AssignExpertsModal için)
-app.put('/api/use-cases/:id/assign', async (req, res) => {
-  try {
-    const { assignedExperts, adminNotes } = req.body;
-    const updatedUseCase = await UseCase.findByIdAndUpdate(
-      req.params.id,
-      { 
-        assignedExperts, 
-        adminNotes, 
-        status: 'in-review' 
-      },
-      { new: true }
-    );
-    res.json(updatedUseCase);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// === DEĞERLENDİRMELER (EVALUATIONS) ===
-
-// Değerlendirme Kaydet (Formu kaydeder veya günceller)
-app.post('/api/evaluations', async (req, res) => {
-  try {
-    const { projectId, userId, stage, answers, riskLevel, isDraft } = req.body;
+    // Güncel sayıları hesapla
+    const agreeCount = tension.votes.filter(v => v.voteType === 'agree').length;
+    const disagreeCount = tension.votes.filter(v => v.voteType === 'disagree').length;
     
-    // Aynı proje, kullanıcı ve aşama için kayıt varsa güncelle, yoksa oluştur
-    const evaluation = await Evaluation.findOneAndUpdate(
-      { projectId, userId, stage },
-      { 
-        answers, 
-        riskLevel, 
-        isDraft, 
-        updatedAt: new Date() 
-      },
-      { new: true, upsert: true } // upsert: yoksa yarat
-    );
+    // Kullanıcının şu anki durumunu bul (Frontend'de butonu boyamak için)
+    const currentUserVote = tension.votes.find(v => v.userId === userId)?.voteType || null;
 
-    // Eğer taslak değilse (submit edildiyse), projenin ilerlemesini güncelle (basit mantık)
-    if (!isDraft) {
-      await Project.findByIdAndUpdate(projectId, { $inc: { progress: 10 } });
-    }
-
-    res.json(evaluation);
+    res.json({ 
+        consensus: { agree: agreeCount, disagree: disagreeCount },
+        userVote: currentUserVote 
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Belirli bir değerlendirmeyi getir (Formu doldururken eski cevapları görmek için)
-app.get('/api/evaluations', async (req, res) => {
-  try {
-    const { projectId, userId, stage } = req.query;
-    const evaluation = await Evaluation.findOne({ projectId, userId, stage });
-    res.json(evaluation || { answers: {} }); // Boş ise boş cevap dön
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// === ETİK GERİLİMLER (TENSIONS) ===
-
-app.post('/api/tensions', async (req, res) => {
-  try {
-    const newTension = new Tension(req.body);
-    await newTension.save();
-    res.status(201).json(newTension);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+// 2. TENSION GETİRME (Kullanıcının kendi oyunu da döner)
 app.get('/api/tensions/:projectId', async (req, res) => {
   try {
+    const { userId } = req.query; // Hangi kullanıcı istiyor?
     const tensions = await Tension.find({ projectId: req.params.projectId });
-    res.json(tensions);
+    
+    const formattedTensions = tensions.map(t => {
+        const agreeCount = t.votes ? t.votes.filter(v => v.voteType === 'agree').length : 0;
+        const disagreeCount = t.votes ? t.votes.filter(v => v.voteType === 'disagree').length : 0;
+        
+        // Bu kullanıcının oyu ne?
+        const myVote = userId && t.votes ? t.votes.find(v => v.userId === userId)?.voteType : null;
+        
+        return {
+            ...t.toObject(),
+            consensus: { agree: agreeCount, disagree: disagreeCount },
+            userVote: myVote // Frontend bunu kullanıp butonu boyayacak
+        };
+    });
+    
+    res.json(formattedTensions);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- 5. SUNUCUYU BAŞLAT ---
-app.listen(PORT, () => {
-  console.log(`🚀 Sunucu çalışıyor: http://localhost:${PORT}`);
+// ... (Diğer login, project, comment route'ları aynen kalabilir) ...
+app.post('/api/tensions/:id/comment', async (req, res) => {
+  try {
+    const { text, author } = req.body;
+    const tension = await Tension.findById(req.params.id);
+    if (!tension) return res.status(404).send('Not found');
+    const newComment = { id: Date.now().toString(), text, author, date: new Date() };
+    if (!tension.comments) tension.comments = [];
+    tension.comments.push(newComment);
+    await tension.save();
+    res.json(newComment);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// Standart Route'lar
+app.post('/api/register', async (req, res) => {
+    try { const newUser = new User(req.body); await newUser.save(); res.json(newUser); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/login', async (req, res) => {
+    const user = await User.findOne({ email: req.body.email, password: req.body.password, role: req.body.role });
+    if (user) res.json(user); else res.status(401).json({ message: "Invalid credentials" });
+});
+app.get('/api/projects', async (req, res) => { const projects = await Project.find(); res.json(projects); });
+app.post('/api/projects', async (req, res) => { const project = new Project(req.body); await project.save(); res.json(project); });
+app.get('/api/users', async (req, res) => { const users = await User.find({}, '-password'); res.json(users); });
+app.get('/api/use-cases', async (req, res) => { const useCases = await UseCase.find(); res.json(useCases); });
+app.post('/api/use-cases', async (req, res) => { const useCase = new UseCase(req.body); await useCase.save(); res.json(useCase); });
+app.post('/api/tensions', async (req, res) => { const tension = new Tension(req.body); await tension.save(); res.json(tension); });
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

@@ -18,11 +18,6 @@ import {
   UseCaseOwner,
   UseCase,
 } from "./types";
-import {
-  mockProjects,
-  mockUsers,
-  mockUseCases,
-} from "./utils/mockData";
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -32,14 +27,13 @@ function App() {
   const [selectedOwner, setSelectedOwner] = useState<UseCaseOwner | null>(null);
   const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null);
   
-  // Veritabanı kullanıldığı için başlangıç değerlerini boş [] yapıyoruz
   const [projects, setProjects] = useState<Project[]>([]);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   
   const [needsPrecondition, setNeedsPrecondition] = useState(false);
 
-  // --- VERİ ÇEKME İŞLEMLERİ (Backend'den) ---
+  // --- VERİ ÇEKME (FETCH) ---
   useEffect(() => {
     // 1. Projeleri Çek
     const fetchProjects = async () => {
@@ -82,8 +76,7 @@ function App() {
     fetchUseCases();
   }, []);
 
-  // --- HANDLERS (Fonksiyonlar) ---
-
+  // --- LOGIN / LOGOUT ---
   const handleLogin = async (
     email: string,
     password: string,
@@ -128,6 +121,7 @@ function App() {
     setNeedsPrecondition(false);
   };
 
+  // --- NAVIGATION HANDLERS ---
   const handleViewProject = (project: Project) => {
     setSelectedProject(project);
     setCurrentView("project-detail");
@@ -167,6 +161,7 @@ function App() {
     setCurrentView("usecase-detail");
   };
 
+  // --- CREATE HANDLERS ---
   const handleCreateProject = async (projectData: Partial<Project>) => {
     try {
       const response = await fetch('http://127.0.0.1:5000/api/projects', {
@@ -177,7 +172,8 @@ function App() {
           status: "ongoing",
           stage: "set-up",
           progress: 0,
-          assignedUsers: projectData.assignedUsers || [] 
+          assignedUsers: projectData.assignedUsers || [],
+          useCase: projectData.useCase
         })
       });
 
@@ -232,7 +228,33 @@ function App() {
     }
   };
 
-  // --- RENDER MANTIĞI ---
+  // --- EKSİK OLAN PARÇA BURASIYDI: Etik Gerilim Ekleme ---
+  const handleCreateTension = async (tensionData: any) => {
+    if (!selectedProject) return;
+    
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/tensions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...tensionData,
+          projectId: selectedProject.id
+        })
+      });
+
+      if (response.ok) {
+        // Kayıt başarılı, ProjectDetail zaten kendi içinde fetch yapıp listeyi güncelleyecek
+        console.log("Tension created successfully");
+      } else {
+        alert("Gerilim eklenirken hata oluştu.");
+      }
+    } catch (error) {
+      console.error("Tension create error:", error);
+      alert("Sunucuya bağlanılamadı.");
+    }
+  };
+
+  // --- RENDER ---
 
   if (!currentUser) {
     return <LoginScreen onLogin={handleLogin} />;
@@ -257,11 +279,10 @@ function App() {
             currentUser={currentUser}
             users={users}
             onBack={handleBackToDashboard}
-            onStartEvaluation={() =>
-              handleStartEvaluation(selectedProject)
-            }
+            onStartEvaluation={() => handleStartEvaluation(selectedProject)}
             onViewTension={handleViewTension}
             onViewOwner={handleViewOwner}
+            onCreateTension={handleCreateTension} // <-- BU BAĞLANTIYI YAPTIK
           />
         ) : null;
       case "tension-detail":
@@ -335,6 +356,7 @@ function App() {
               currentUser={currentUser}
               projects={projects}
               users={users}
+              useCases={useCases}
               onViewProject={handleViewProject}
               onStartEvaluation={handleStartEvaluation}
               onCreateProject={handleCreateProject}

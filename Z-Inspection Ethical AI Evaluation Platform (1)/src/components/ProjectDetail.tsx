@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Calendar,
@@ -11,22 +11,206 @@ import {
   BarChart3,
   Plus,
   MoreVertical,
-  User as UserIconLucide
+  User as UserIconLucide,
+  GitBranch,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
+  Upload,
+  ChevronDown,
+  ChevronUp,
+  Send
 } from 'lucide-react';
 import {
   Project,
   User,
   Tension,
   UseCaseOwner,
-  TensionSeverity,
   EthicalPrinciple
 } from '../types';
-import { mockEvidences, mockTensions } from '../utils/mockData';
 import { UseCaseOwners } from './UseCaseOwners';
 import { formatRoleName } from '../utils/helpers';
-import { SeveritySelector } from './SeveritySelector';
 import { EthicalTensionSelector } from './EthicalTensionSelector';
-import { SeverityBadge } from './SeverityBadge';
+
+// --- TİP TANIMLAMALARI ---
+interface Comment {
+  id: string;
+  text: string;
+  author: string;
+  date: string;
+}
+
+interface ExpandedTension extends Tension {
+  claimStatement?: string;
+  description?: string;
+  evidenceDescription?: string;
+  evidenceFileName?: string;
+  comments?: Comment[];
+}
+
+// --- İÇ BİLEŞEN: AddTensionModal ---
+interface AddTensionModalProps {
+  onClose: () => void;
+  onSave: (data: any) => void;
+}
+
+function AddTensionModal({ onClose, onSave }: AddTensionModalProps) {
+  const [principle1, setPrinciple1] = useState<EthicalPrinciple | undefined>();
+  const [principle2, setPrinciple2] = useState<EthicalPrinciple | undefined>();
+  
+  const [claim, setClaim] = useState('');
+  const [argument, setArgument] = useState('');
+  const [evidence, setEvidence] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  
+  const [severity, setSeverity] = useState<number>(2);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (principle1 && principle2 && claim && argument) {
+      onSave({
+        principle1,
+        principle2,
+        claimStatement: claim, 
+        description: argument,
+        evidenceDescription: evidence,
+        evidenceFileName: evidenceFile ? evidenceFile.name : undefined,
+        severity
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center">
+            <AlertTriangle className="h-5 w-5 text-orange-500 mr-2" />
+            Add Ethical Tension (CAE Framework)
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <EthicalTensionSelector
+            principle1={principle1}
+            principle2={principle2}
+            onPrinciple1Change={setPrinciple1}
+            onPrinciple2Change={setPrinciple2}
+          />
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">Claim *</label>
+              <input
+                type="text"
+                value={claim}
+                onChange={(e) => setClaim(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="E.g., The system exhibits bias against specific demographic groups..."
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">Argument *</label>
+              <textarea
+                value={argument}
+                onChange={(e) => setArgument(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Detailed explanation of why this conflict exists..."
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-700">Evidence (Optional)</label>
+              <textarea
+                value={evidence}
+                onChange={(e) => setEvidence(e.target.value)}
+                rows={2}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Supporting data, reports, or observations..."
+              />
+              
+              <div className="mt-3">
+                <div className="flex items-center space-x-3">
+                  <label className="cursor-pointer inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                    <Upload className="h-4 w-4 mr-2 text-gray-500" />
+                    Upload File
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                  <span className="text-sm text-gray-500 italic">
+                    {evidenceFile ? evidenceFile.name : 'No file attached'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-3 text-gray-700">Severity Level</label>
+            <div className="grid grid-cols-3 gap-4">
+              <button
+                type="button"
+                onClick={() => setSeverity(1)}
+                className={`p-3 rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
+                  severity === 1 
+                    ? 'border-green-500 bg-green-50 text-green-700' 
+                    : 'border-gray-200 hover:border-green-200 text-gray-600'
+                }`}
+              >
+                <div className={`w-4 h-4 rounded-full mb-1 ${severity === 1 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className="font-medium text-sm">Low</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSeverity(2)}
+                className={`p-3 rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
+                  severity === 2 
+                    ? 'border-yellow-500 bg-yellow-50 text-yellow-800' 
+                    : 'border-gray-200 hover:border-yellow-200 text-gray-600'
+                }`}
+              >
+                <div className={`w-4 h-4 rounded-full mb-1 ${severity === 2 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                <span className="font-medium text-sm">Medium</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSeverity(3)}
+                className={`p-3 rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
+                  severity === 3 
+                    ? 'border-red-500 bg-red-50 text-red-800' 
+                    : 'border-gray-200 hover:border-red-200 text-gray-600'
+                }`}
+              >
+                <div className={`w-4 h-4 rounded-full mb-1 ${severity === 3 ? 'bg-red-500' : 'bg-gray-300'}`} />
+                <span className="font-medium text-sm">High</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
+            <button type="submit" disabled={!principle1 || !principle2 || !claim || !argument} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">Save Tension</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// --- ANA BİLEŞEN ---
 
 interface ProjectDetailProps {
   project: Project;
@@ -36,6 +220,7 @@ interface ProjectDetailProps {
   onStartEvaluation: () => void;
   onViewTension?: (tension: Tension) => void;
   onViewOwner?: (owner: UseCaseOwner) => void;
+  onCreateTension?: (data: any) => void; 
 }
 
 const roleColors = {
@@ -48,12 +233,6 @@ const roleColors = {
   'legal-expert': '#B45309'
 };
 
-const statusColors = {
-  ongoing: { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
-  proven: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
-  disproven: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' }
-};
-
 export function ProjectDetail({
   project,
   currentUser,
@@ -61,23 +240,121 @@ export function ProjectDetail({
   onBack,
   onStartEvaluation,
   onViewTension,
-  onViewOwner
+  onViewOwner,
+  onCreateTension
 }: ProjectDetailProps) {
-  const [activeTab, setActiveTab] = useState<'evaluation' | 'tensions' | 'usecase' | 'owners'>(
-    'evaluation'
-  );
+  const [activeTab, setActiveTab] = useState<'evaluation' | 'tensions' | 'usecase' | 'owners'>('evaluation');
   const [showAddTension, setShowAddTension] = useState(false);
-  const [showAddEvidence, setShowAddEvidence] = useState(false);
-  const [selectedTensionForEvidence, setSelectedTensionForEvidence] = useState<string | null>(
-    null
-  );
+  const [tensions, setTensions] = useState<ExpandedTension[]>([]); 
+  const [expandedTensionId, setExpandedTensionId] = useState<string | null>(null);
+
+  const fetchTensions = async () => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/tensions/${project.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Backend'den gelen veriyi frontend formatına eşle
+        const formattedData = data.map((t: any) => ({
+            ...t,
+            id: t._id || t.id,
+            claimStatement: t.claimStatement || t.description || "No claim specified",
+            description: t.description || t.claimStatement,
+            principle1: t.principle1,
+            principle2: t.principle2,
+            status: t.status || 'ongoing',
+            // Backend artık canlı consensus verisi gönderiyor
+            consensus: t.consensus || { agree: 0, disagree: 0 },
+            createdAt: t.createdAt,
+            comments: t.comments || []
+        }));
+        setTensions(formattedData);
+      }
+    } catch (error) {
+      console.error("Tensions load error:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchTensions();
+  }, [project.id]);
+
+  const handleSaveTension = async (data: any) => {
+    if (onCreateTension) {
+      await onCreateTension(data);
+      setShowAddTension(false);
+      setTimeout(fetchTensions, 500); 
+    }
+  };
+
+  // --- OYLAMA (BACKEND BAĞLANTILI) ---
+  const handleVote = async (tensionId: string, type: 'agree' | 'disagree') => {
+    try {
+        const response = await fetch(`http://127.0.0.1:5000/api/tensions/${tensionId}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, voteType: type })
+        });
+
+        if (response.ok) {
+            const updatedData = await response.json();
+            // Arayüzü güncelle (Veritabanından dönen yeni sayılarla)
+            setTensions(currentTensions =>
+                currentTensions.map(t => {
+                    if (t.id === tensionId) {
+                        return {
+                            ...t,
+                            consensus: updatedData.consensus
+                        };
+                    }
+                    return t;
+                })
+            );
+        }
+    } catch (error) {
+        console.error("Vote error:", error);
+    }
+  };
+
+  // --- YORUM (BACKEND BAĞLANTILI) ---
+  const handleAddComment = async (tensionId: string) => {
+    const commentText = window.prompt("Enter your comment:");
+    if (commentText) {
+        try {
+            const response = await fetch(`http://127.0.0.1:5000/api/tensions/${tensionId}/comment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    text: commentText,
+                    author: currentUser.name 
+                })
+            });
+
+            if (response.ok) {
+                const newComment = await response.json();
+                setTensions(currentTensions =>
+                    currentTensions.map(t => {
+                        if (t.id === tensionId) {
+                            return { ...t, comments: [...(t.comments || []), newComment] };
+                        }
+                        return t;
+                    })
+                );
+                setExpandedTensionId(tensionId);
+            }
+        } catch (error) {
+            console.error("Comment error:", error);
+        }
+    }
+  };
+
+  const toggleExpandTension = (tensionId: string) => {
+    setExpandedTensionId(prev => prev === tensionId ? null : tensionId);
+  };
 
   const canViewOwners = currentUser.role === 'admin' || currentUser.role === 'ethical-expert';
-
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors] || '#1F2937';
   const isAssigned = project.assignedUsers.includes(currentUser.id);
   const isAdmin = currentUser.role === 'admin';
-
   const assignedUserDetails = users.filter((user) => project.assignedUsers.includes(user.id));
 
   const stages = [
@@ -125,17 +402,13 @@ export function ProjectDetail({
                   Start Evaluation
                 </button>
               )}
-              {!isAssigned && (
-                <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                  Add Comment
-                </button>
-              )}
             </div>
           </div>
         </div>
       </div>
 
       <div className="px-6 py-6">
+        
         {/* Timeline */}
         <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
           <h2 className="text-lg mb-4 text-gray-900">Z-Inspection Timeline</h2>
@@ -223,33 +496,8 @@ export function ProjectDetail({
               <BarChart3 className="h-5 w-5 text-gray-400 mr-2" />
               <div>
                 <div className="text-xs text-gray-600">Tensions</div>
-                <div className="text-sm text-gray-900">{mockTensions.length} total</div>
+                <div className="text-sm text-gray-900">{tensions.length} total</div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Pre-Assessment Checklist */}
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h3 className="text-lg mb-4 text-gray-900">Pre-Assessment Checklist</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center">
-              <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-3">
-                <span className="text-white text-xs">✓</span>
-              </div>
-              <span className="text-sm text-gray-700">Purpose clearly defined</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center mr-3">
-                <span className="text-white text-xs">✓</span>
-              </div>
-              <span className="text-sm text-gray-700">Data source identified</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center mr-3">
-                <span className="text-white text-xs">!</span>
-              </div>
-              <span className="text-sm text-gray-700">Initial ethical risk assessed</span>
             </div>
           </div>
         </div>
@@ -278,7 +526,7 @@ export function ProjectDetail({
                 }`}
               >
                 <MessageSquare className="h-4 w-4 inline mr-2" />
-                Tensions ({mockTensions.length})
+                Tensions ({tensions.length})
               </button>
               <button
                 onClick={() => setActiveTab('usecase')}
@@ -322,61 +570,13 @@ export function ProjectDetail({
                     </button>
                   )}
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  {assignedUserDetails.map((user) => {
-                    const userColor =
-                      roleColors[user.role as keyof typeof roleColors] || '#1F2937';
-                    const randomProgress = Math.floor(Math.random() * 100);
-                    const randomBar = Math.floor(Math.random() * 100);
-                    const randomStatus = Math.random() > 0.5 ? 'In Progress' : 'Completed';
-
-                    return (
-                      <div key={user.id} className="border rounded-lg p-4">
-                        <div className="flex items-center mb-3">
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm mr-3"
-                            style={{ backgroundColor: userColor }}
-                          >
-                            {user.name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="text-sm text-gray-900">{user.name}</div>
-                            <div className="text-xs text-gray-500">{formatRoleName(user.role)}</div>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs text-gray-600">
-                            <span>Progress</span>
-                            <span>{randomProgress}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5">
-                            <div
-                              className="h-1.5 rounded-full"
-                              style={{
-                                width: `${randomBar}%`,
-                                backgroundColor: userColor
-                              }}
-                            />
-                          </div>
-                          <div className="text-xs text-gray-600">Status: {randomStatus}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+                    Select "Start Evaluation" above to begin or resume your assessment.
                 </div>
-
-                {!isAssigned && (
-                  <div className="bg-gray-50 border rounded-lg p-4 text-center">
-                    <p className="text-gray-600 mb-2">You are not assigned to this project</p>
-                    <p className="text-sm text-gray-500">
-                      You can view project details and participate in discussions
-                    </p>
-                  </div>
-                )}
               </div>
             )}
 
+            {/* --- TENSIONS TAB --- */}
             {activeTab === 'tensions' && (
               <div>
                 <div className="flex items-center justify-between mb-6">
@@ -390,150 +590,186 @@ export function ProjectDetail({
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  {mockTensions.map((tension) => {
-                    const evidenceCount = mockEvidences.filter(
-                      (ev) => ev.tensionId === tension.id
-                    ).length;
-                    const creator = users.find((u) => u.id === tension.createdBy);
+                {tensions.length > 0 ? (
+                  <div className="space-y-4">
+                    {tensions.map((tension) => {
+                      const agreeCount = tension.consensus?.agree || 0;
+                      const disagreeCount = tension.consensus?.disagree || 0;
+                      const totalVotes = agreeCount + disagreeCount;
+                      const agreePercent = totalVotes > 0 ? Math.round((agreeCount / totalVotes) * 100) : 0;
+                      const isExpanded = expandedTensionId === tension.id;
 
-                    return (
-                      <div
-                        key={tension.id}
-                        className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => onViewTension?.(tension)}
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center mb-2">
-                              <SeverityBadge severity={tension.severity} size="md" />
-                              <span
-                                className={`ml-2 px-2 py-1 text-xs rounded-full ${
-                                  statusColors[tension.status].bg
-                                } ${statusColors[tension.status].text}`}
-                              >
-                                {tension.status.toUpperCase()}
-                              </span>
-                              <span className="ml-2 text-xs text-gray-500">
-                                by {creator ? creator.name : 'Unknown'} on{' '}
-                                {new Date(tension.createdAt).toLocaleDateString()}
-                              </span>
-                              {evidenceCount > 0 && (
-                                <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full flex items-center">
-                                  <FileText className="h-3 w-3 mr-1" />
-                                  {evidenceCount} evidence{evidenceCount !== 1 ? 's' : ''}
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-base text-gray-900 mb-2 flex items-center">
-                              {tension.claimStatement}
-                            </h4>
-                            <p className="text-sm text-gray-600 mb-3">
-                              {tension.supportingArgument}
-                            </p>
+                      const severityColor = tension.severity === 3 ? 'bg-red-100 text-red-800' :
+                                            tension.severity === 2 ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-green-100 text-green-800';
+                      const severityLabel = tension.severity === 3 ? 'High' :
+                                            tension.severity === 2 ? 'Medium' : 'Low';
 
-                            {/* Consensus Indicator */}
-                            <div className="flex items-center space-x-4">
-                              <div className="text-xs text-gray-600">Consensus:</div>
-                              <div className="flex items-center">
-                                <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                                  <div
-                                    className="bg-green-500 h-2 rounded-full"
-                                    style={{ width: `${tension.consensus.agree}%` }}
-                                  />
+                      return (
+                        <div
+                          key={tension.id}
+                          className={`border rounded-lg transition-all ${isExpanded ? 'ring-2 ring-blue-100 shadow-md' : 'hover:shadow-sm'}`}
+                        >
+                          {/* Card Header (Click to expand) */}
+                          <div 
+                            className="p-6 cursor-pointer"
+                            onClick={() => toggleExpandTension(tension.id)}
+                          >
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex-1">
+                                <div className="flex items-center mb-2">
+                                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${severityColor}`}>
+                                    Risk: {severityLabel}
+                                  </span>
+                                  <span className="ml-2 text-xs text-gray-500">
+                                    {tension.createdAt ? new Date(tension.createdAt).toLocaleDateString() : 'Just now'}
+                                  </span>
                                 </div>
-                                <span className="text-xs text-gray-600">
-                                  {tension.consensus.agree}% agree
-                                </span>
+                                <h4 className="text-base text-gray-900 mb-2 font-semibold">
+                                  {tension.claimStatement}
+                                </h4>
+                                {tension.description && (
+                                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                                    {tension.description}
+                                  </p>
+                                )}
+                                <p className="text-xs text-blue-600 font-medium">
+                                  {tension.principle1} ↔ {tension.principle2}
+                                </p>
+
+                                {/* Consensus Indicator */}
+                                <div className="flex items-center space-x-4 mt-3">
+                                  <div className="text-xs text-gray-600">Consensus:</div>
+                                  <div className="flex items-center">
+                                    <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                                      <div
+                                        className="bg-green-500 h-2 rounded-full transition-all"
+                                        style={{ width: `${agreePercent}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      {agreePercent}% agree ({agreeCount}/{totalVotes})
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
+
+                              <button className="p-1 text-gray-400 hover:text-gray-600">
+                                {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                              </button>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              <button
+                                className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-full hover:bg-green-200 border border-green-200"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleVote(tension.id, 'agree');
+                                }}
+                              >
+                                Agree ({agreeCount})
+                              </button>
+                              <button
+                                className="px-3 py-1 text-xs bg-red-100 text-red-800 rounded-full hover:bg-red-200 border border-red-200"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleVote(tension.id, 'disagree');
+                                }}
+                              >
+                                Disagree ({disagreeCount})
+                              </button>
+                              <button
+                                className="px-3 py-1 text-xs bg-gray-100 text-gray-800 rounded-full hover:bg-gray-200 border border-gray-200 flex items-center"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddComment(tension.id);
+                                }}
+                              >
+                                <MessageSquare className="h-3 w-3 mr-1" />
+                                Comment ({tension.comments?.length || 0})
+                              </button>
                             </div>
                           </div>
 
-                          <button
-                            className="p-1 text-gray-400 hover:text-gray-600"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </div>
+                          {/* Expanded Content (Comments & Evidence) */}
+                          {isExpanded && (
+                            <div className="px-6 pb-6 pt-2 border-t border-gray-100 bg-gray-50/50">
+                              
+                              {/* Evidence Section */}
+                              {tension.evidenceDescription && (
+                                <div className="mb-4">
+                                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Evidence</h5>
+                                  <div className="bg-white p-3 rounded border border-gray-200 text-sm text-gray-700">
+                                    {tension.evidenceDescription}
+                                    {tension.evidenceFileName && (
+                                      <div className="mt-2 flex items-center text-blue-600 text-xs">
+                                        <FileText className="h-3 w-3 mr-1" />
+                                        {tension.evidenceFileName}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
-                        <div className="flex items-center space-x-2">
-                          <button
-                            className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-full hover:bg-green-200"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Agree
-                          </button>
-                          <button
-                            className="px-3 py-1 text-xs bg-red-100 text-red-800 rounded-full hover:bg-red-200"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Disagree
-                          </button>
-                          <button
-                            className="px-3 py-1 text-xs bg-gray-100 text-gray-800 rounded-full hover:bg-gray-200"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Comment
-                          </button>
-                          <button
-                            className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded-full hover:bg-blue-200 flex items-center"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedTensionForEvidence(tension.id);
-                              setShowAddEvidence(true);
-                            }}
-                          >
-                            <Plus className="h-3 w-3 mr-1" />
-                            Add Evidence
-                          </button>
+                              {/* Comments Section */}
+                              <div>
+                                <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                  Comments ({tension.comments?.length || 0})
+                                </h5>
+                                {tension.comments && tension.comments.length > 0 ? (
+                                  <div className="space-y-3">
+                                    {tension.comments.map((comment) => (
+                                      <div key={comment.id} className="bg-white p-3 rounded border border-gray-200">
+                                        <div className="flex justify-between items-center mb-1">
+                                          <span className="text-xs font-bold text-gray-900">{comment.author}</span>
+                                          <span className="text-[10px] text-gray-400">
+                                            {new Date(comment.date).toLocaleDateString()}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-600">{comment.text}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-400 italic">No comments yet.</p>
+                                )}
+                                
+                                <button 
+                                  onClick={() => handleAddComment(tension.id)}
+                                  className="mt-3 text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add a comment
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                    <GitBranch className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500 font-medium">No tensions identified yet.</p>
+                    <button 
+                      onClick={() => setShowAddTension(true)}
+                      className="text-blue-600 text-sm font-medium hover:underline"
+                    >
+                      Create first tension
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'usecase' && (
               <div>
                 <h3 className="text-lg mb-4 text-gray-900">Use Case Documentation</h3>
-                {project.useCase ? (
-                  <div className="border rounded-lg p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <FileText className="h-6 w-6 text-gray-400 mr-3" />
-                        <div>
-                          <div className="text-sm text-gray-900">{project.useCase.filename}</div>
-                          <div className="text-xs text-gray-500">
-                            Uploaded on {new Date(project.createdAt).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm flex items-center">
-                          <Download className="h-3 w-3 mr-1" />
-                          Download
-                        </button>
-                        {isAdmin && (
-                          <button className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm">
-                            Replace
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500 border rounded-lg">
                     <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p>No use case document uploaded</p>
-                    {isAdmin && (
-                      <button className="mt-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                        Upload Use Case
-                      </button>
-                    )}
-                  </div>
-                )}
+                    <p>Use Case ID: {project.useCase || 'Not Linked'}</p>
+                </div>
               </div>
             )}
 
@@ -544,195 +780,253 @@ export function ProjectDetail({
         </div>
       </div>
 
-      {/* Add Evidence Modal */}
-      {showAddEvidence && selectedTensionForEvidence && (
-        <AddEvidenceModal
-          tensionId={selectedTensionForEvidence}
-          onClose={() => {
-            setShowAddEvidence(false);
-            setSelectedTensionForEvidence(null);
-          }}
+      {/* --- ADD TENSION MODAL --- */}
+      {showAddTension && (
+        <AddTensionModal 
+          onClose={() => setShowAddTension(false)} 
+          onSave={handleSaveTension} 
         />
       )}
-
-      {/* Add Tension Modal */}
-      {showAddTension && <AddTensionModal onClose={() => setShowAddTension(false)} />}
     </div>
   );
 }
+```
 
-interface AddTensionModalProps {
-  onClose: () => void;
-}
+### **2. Adım: Backend (`server.js`) Dosyasını Güncelle**
 
-function AddTensionModal({ onClose }: AddTensionModalProps) {
-  const [principle1, setPrinciple1] = useState<EthicalPrinciple | undefined>(undefined);
-  const [principle2, setPrinciple2] = useState<EthicalPrinciple | undefined>(undefined);
-  const [tensionDescription, setTensionDescription] = useState('');
-  const [claimStatement, setClaimStatement] = useState('');
-  const [supportingArgument, setSupportingArgument] = useState('');
-  const [severity, setSeverity] = useState<TensionSeverity>('medium');
+Backend tarafında, oyların "kimin" kullandığını takip etmemiz lazım. Böylece bir kişi ikinci kez oy verdiğinde eski oyu güncellenir. Ayrıca yorumları da veritabanına kaydedelim.
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Mock add tension functionality
-    alert(`Tension added successfully with ${severity} severity!`);
-    onClose();
-  };
+Aşağıdaki kodu **`backend/server.js`** dosyasına yapıştırarak eski kodun üzerine yaz.
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl text-gray-900">Create New Tension</h2>
-        </div>
+```javascript
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+require('dotenv').config();
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <EthicalTensionSelector
-            principle1={principle1}
-            principle2={principle2}
-            onPrinciple1Change={setPrinciple1}
-            onPrinciple2Change={setPrinciple2}
-          />
+const app = express();
+const PORT = 5000;
 
-          <div>
-            <label className="block text-sm mb-2 text-gray-700">Tension Description *</label>
-            <textarea
-              value={tensionDescription}
-              onChange={(e) => setTensionDescription(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-              placeholder="Describe the ethical conflict between these two principles..."
-              required
-            />
-          </div>
+app.use(cors());
+app.use(express.json());
 
-          <div>
-            <label className="block text-sm mb-2 text-gray-700">Claim Statement *</label>
-            <textarea
-              value={claimStatement}
-              onChange={(e) => setClaimStatement(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-              placeholder="Enter your claim about the AI system..."
-              required
-            />
-          </div>
+// Veritabanı Bağlantısı
+const MONGO_URI = 'mongodb://localhost:27017/zinspection';
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
+  .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
 
-          <div>
-            <label className="block text-sm mb-2 text-gray-700">Supporting Argument</label>
-            <textarea
-              value={supportingArgument}
-              onChange={(e) => setSupportingArgument(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-              placeholder="Provide evidence or reasoning to support your claim..."
-            />
-          </div>
+// --- ŞEMALAR ---
 
-          <SeveritySelector value={severity} onChange={setSeverity} />
+// Kullanıcı Şeması
+const UserSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, required: true },
+  isOnline: { type: Boolean, default: false },
+  lastSeen: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', UserSchema);
 
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-3 text-gray-600 hover:text-gray-800 rounded-lg"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Add Tension
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+// Proje Şeması
+const ProjectSchema = new mongoose.Schema({
+  title: String,
+  shortDescription: String,
+  fullDescription: String,
+  status: { type: String, default: 'ongoing' },
+  stage: { type: String, default: 'set-up' },
+  targetDate: String,
+  progress: { type: Number, default: 0 },
+  assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  useCase: { type: String }, 
+  createdAt: { type: Date, default: Date.now }
+});
+const Project = mongoose.model('Project', ProjectSchema);
 
-interface AddEvidenceModalProps {
-  tensionId: string;
-  onClose: () => void;
-}
+// Use Case Şeması
+const UseCaseSchema = new mongoose.Schema({
+  title: String,
+  description: String,
+  aiSystemCategory: String,
+  status: { type: String, default: 'assigned' },
+  progress: { type: Number, default: 0 },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  assignedExperts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  adminNotes: String,
+  supportingFiles: [String],
+  createdAt: { type: Date, default: Date.now }
+});
+const UseCase = mongoose.model('UseCase', UseCaseSchema);
 
-function AddEvidenceModal({ tensionId, onClose }: AddEvidenceModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+// Tension (Gerilim) Şeması (GÜNCELLENDİ)
+const TensionSchema = new mongoose.Schema({
+  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
+  principle1: String,
+  principle2: String,
+  claimStatement: String, // İddia
+  description: String,    // Argüman
+  evidenceDescription: String, // Kanıt metni
+  evidenceFileName: String, // Kanıt dosya adı
+  severity: Number,
+  createdAt: { type: Date, default: Date.now },
+  
+  // OYLAMA SİSTEMİ (YENİ)
+  votes: [{
+    userId: String,
+    voteType: { type: String, enum: ['agree', 'disagree'] }
+  }],
+  
+  // YORUMLAR SİSTEMİ (YENİ)
+  comments: [{
+    id: String,
+    text: String,
+    author: String,
+    date: { type: Date, default: Date.now }
+  }]
+});
+const Tension = mongoose.model('Tension', TensionSchema);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Mock add evidence functionality
-    console.log('Evidence for tension:', tensionId, { title, description, file });
-    alert('Evidence added successfully!');
-    onClose();
-  };
+// Değerlendirme Formu Şeması
+const EvaluationSchema = new mongoose.Schema({
+  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  role: String,
+  stage: String,
+  answers: { type: Map, of: mongoose.Schema.Types.Mixed },
+  riskLevel: String,
+  isDraft: Boolean,
+  updatedAt: { type: Date, default: Date.now }
+});
+const Evaluation = mongoose.model('Evaluation', EvaluationSchema);
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-xl text-gray-900">Add Evidence</h2>
-        </div>
+// --- ROUTES ---
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm mb-2 text-gray-700">Evidence Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter evidence title..."
-              required
-            />
-          </div>
+// 1. OYLAMA ROUTE'U (YENİ)
+app.post('/api/tensions/:id/vote', async (req, res) => {
+  try {
+    const { userId, voteType } = req.body;
+    const tension = await Tension.findById(req.params.id);
+    if (!tension) return res.status(404).send('Tension not found');
 
-          <div>
-            <label className="block text.sm mb-2 text-gray-700">Description *</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Describe the evidence and how it supports the claim..."
-              required
-            />
-          </div>
+    // votes dizisi yoksa oluştur
+    if (!tension.votes) tension.votes = [];
 
-          <div>
-            <label className="block text-sm mb-2 text-gray-700">Upload Document</label>
-            <input
-              type="file"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Accepted formats: PDF, DOC, DOCX, XLS, XLSX, CSV
-            </p>
-          </div>
+    // Kullanıcı daha önce oy vermiş mi kontrol et
+    const existingVoteIndex = tension.votes.findIndex(v => v.userId === userId);
 
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+    if (existingVoteIndex > -1) {
+      // Varsa güncelle
+      tension.votes[existingVoteIndex].voteType = voteType;
+    } else {
+      // Yoksa yeni ekle
+      tension.votes.push({ userId, voteType });
+    }
+
+    await tension.save();
+
+    // Güncel sayıları hesapla
+    const agreeCount = tension.votes.filter(v => v.voteType === 'agree').length;
+    const disagreeCount = tension.votes.filter(v => v.voteType === 'disagree').length;
+
+    res.json({ consensus: { agree: agreeCount, disagree: disagreeCount } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. YORUM EKLEME ROUTE'U (YENİ)
+app.post('/api/tensions/:id/comment', async (req, res) => {
+  try {
+    const { text, author } = req.body;
+    const tension = await Tension.findById(req.params.id);
+    if (!tension) return res.status(404).send('Not found');
+
+    const newComment = {
+      id: Date.now().toString(),
+      text,
+      author,
+      date: new Date()
+    };
+
+    if (!tension.comments) tension.comments = [];
+    tension.comments.push(newComment);
+    
+    await tension.save();
+    res.json(newComment);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. TENSION GETİRME (GÜNCELLENDİ - Oyları Hesaplayıp Dönüyor)
+app.get('/api/tensions/:projectId', async (req, res) => {
+  try {
+    const tensions = await Tension.find({ projectId: req.params.projectId });
+    
+    // Her gerilim için oy sayılarını hesaplayıp frontend formatına çevir
+    const formattedTensions = tensions.map(t => {
+        const agreeCount = t.votes ? t.votes.filter(v => v.voteType === 'agree').length : 0;
+        const disagreeCount = t.votes ? t.votes.filter(v => v.voteType === 'disagree').length : 0;
+        
+        return {
+            ...t.toObject(),
+            consensus: { agree: agreeCount, disagree: disagreeCount }
+        };
+    });
+    
+    res.json(formattedTensions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Diğer Standart Route'lar (Login, Project, UseCase vs.) ---
+app.post('/api/register', async (req, res) => {
+    try {
+        const newUser = new User(req.body);
+        await newUser.save();
+        res.json(newUser);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/login', async (req, res) => {
+    const user = await User.findOne({ email: req.body.email, password: req.body.password, role: req.body.role });
+    if (user) res.json(user);
+    else res.status(401).json({ message: "Invalid credentials" });
+});
+
+app.get('/api/projects', async (req, res) => {
+    const projects = await Project.find();
+    res.json(projects);
+});
+
+app.post('/api/projects', async (req, res) => {
+    const project = new Project(req.body);
+    await project.save();
+    res.json(project);
+});
+
+app.get('/api/users', async (req, res) => {
+    const users = await User.find({}, '-password');
+    res.json(users);
+});
+
+app.get('/api/use-cases', async (req, res) => {
+    const useCases = await UseCase.find();
+    res.json(useCases);
+});
+
+app.post('/api/use-cases', async (req, res) => {
+    const useCase = new UseCase(req.body);
+    await useCase.save();
+    res.json(useCase);
+});
+
+app.post('/api/tensions', async (req, res) => {
+    const tension = new Tension(req.body);
+    await tension.save();
+    res.json(tension);
+});
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
