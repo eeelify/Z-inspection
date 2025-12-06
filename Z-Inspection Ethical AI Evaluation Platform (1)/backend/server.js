@@ -9,11 +9,16 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
-// Veritabanı Bağlantısı
-const MONGO_URI = 'mongodb://localhost:27017/zinspection';
+// --- VERİTABANI BAĞLANTISI (BULUT/ATLAS) ---
+
+const MONGO_URI = 'mongodb+srv://admin_merve:Sifre123@cluster0.tg8voq1.mongodb.net/zinspection?retryWrites=true&w=majority&appName=Cluster0';
+
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
-  .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
+  .then(() => console.log('✅ MongoDB Atlas (Bulut) Bağlantısı Başarılı'))
+  .catch(err => {
+    console.error('❌ Bağlantı Hatası:', err);
+    console.log('İPUCU: Şifrenizi Atlas panelinden "Sifre123" (İngilizce karakter) olarak güncellediğinizden emin olun.');
+  });
 
 // --- ŞEMALAR ---
 
@@ -51,7 +56,25 @@ const UseCaseSchema = new mongoose.Schema({
   assignedExperts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   adminNotes: String,
   supportingFiles: [String],
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  // CAE ve detaylı alanlar için genişletilmiş bilgi
+  extendedInfo: {
+    type: Map,
+    of: mongoose.Schema.Types.Mixed
+  },
+  // Uzman geri bildirimleri
+  feedback: [{
+    from: String,
+    text: String,
+    timestamp: { type: Date, default: Date.now }
+  }],
+  // Admin notları
+  adminReflections: [{
+    id: String,
+    text: String,
+    visibleToExperts: Boolean,
+    createdAt: { type: Date, default: Date.now }
+  }]
 });
 const UseCase = mongoose.model('UseCase', UseCaseSchema);
 
@@ -84,7 +107,7 @@ const Tension = mongoose.model('Tension', TensionSchema);
 
 // --- ROUTES ---
 
-// 1. OYLAMA ROUTE'U (GELİŞMİŞ TOGGLE MANTIĞI)
+// 1. OYLAMA ROUTE'U
 app.post('/api/tensions/:id/vote', async (req, res) => {
   try {
     const { userId, voteType } = req.body;
@@ -93,30 +116,22 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
 
     if (!tension.votes) tension.votes = [];
 
-    // Kullanıcı daha önce oy vermiş mi?
     const existingVoteIndex = tension.votes.findIndex(v => v.userId === userId);
 
     if (existingVoteIndex > -1) {
-      // Zaten oyu var
       if (tension.votes[existingVoteIndex].voteType === voteType) {
-        // Aynı butona bastı -> Oyu Geri Çek (Sil)
         tension.votes.splice(existingVoteIndex, 1);
       } else {
-        // Farklı butona bastı -> Oyu Değiştir
         tension.votes[existingVoteIndex].voteType = voteType;
       }
     } else {
-      // Yeni oy ekle
       tension.votes.push({ userId, voteType });
     }
 
     await tension.save();
 
-    // Güncel sayıları hesapla
     const agreeCount = tension.votes.filter(v => v.voteType === 'agree').length;
     const disagreeCount = tension.votes.filter(v => v.voteType === 'disagree').length;
-    
-    // Kullanıcının şu anki durumunu bul (Frontend'de butonu boyamak için)
     const currentUserVote = tension.votes.find(v => v.userId === userId)?.voteType || null;
 
     res.json({ 
@@ -128,23 +143,21 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
   }
 });
 
-// 2. TENSION GETİRME (Kullanıcının kendi oyunu da döner)
+// 2. TENSION GETİRME
 app.get('/api/tensions/:projectId', async (req, res) => {
   try {
-    const { userId } = req.query; // Hangi kullanıcı istiyor?
+    const { userId } = req.query;
     const tensions = await Tension.find({ projectId: req.params.projectId });
     
     const formattedTensions = tensions.map(t => {
         const agreeCount = t.votes ? t.votes.filter(v => v.voteType === 'agree').length : 0;
         const disagreeCount = t.votes ? t.votes.filter(v => v.voteType === 'disagree').length : 0;
-        
-        // Bu kullanıcının oyu ne?
         const myVote = userId && t.votes ? t.votes.find(v => v.userId === userId)?.voteType : null;
         
         return {
             ...t.toObject(),
             consensus: { agree: agreeCount, disagree: disagreeCount },
-            userVote: myVote // Frontend bunu kullanıp butonu boyayacak
+            userVote: myVote
         };
     });
     
@@ -154,7 +167,6 @@ app.get('/api/tensions/:projectId', async (req, res) => {
   }
 });
 
-// ... (Diğer login, project, comment route'ları aynen kalabilir) ...
 app.post('/api/tensions/:id/comment', async (req, res) => {
   try {
     const { text, author } = req.body;

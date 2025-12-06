@@ -20,7 +20,9 @@ import {
   Upload,
   ChevronDown,
   ChevronUp,
-  Send
+  Send,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import {
   Project,
@@ -47,6 +49,7 @@ interface ExpandedTension extends Tension {
   evidenceDescription?: string;
   evidenceFileName?: string;
   comments?: Comment[];
+  userVote?: 'agree' | 'disagree' | null;
 }
 
 // --- İÇ BİLEŞEN: AddTensionModal ---
@@ -250,10 +253,9 @@ export function ProjectDetail({
 
   const fetchTensions = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/tensions/${project.id}`);
+      const response = await fetch(`http://127.0.0.1:5000/api/tensions/${project.id}?userId=${currentUser.id}`);
       if (response.ok) {
         const data = await response.json();
-        // Backend'den gelen veriyi frontend formatına eşle
         const formattedData = data.map((t: any) => ({
             ...t,
             id: t._id || t.id,
@@ -262,10 +264,10 @@ export function ProjectDetail({
             principle1: t.principle1,
             principle2: t.principle2,
             status: t.status || 'ongoing',
-            // Backend artık canlı consensus verisi gönderiyor
             consensus: t.consensus || { agree: 0, disagree: 0 },
             createdAt: t.createdAt,
-            comments: t.comments || []
+            comments: t.comments || [],
+            userVote: t.userVote
         }));
         setTensions(formattedData);
       }
@@ -283,10 +285,11 @@ export function ProjectDetail({
       await onCreateTension(data);
       setShowAddTension(false);
       setTimeout(fetchTensions, 500); 
+    } else {
+      console.error("onCreateTension prop missing");
     }
   };
 
-  // --- OYLAMA (BACKEND BAĞLANTILI) ---
   const handleVote = async (tensionId: string, type: 'agree' | 'disagree') => {
     try {
         const response = await fetch(`http://127.0.0.1:5000/api/tensions/${tensionId}/vote`, {
@@ -297,13 +300,13 @@ export function ProjectDetail({
 
         if (response.ok) {
             const updatedData = await response.json();
-            // Arayüzü güncelle (Veritabanından dönen yeni sayılarla)
             setTensions(currentTensions =>
                 currentTensions.map(t => {
                     if (t.id === tensionId) {
                         return {
                             ...t,
-                            consensus: updatedData.consensus
+                            consensus: updatedData.consensus,
+                            userVote: updatedData.userVote
                         };
                     }
                     return t;
@@ -315,7 +318,6 @@ export function ProjectDetail({
     }
   };
 
-  // --- YORUM (BACKEND BAĞLANTILI) ---
   const handleAddComment = async (tensionId: string) => {
     const commentText = window.prompt("Enter your comment:");
     if (commentText) {
@@ -354,7 +356,6 @@ export function ProjectDetail({
   const canViewOwners = currentUser.role === 'admin' || currentUser.role === 'ethical-expert';
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors] || '#1F2937';
   const isAssigned = project.assignedUsers.includes(currentUser.id);
-  const isAdmin = currentUser.role === 'admin';
   const assignedUserDetails = users.filter((user) => project.assignedUsers.includes(user.id));
 
   const stages = [
@@ -605,6 +606,10 @@ export function ProjectDetail({
                       const severityLabel = tension.severity === 3 ? 'High' :
                                             tension.severity === 2 ? 'Medium' : 'Low';
 
+                      // Oy durumuna göre buton rengi
+                      const isAgreed = tension.userVote === 'agree';
+                      const isDisagreed = tension.userVote === 'disagree';
+
                       return (
                         <div
                           key={tension.id}
@@ -660,32 +665,46 @@ export function ProjectDetail({
                             </div>
 
                             <div className="flex items-center space-x-2">
+                              {/* AGREE BUTONU */}
                               <button
-                                className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-full hover:bg-green-200 border border-green-200"
+                                className={`px-3 py-1.5 text-xs rounded-full border flex items-center transition-colors ${
+                                  isAgreed 
+                                    ? 'bg-green-600 text-white border-green-600' 
+                                    : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleVote(tension.id, 'agree');
                                 }}
                               >
+                                <ThumbsUp className="h-3 w-3 mr-1.5" />
                                 Agree ({agreeCount})
                               </button>
+
+                              {/* DISAGREE BUTONU */}
                               <button
-                                className="px-3 py-1 text-xs bg-red-100 text-red-800 rounded-full hover:bg-red-200 border border-red-200"
+                                className={`px-3 py-1.5 text-xs rounded-full border flex items-center transition-colors ${
+                                  isDisagreed
+                                    ? 'bg-red-600 text-white border-red-600'
+                                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleVote(tension.id, 'disagree');
                                 }}
                               >
+                                <ThumbsDown className="h-3 w-3 mr-1.5" />
                                 Disagree ({disagreeCount})
                               </button>
+
                               <button
-                                className="px-3 py-1 text-xs bg-gray-100 text-gray-800 rounded-full hover:bg-gray-200 border border-gray-200 flex items-center"
+                                className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 border border-gray-200 flex items-center"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleAddComment(tension.id);
                                 }}
                               >
-                                <MessageSquare className="h-3 w-3 mr-1" />
+                                <MessageSquare className="h-3 w-3 mr-1.5" />
                                 Comment ({tension.comments?.length || 0})
                               </button>
                             </div>
@@ -780,7 +799,6 @@ export function ProjectDetail({
         </div>
       </div>
 
-      {/* --- ADD TENSION MODAL --- */}
       {showAddTension && (
         <AddTensionModal 
           onClose={() => setShowAddTension(false)} 
@@ -790,243 +808,3 @@ export function ProjectDetail({
     </div>
   );
 }
-```
-
-### **2. Adım: Backend (`server.js`) Dosyasını Güncelle**
-
-Backend tarafında, oyların "kimin" kullandığını takip etmemiz lazım. Böylece bir kişi ikinci kez oy verdiğinde eski oyu güncellenir. Ayrıca yorumları da veritabanına kaydedelim.
-
-Aşağıdaki kodu **`backend/server.js`** dosyasına yapıştırarak eski kodun üzerine yaz.
-
-```javascript
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-require('dotenv').config();
-
-const app = express();
-const PORT = 5000;
-
-app.use(cors());
-app.use(express.json());
-
-// Veritabanı Bağlantısı
-const MONGO_URI = 'mongodb://localhost:27017/zinspection';
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB Bağlantısı Başarılı'))
-  .catch(err => console.error('❌ MongoDB Bağlantı Hatası:', err));
-
-// --- ŞEMALAR ---
-
-// Kullanıcı Şeması
-const UserSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, required: true },
-  isOnline: { type: Boolean, default: false },
-  lastSeen: { type: Date, default: Date.now }
-});
-const User = mongoose.model('User', UserSchema);
-
-// Proje Şeması
-const ProjectSchema = new mongoose.Schema({
-  title: String,
-  shortDescription: String,
-  fullDescription: String,
-  status: { type: String, default: 'ongoing' },
-  stage: { type: String, default: 'set-up' },
-  targetDate: String,
-  progress: { type: Number, default: 0 },
-  assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  useCase: { type: String }, 
-  createdAt: { type: Date, default: Date.now }
-});
-const Project = mongoose.model('Project', ProjectSchema);
-
-// Use Case Şeması
-const UseCaseSchema = new mongoose.Schema({
-  title: String,
-  description: String,
-  aiSystemCategory: String,
-  status: { type: String, default: 'assigned' },
-  progress: { type: Number, default: 0 },
-  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  assignedExperts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  adminNotes: String,
-  supportingFiles: [String],
-  createdAt: { type: Date, default: Date.now }
-});
-const UseCase = mongoose.model('UseCase', UseCaseSchema);
-
-// Tension (Gerilim) Şeması (GÜNCELLENDİ)
-const TensionSchema = new mongoose.Schema({
-  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  principle1: String,
-  principle2: String,
-  claimStatement: String, // İddia
-  description: String,    // Argüman
-  evidenceDescription: String, // Kanıt metni
-  evidenceFileName: String, // Kanıt dosya adı
-  severity: Number,
-  createdAt: { type: Date, default: Date.now },
-  
-  // OYLAMA SİSTEMİ (YENİ)
-  votes: [{
-    userId: String,
-    voteType: { type: String, enum: ['agree', 'disagree'] }
-  }],
-  
-  // YORUMLAR SİSTEMİ (YENİ)
-  comments: [{
-    id: String,
-    text: String,
-    author: String,
-    date: { type: Date, default: Date.now }
-  }]
-});
-const Tension = mongoose.model('Tension', TensionSchema);
-
-// Değerlendirme Formu Şeması
-const EvaluationSchema = new mongoose.Schema({
-  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  role: String,
-  stage: String,
-  answers: { type: Map, of: mongoose.Schema.Types.Mixed },
-  riskLevel: String,
-  isDraft: Boolean,
-  updatedAt: { type: Date, default: Date.now }
-});
-const Evaluation = mongoose.model('Evaluation', EvaluationSchema);
-
-// --- ROUTES ---
-
-// 1. OYLAMA ROUTE'U (YENİ)
-app.post('/api/tensions/:id/vote', async (req, res) => {
-  try {
-    const { userId, voteType } = req.body;
-    const tension = await Tension.findById(req.params.id);
-    if (!tension) return res.status(404).send('Tension not found');
-
-    // votes dizisi yoksa oluştur
-    if (!tension.votes) tension.votes = [];
-
-    // Kullanıcı daha önce oy vermiş mi kontrol et
-    const existingVoteIndex = tension.votes.findIndex(v => v.userId === userId);
-
-    if (existingVoteIndex > -1) {
-      // Varsa güncelle
-      tension.votes[existingVoteIndex].voteType = voteType;
-    } else {
-      // Yoksa yeni ekle
-      tension.votes.push({ userId, voteType });
-    }
-
-    await tension.save();
-
-    // Güncel sayıları hesapla
-    const agreeCount = tension.votes.filter(v => v.voteType === 'agree').length;
-    const disagreeCount = tension.votes.filter(v => v.voteType === 'disagree').length;
-
-    res.json({ consensus: { agree: agreeCount, disagree: disagreeCount } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 2. YORUM EKLEME ROUTE'U (YENİ)
-app.post('/api/tensions/:id/comment', async (req, res) => {
-  try {
-    const { text, author } = req.body;
-    const tension = await Tension.findById(req.params.id);
-    if (!tension) return res.status(404).send('Not found');
-
-    const newComment = {
-      id: Date.now().toString(),
-      text,
-      author,
-      date: new Date()
-    };
-
-    if (!tension.comments) tension.comments = [];
-    tension.comments.push(newComment);
-    
-    await tension.save();
-    res.json(newComment);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 3. TENSION GETİRME (GÜNCELLENDİ - Oyları Hesaplayıp Dönüyor)
-app.get('/api/tensions/:projectId', async (req, res) => {
-  try {
-    const tensions = await Tension.find({ projectId: req.params.projectId });
-    
-    // Her gerilim için oy sayılarını hesaplayıp frontend formatına çevir
-    const formattedTensions = tensions.map(t => {
-        const agreeCount = t.votes ? t.votes.filter(v => v.voteType === 'agree').length : 0;
-        const disagreeCount = t.votes ? t.votes.filter(v => v.voteType === 'disagree').length : 0;
-        
-        return {
-            ...t.toObject(),
-            consensus: { agree: agreeCount, disagree: disagreeCount }
-        };
-    });
-    
-    res.json(formattedTensions);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --- Diğer Standart Route'lar (Login, Project, UseCase vs.) ---
-app.post('/api/register', async (req, res) => {
-    try {
-        const newUser = new User(req.body);
-        await newUser.save();
-        res.json(newUser);
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/login', async (req, res) => {
-    const user = await User.findOne({ email: req.body.email, password: req.body.password, role: req.body.role });
-    if (user) res.json(user);
-    else res.status(401).json({ message: "Invalid credentials" });
-});
-
-app.get('/api/projects', async (req, res) => {
-    const projects = await Project.find();
-    res.json(projects);
-});
-
-app.post('/api/projects', async (req, res) => {
-    const project = new Project(req.body);
-    await project.save();
-    res.json(project);
-});
-
-app.get('/api/users', async (req, res) => {
-    const users = await User.find({}, '-password');
-    res.json(users);
-});
-
-app.get('/api/use-cases', async (req, res) => {
-    const useCases = await UseCase.find();
-    res.json(useCases);
-});
-
-app.post('/api/use-cases', async (req, res) => {
-    const useCase = new UseCase(req.body);
-    await useCase.save();
-    res.json(useCase);
-});
-
-app.post('/api/tensions', async (req, res) => {
-    const tension = new Tension(req.body);
-    await tension.save();
-    res.json(tension);
-});
-
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
