@@ -21,6 +21,16 @@ export interface Project {
   createdAt: string;
   isNew?: boolean;
   progress: number;
+
+  inspectionContext?: { // Yeni alan
+        requester: string;
+        inspectionReason: string;
+        relevantFor: string;
+        isMandatory: string;
+        conditionsToAnalyze: string;
+        resultsUsage: string;
+        resultsSharing: string;
+    }
 }
 
 export type TensionSeverity = 'high' | 'medium' | 'low';

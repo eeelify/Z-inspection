@@ -65,6 +65,10 @@ function App() {
         const response = await fetch('http://127.0.0.1:5000/api/use-cases');
         if (response.ok) {
           const data = await response.json();
+
+          console.log("API'den gelen tüm kullanıcılar:", data); 
+          console.log("Gelen kullanıcı sayısı:", data.length);
+
           const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
           setUseCases(formattedUseCases);
         }

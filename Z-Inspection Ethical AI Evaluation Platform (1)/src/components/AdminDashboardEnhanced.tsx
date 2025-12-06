@@ -22,7 +22,7 @@ const statusColors = {
 
 const stageLabels = {
   'set-up': 'Set-up',
-  assess: 'Assess', 
+  assess: 'Assess',
   resolve: 'Resolve'
 };
 
@@ -64,7 +64,7 @@ export function AdminDashboardEnhanced({
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="h-1 bg-gradient-to-r from-blue-600 to-blue-800" />
-        
+
         <div className="p-6 border-b border-gray-200">
           <div className="text-xl font-bold text-gray-900 mb-1">Z-Inspection</div>
           <div className="text-xs text-gray-500 uppercase tracking-wider">Admin Portal</div>
@@ -196,26 +196,26 @@ export function AdminDashboardEnhanced({
             setSelectedUseCaseForAssignment(null);
           }}
           onAssign={async (expertIds, notes) => {
-             try {
-              const response = await fetch(`http://127.0.0.1:5000/api/use-cases/${selectedUseCaseForAssignment.id}/assign`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  assignedExperts: expertIds,
-                  adminNotes: notes
-                })
-              });
+              try {
+               const response = await fetch(`http://127.0.0.1:5000/api/use-cases/${selectedUseCaseForAssignment.id}/assign`, {
+                 method: 'PUT',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                   assignedExperts: expertIds,
+                   adminNotes: notes
+                 })
+               });
 
-              if (response.ok) {
-                alert("Experts assigned successfully!");
-              }
-            } catch (error) {
-              console.error("Assignment error:", error);
-              alert("Failed to assign experts.");
-            }
-            setShowAssignExpertsModal(false);
-            setSelectedUseCaseForAssignment(null);
-          }}
+               if (response.ok) {
+                 alert("Experts assigned successfully!");
+               }
+             } catch (error) {
+               console.error("Assignment error:", error);
+               alert("Failed to assign experts.");
+             }
+             setShowAssignExpertsModal(false);
+             setSelectedUseCaseForAssignment(null);
+           }}
         />
       )}
     </div>
@@ -233,7 +233,7 @@ function DashboardTab({ projects, searchQuery, setSearchQuery, onViewProject, ri
             <h1 className="text-2xl font-bold text-gray-900 mb-1">Overview</h1>
             <p className="text-gray-600">Monitor all evaluation projects and risk assessments</p>
           </div>
-          <button 
+          <button
             onClick={onCreateNew}
             className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 flex items-center shadow-sm"
           >
@@ -351,55 +351,55 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {useCases.length === 0 ? (
-                 <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                        No use cases found. Use Case Owners need to create them first.
-                    </td>
-                 </tr>
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    No use cases found. Use Case Owners need to create them first.
+                  </td>
+                </tr>
               ) : (
                 useCases.map((useCase: UseCase) => {
-                    const owner = users.find((u: User) => u.id === useCase.ownerId);
-                    const assignedExperts = users.filter((u: User) => useCase.assignedExperts?.includes(u.id));
-                    
-                    return (
+                  const owner = users.find((u: User) => u.id === useCase.ownerId);
+                  const assignedExperts = users.filter((u: User) => useCase.assignedExperts?.includes(u.id));
+
+                  return (
                     <tr key={useCase.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
+                      <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{useCase.title}</div>
                         <div className="text-xs text-gray-500">{useCase.aiSystemCategory || 'No category'}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Unknown'}</td>
-                        <td className="px-6 py-4">
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Unknown'}</td>
+                      <td className="px-6 py-4">
                         <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status]?.text || 'text-gray-800'}`}>
-                            {useCase.status.replace('-', ' ').toUpperCase()}
+                          {useCase.status.replace('-', ' ').toUpperCase()}
                         </span>
-                        </td>
-                        <td className="px-6 py-4">
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="flex -space-x-2">
-                            {assignedExperts.length === 0 ? (
-                                <span className="text-xs text-gray-400 italic">None</span>
-                            ) : (
-                                assignedExperts.map((expert: User) => (
-                                <div
-                                    key={expert.id}
-                                    className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                    title={`${expert.name} (${expert.role})`}
-                                >
-                                    {expert.name.charAt(0)}
-                                </div>
-                                ))
-                            )}
+                          {assignedExperts.length === 0 ? (
+                            <span className="text-xs text-gray-400 italic">None</span>
+                          ) : (
+                            assignedExperts.map((expert: User) => (
+                              <div
+                                key={expert.id}
+                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                title={`${expert.name} (${expert.role})`}
+                              >
+                                {expert.name.charAt(0)}
+                              </div>
+                            ))
+                          )}
                         </div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
+                      </td>
+                      <td className="px-6 py-4 text-right">
                         <button
-                            onClick={() => onAssignExperts(useCase)}
-                            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                          onClick={() => onAssignExperts(useCase)}
+                          className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors"
                         >
-                            Manage Team
+                          Manage Team
                         </button>
-                        </td>
+                      </td>
                     </tr>
-                    );
+                  );
                 })
               )}
             </tbody>
@@ -418,29 +418,56 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject }: any) {
   const [selectedUseCaseId, setSelectedUseCaseId] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string[]>([]);
 
+  // ⚠️ YENİ STATE'LER: 7 Temel Soru İçin Eklenmiştir
+  const [requester, setRequester] = useState('');
+  const [inspectionReason, setInspectionReason] = useState('');
+  const [relevantFor, setRelevantFor] = useState('');
+  const [isMandatory, setIsMandatory] = useState('');
+  const [conditionsToAnalyze, setConditionsToAnalyze] = useState('');
+  const [resultsUsage, setResultsUsage] = useState('');
+  const [resultsSharing, setResultsSharing] = useState('');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (selectedTeam.length === 0) {
       alert("Please assign at least one team member (Expert or Owner) to create a project.");
       return;
     }
 
+    // ⚠️ GÜNCELLENMİŞ onCreateProject çağrısı: inspectionContext eklendi
     onCreateProject({
       title,
       shortDescription: description.substring(0, 100),
       fullDescription: description,
       targetDate,
       assignedUsers: selectedTeam,
-      useCase: selectedUseCaseId || undefined
+      useCase: selectedUseCaseId || undefined,
+      inspectionContext: {
+        requester,
+        inspectionReason,
+        relevantFor,
+        isMandatory,
+        conditionsToAnalyze,
+        resultsUsage,
+        resultsSharing
+      }
     });
-    
+
+    // Alanları temizle
     setTitle('');
     setDescription('');
     setTags('');
     setTargetDate('');
     setSelectedUseCaseId('');
     setSelectedTeam([]);
+    setRequester('');
+    setInspectionReason('');
+    setRelevantFor('');
+    setIsMandatory('');
+    setConditionsToAnalyze('');
+    setResultsUsage('');
+    setResultsSharing('');
   };
 
   const toggleUser = (userId: string) => {
@@ -451,7 +478,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject }: any) {
     }
   };
 
-  const experts = users.filter((u: User) => u.role !== 'admin');
+  const experts = users.filter((u: User) => u.role !== 'admin'); // Admin olmayan kullanıcılar (Expert/Owner)
 
   return (
     <>
@@ -461,10 +488,12 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject }: any) {
       </div>
 
       <div className="px-8 py-8">
-        <div className="max-w-2xl mx-auto mb-20"> 
+        <div className="max-w-2xl mx-auto mb-20">
           <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* 1. Project Info Section */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
-              
+
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                 <label className="block text-sm font-medium mb-2 text-blue-900 flex items-center">
                   <LinkIcon className="h-4 w-4 mr-2" />
@@ -541,34 +570,144 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject }: any) {
                 </div>
               </div>
 
+            </div>
+
+            {/* 2. Project Context and Scope Questions (7 Soru) */}
+            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
+              <h2 className="text-lg font-bold text-gray-900 border-b pb-3 mb-4">Project Context and Scope</h2>
+
+              {/* Soru 1: Who requested the inspection? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">1. Who requested the inspection?</label>
+                <input
+                  type="text"
+                  value={requester}
+                  onChange={(e) => setRequester(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Legal Department, Product Owner, Regulatory Body"
+                />
+              </div>
+
+              {/* Soru 2: Why carry out an inspection? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">2. Why carry out an inspection?</label>
+                <input
+                  type="text"
+                  value={inspectionReason}
+                  onChange={(e) => setInspectionReason(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Compliance check, Risk mitigation, Public trust building"
+                />
+              </div>
+
+              {/* Soru 3: For whom is the inspection relevant? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">3. For whom is the inspection relevant?</label>
+                <input
+                  type="text"
+                  value={relevantFor}
+                  onChange={(e) => setRelevantFor(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Internal auditors, Customers, Regulators"
+                />
+              </div>
+
+              {/* Soru 4: Is it recommended or required (mandatory inspection)? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">4. Is it recommended or required (mandatory inspection)?</label>
+                <select
+                  value={isMandatory}
+                  onChange={(e) => setIsMandatory(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Select one...</option>
+                  <option value="recommended">Recommended</option>
+                  <option value="mandatory">Required (Mandatory)</option>
+                </select>
+              </div>
+
+              {/* Soru 5: What are the sufficient vs. necessary conditions that need to be analyzed? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">5. What are the sufficient vs. necessary conditions that need to be analyzed?</label>
+                <textarea
+                  value={conditionsToAnalyze}
+                  onChange={(e) => setConditionsToAnalyze(e.target.value)}
+                  rows={2}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Minimum legal requirements (necessary), Best practice standards (sufficient)"
+                />
+              </div>
+
+              {/* Soru 6: How are the inspection results to be used? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">6. How are the inspection results to be used? (e.g. verification, certification, sanctions)</label>
+                <input
+                  type="text"
+                  value={resultsUsage}
+                  onChange={(e) => setResultsUsage(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Internal risk report, External certification for compliance"
+                />
+              </div>
+
+              {/* Soru 7: Will the results be shared (public) or kept private? */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">7. Will the results be shared (public) or kept private? (If private, why?)</label>
+                <textarea
+                  value={resultsSharing}
+                  onChange={(e) => setResultsSharing(e.target.value)}
+                  rows={2}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Public (for transparency), Private (due to sensitive trade secrets)"
+                />
+              </div>
+            </div>
+            {/* End of Project Context Section */}
+
+
+            {/* 3. Assignment Section (Ekip Atama) - Düzeltilmiş Görünüm */}
+            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
               <div>
                 <label className="block text-sm font-medium mb-3 text-gray-700">
-                    Assign Evaluation Team (Experts & Owners)
+                  Assign Evaluation Team (Experts & Owners) *
                 </label>
                 <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  {experts.map((user: User) => (
-                    <label key={user.id} className={`flex items-center p-2 rounded cursor-pointer transition-colors ${selectedTeam.includes(user.id) ? 'bg-blue-50 border-blue-100' : 'hover:bg-gray-50'}`}>
-                      <input
-                        type="checkbox"
-                        checked={selectedTeam.includes(user.id)}
-                        onChange={() => toggleUser(user.id)}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3"
-                      />
-                      <div className="flex items-center">
-                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 mr-2 font-medium">
-                          {user.name.charAt(0)}
-                        </div>
-                        <span className="text-sm text-gray-900">{user.name}</span>
-                        <span className="text-xs text-gray-500 ml-2 bg-gray-100 px-2 py-0.5 rounded-full capitalize">
+                  
+                  {experts.length === 0 ? (
+                    <div className="text-sm text-gray-500 text-center py-4">No users available for assignment.</div>
+                  ) : (
+                    experts.map((user: User) => (
+                      <label 
+                        key={user.id} 
+                        className={`flex items-center p-2 rounded cursor-pointer transition-colors ${
+                          selectedTeam.includes(user.id) ? 'bg-blue-100 border border-blue-200' : 'hover:bg-gray-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedTeam.includes(user.id)}
+                          onChange={() => toggleUser(user.id)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3"
+                        />
+                        <div className="flex items-center flex-1">
+                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-600 mr-3 font-medium border-2 border-white shadow-sm">
+                            {user.name.charAt(0)}
+                          </div>
+                          <span className="text-sm text-gray-900 font-medium">{user.name}</span>
+                          <span className={`text-xs ml-auto px-2 py-0.5 rounded-full capitalize ${
+                            user.role === 'expert' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                          }`}>
                             {user.role.replace('-', ' ')}
-                        </span>
-                      </div>
-                      {selectedTeam.includes(user.id) && <CheckCircle2 className="w-4 h-4 text-blue-600 ml-auto" />}
-                    </label>
-                  ))}
+                          </span>
+                        </div>
+                        {selectedTeam.includes(user.id) && <CheckCircle2 className="w-4 h-4 text-blue-600 ml-3" />}
+                      </label>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
+            {/* End of Assignment Section */}
 
             <div className="flex justify-end pb-8">
               <button
@@ -588,7 +727,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject }: any) {
 function ReportsTab({ projects, riskLevels }: any) {
   return (
     <div className="flex items-center justify-center h-full text-gray-500">
-        Reports module coming soon...
+      Reports module coming soon...
     </div>
   );
 }
@@ -640,28 +779,28 @@ function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExperts
             <label className="block text-sm font-medium mb-3 text-gray-700">Select Experts</label>
             <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-2 bg-gray-50">
               {experts.length === 0 ? (
-                  <div className="text-sm text-gray-500 text-center py-2">No experts available to assign.</div>
+                <div className="text-sm text-gray-500 text-center py-2">No experts available to assign.</div>
               ) : (
                 experts.map(expert => (
-                    <label
+                  <label
                     key={expert.id}
                     className={`flex items-center p-3 rounded-lg cursor-pointer transition-all ${
-                        selectedExperts.includes(expert.id) 
-                        ? 'bg-blue-50 border border-blue-200' 
+                      selectedExperts.includes(expert.id)
+                        ? 'bg-blue-50 border border-blue-200'
                         : 'hover:bg-white border border-transparent'
                     }`}
-                    >
+                  >
                     <input
-                        type="checkbox"
-                        checked={selectedExperts.includes(expert.id)}
-                        onChange={() => toggleExpert(expert.id)}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3 border-gray-300"
+                      type="checkbox"
+                      checked={selectedExperts.includes(expert.id)}
+                      onChange={() => toggleExpert(expert.id)}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mr-3 border-gray-300"
                     />
                     <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900">{expert.name}</div>
-                        <div className="text-xs text-gray-500 capitalize">{expert.role.replace('-', ' ')}</div>
+                      <div className="text-sm font-medium text-gray-900">{expert.name}</div>
+                      <div className="text-xs text-gray-500 capitalize">{expert.role.replace('-', ' ')}</div>
                     </div>
-                    </label>
+                  </label>
                 ))
               )}
             </div>
