@@ -67,7 +67,12 @@ const UseCaseSchema = new mongoose.Schema({
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   assignedExperts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   adminNotes: String,
-  supportingFiles: [String],
+  supportingFiles: [{
+    name: String,
+    data: String, // Base64
+    contentType: String,
+    url: String
+  }],
   createdAt: { type: Date, default: Date.now },
   extendedInfo: { type: Map, of: mongoose.Schema.Types.Mixed },
   feedback: [{ from: String, text: String, timestamp: { type: Date, default: Date.now } }],
@@ -130,6 +135,35 @@ const Tension = mongoose.model('Tension', TensionSchema);
 app.get('/api/use-cases', async (req, res) => { try { const useCases = await UseCase.find(); res.json(useCases); } catch (err) { res.status(500).json({ error: err.message }); }});
 app.get('/api/use-cases/:id', async (req, res) => { try { const useCase = await UseCase.findById(req.params.id); if (!useCase) return res.status(404).json({ error: 'Not found' }); res.json(useCase); } catch (err) { res.status(500).json({ error: err.message }); }});
 app.post('/api/use-cases', async (req, res) => { try { const useCase = new UseCase(req.body); await useCase.save(); res.json(useCase); } catch (err) { res.status(500).json({ error: err.message }); }});
+// Add supporting files to a use case (files should be sent as base64 data)
+app.post('/api/use-cases/:id/supporting-files', async (req, res) => {
+  try {
+    const useCaseId = req.params.id;
+    const { files } = req.body; // expect [{ name, data, contentType, url? }]
+    const useCase = await UseCase.findById(useCaseId);
+    if (!useCase) return res.status(404).json({ error: 'Use case not found' });
+
+    if (!Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: 'No files provided' });
+    }
+
+    if (!useCase.supportingFiles) useCase.supportingFiles = [];
+    files.forEach(f => {
+      useCase.supportingFiles.push({
+        name: f.name,
+        data: f.data,
+        contentType: f.contentType,
+        url: f.url
+      });
+    });
+
+    await useCase.save();
+    res.json(useCase.supportingFiles);
+  } catch (err) {
+    console.error('Support file upload error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Tensions - OLUŞTURMA (İlk evidence ile birlikte)
 app.post('/api/tensions', async (req, res) => {

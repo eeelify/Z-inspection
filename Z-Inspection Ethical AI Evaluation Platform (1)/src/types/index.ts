@@ -116,7 +116,9 @@ export interface UseCase {
   updatedAt: string;
   supportingFiles?: {
     name: string;
-    url: string;
+    url?: string;
+    data?: string; // Base64 inline data
+    contentType?: string;
   }[];
   assignedExperts?: string[];
   adminNotes?: string;
