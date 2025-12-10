@@ -36,49 +36,45 @@ function App() {
 
   // --- VERİ ÇEKME (FETCH) ---
   useEffect(() => {
-    // 1. Projeleri Çek
-    const fetchProjects = async () => {
+    // Paralel olarak tüm verileri çek - daha hızlı, timeout ile
+    const fetchAllData = async () => {
       try {
-        const response = await fetch(api('/api/projects'));
-        if (response.ok) {
-          const data = await response.json();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const [projectsRes, usersRes, useCasesRes] = await Promise.all([
+          fetch(api('/api/projects'), { signal: controller.signal }),
+          fetch(api('/api/users'), { signal: controller.signal }),
+          fetch(api('/api/use-cases'), { signal: controller.signal })
+        ]);
+        
+        clearTimeout(timeoutId);
+
+        if (projectsRes.ok) {
+          const data = await projectsRes.json();
           const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
           setProjects(formattedProjects);
         }
-      } catch (error) { console.error("Projeler yüklenemedi:", error); }
-    };
 
-    // 2. Kullanıcıları Çek
-    const fetchUsers = async () => {
-      try {
-        const response = await fetch(api('/api/users'));
-        if (response.ok) {
-          const data = await response.json();
+        if (usersRes.ok) {
+          const data = await usersRes.json();
           const formattedUsers = data.map((u: any) => ({ ...u, id: u._id }));
           setUsers(formattedUsers);
         }
-      } catch (error) { console.error("Kullanıcılar yüklenemedi:", error); }
-    };
 
-    // 3. Use Case'leri Çek (İŞTE BU SATIR VERİLERİN GELMESİNİ SAĞLAR)
-    const fetchUseCases = async () => {
-      try {
-        const response = await fetch(api('/api/use-cases'));
-        if (response.ok) {
-          const data = await response.json();
-
-          console.log("API'den gelen tüm kullanıcılar:", data); 
-          console.log("Gelen kullanıcı sayısı:", data.length);
-
+        if (useCasesRes.ok) {
+          const data = await useCasesRes.json();
           const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
           setUseCases(formattedUseCases);
         }
-      } catch (error) { console.error("Use Case'ler yüklenemedi:", error); }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error("Veri yükleme hatası:", error);
+        }
+      }
     };
 
-    fetchProjects();
-    fetchUsers();
-    fetchUseCases();
+    fetchAllData();
   }, []);
 
   // --- LOGIN ---
@@ -88,11 +84,18 @@ function App() {
     role: string,
   ) => {
     try {
+      // Add timeout to login request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      
       const response = await fetch(api('/api/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role })
+        body: JSON.stringify({ email, password, role }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const userDB = await response.json();
@@ -108,11 +111,16 @@ function App() {
           setNeedsPrecondition(!Boolean(approved));
         }
       } else {
-        alert("Giriş başarısız! Bilgileri kontrol edin.");
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        alert(errorData.message || "Giriş başarısız! Bilgileri kontrol edin.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login hatası:", error);
-      alert("Sunucuya bağlanılamadı.");
+      if (error.name === 'AbortError') {
+        alert("Giriş zaman aşımına uğradı. Lütfen tekrar deneyin.");
+      } else {
+        alert("Sunucuya bağlanılamadı. Backend'in çalıştığından emin olun.");
+      }
     }
   };
 
@@ -242,6 +250,7 @@ function App() {
 
   const handleCreateUseCase = async (useCaseData: Partial<UseCase>) => {
     try {
+      console.log('Creating use case with data:', useCaseData);
       const response = await fetch(api('/api/use-cases'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -251,7 +260,8 @@ function App() {
           status: 'assigned',
           progress: 0,
           assignedExperts: [],
-          supportingFiles: useCaseData.supportingFiles || []
+          supportingFiles: useCaseData.supportingFiles || [],
+          answers: useCaseData.answers || []
         })
       });
 
@@ -264,6 +274,10 @@ function App() {
         // Listeyi güncelle ki anında görebilelim
         setUseCases([newUseCaseFrontend, ...useCases]);
         alert("Use Case başarıyla oluşturuldu!");
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error("Use Case oluşturma hatası:", errorData);
+        alert(`Use Case oluşturulamadı: ${errorData.error || 'Bilinmeyen hata'}`);
       }
     } catch (error) {
       console.error("Use Case oluşturma hatası:", error);

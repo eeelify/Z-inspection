@@ -50,8 +50,34 @@ export function UseCaseOwnerDashboard({
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [myUseCases, setMyUseCases] = useState<UseCase[]>([]);
+  const [loadingUseCases, setLoadingUseCases] = useState(true);
 
-  const myUseCases = useCases.filter(uc => uc.ownerId === currentUser.id);
+  // Fetch only this owner's use cases directly from backend (much faster)
+  const fetchMyUseCases = React.useCallback(async () => {
+    setLoadingUseCases(true);
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/use-cases?ownerId=${currentUser.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const formattedUseCases = data.map((uc: any) => ({ ...uc, id: uc._id }));
+        setMyUseCases(formattedUseCases);
+      } else {
+        // Fallback to filtering from props if API fails
+        setMyUseCases(useCases.filter(uc => uc.ownerId === currentUser.id));
+      }
+    } catch (error) {
+      console.error('Error fetching my use cases:', error);
+      // Fallback to filtering from props if API fails
+      setMyUseCases(useCases.filter(uc => uc.ownerId === currentUser.id));
+    } finally {
+      setLoadingUseCases(false);
+    }
+  }, [currentUser.id, useCases]);
+
+  useEffect(() => {
+    fetchMyUseCases();
+  }, [fetchMyUseCases]);
   
   // Find admin user
   const adminUser = users.find(u => u.role === 'admin');
@@ -375,7 +401,11 @@ export function UseCaseOwnerDashboard({
         </div>
                 {/* Use Cases Grid */}
         <div className="px-8 py-6">
-          {myUseCases.length > 0 ? (
+          {loadingUseCases ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">Loading use cases...</div>
+            </div>
+          ) : myUseCases.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {myUseCases.map(useCase => (
                 <div
@@ -393,10 +423,12 @@ export function UseCaseOwnerDashboard({
                           {statusLabels[useCase.status]}
                         </span>
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             const confirmed = window.confirm(`Delete use case "${useCase.title}"?`);
                             if (confirmed) {
-                              onDeleteUseCase(useCase.id);
+                              await onDeleteUseCase(useCase.id);
+                              // Refresh the list after deletion
+                              fetchMyUseCases();
                             }
                           }}
                           className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
@@ -487,9 +519,11 @@ export function UseCaseOwnerDashboard({
       {showNewUseCaseModal && (
         <NewUseCaseModal
           onClose={() => setShowNewUseCaseModal(false)}
-          onSubmit={(data) => {
-            onCreateUseCase(data);
+          onSubmit={async (data) => {
+            await onCreateUseCase(data);
             setShowNewUseCaseModal(false);
+            // Refresh the list after creating
+            fetchMyUseCases();
           }}
           currentUser={currentUser}
         />
@@ -550,13 +584,27 @@ type FileAttachment = {
   contentType?: string;
 };
 
+interface UseCaseQuestion {
+  id: string;
+  questionEn: string;
+  questionTr: string;
+  type: 'text' | 'multiple-choice';
+  options?: string[];
+  order?: number;
+}
+
 function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProps) {
+  const [questions, setQuestions] = useState<UseCaseQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   // Basic Information
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [aiSystemCategory, setAiSystemCategory] = useState('Healthcare & Medical');
   const [dragActive, setDragActive] = useState(false);
   const [files, setFiles] = useState<FileAttachment[]>([]);
+  
+  // Questions answers - initialize with empty object
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
 
   // Section I
   const [systemName, setSystemName] = useState('');
@@ -606,6 +654,53 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
   const [accountability, setAccountability] = useState('');
   const [traceability, setTraceability] = useState('');
 
+  // Fetch questions from API when component mounts - with timeout
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      setLoadingQuestions(true);
+      try {
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch('http://127.0.0.1:5000/api/use-case-questions', {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            setQuestions(data);
+            // Initialize question answers
+            const initialAnswers = data.reduce((acc: Record<string, string>, q: UseCaseQuestion) => {
+              acc[q.id] = '';
+              return acc;
+            }, {});
+            setQuestionAnswers(initialAnswers);
+          } else {
+            console.warn('No questions found. Please seed questions first.');
+            setQuestions([]);
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('Failed to fetch questions:', response.status, errorText);
+          setQuestions([]);
+        }
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.error('Request timeout - server is slow or not responding');
+        } else {
+          console.error('Error fetching questions:', error);
+        }
+        setQuestions([]);
+      } finally {
+        setLoadingQuestions(false);
+      }
+    };
+    fetchQuestions();
+  }, []);
+
   const categories = [
     'Healthcare & Medical',
     'Finance',
@@ -619,30 +714,18 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 1. Ana Dokümanı Hazırla (Varsa)
-    // Link ise 'Main Link', Dosya ise 'Main Document' ismini veriyoruz.
-    const mainDocumentObj = docValue ? {
-      name: docType === 'link' ? 'Main Use Case Link' : 'Main Use Case Document',
-      url: docValue,       // Girilen link veya sunucudan dönen dosya yolu
-      contentType: docType // 'link' veya 'file' (İndirme butonunda ikon seçimi için)
-    } : null;
-
-    // 2. Diğer Dosyaları Hazırla (Eğer sürükle-bırak ile başka dosyalar da eklediyse)
-    // (files state'inin yapısına göre data veya url kullanıyoruz)
-    // @ts-ignore
-    const additionalFiles = files.map(f => ({
+    // Prepare supporting files
+    const finalSupportingFiles = files.map(f => ({
       name: f.name,
-      url: f.url || '',    // Varsa URL
-      // @ts-ignore
-      data: f.data,        // Varsa Base64 (Eski yöntem)
-      // @ts-ignore
+      data: f.data,
       contentType: f.contentType,
     }));
 
-    // 3. Listeleri Birleştir (Ana doküman en başa)
-    const finalSupportingFiles = mainDocumentObj 
-      ? [mainDocumentObj, ...additionalFiles] 
-      : additionalFiles;
+    // Prepare answers array - sadece questionId ve answer
+    const answers = questions.map(q => ({
+      questionId: q.id,
+      answer: questionAnswers[q.id] || ''
+    }));
 
     onSubmit({
       title,
@@ -653,10 +736,8 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
       ownerId: currentUser.id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      
-      // ✅ GÜNCELLENEN KISIM: Tek bir liste gönderiyoruz
       supportingFiles: finalSupportingFiles,
-
+      answers: answers,
       extendedInfo: {
         sectionI: {
           systemName,
@@ -708,7 +789,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
         }
       }
     });
-};
+  };
 
   const InfoTooltip = ({ content }: { content: string }) => (
     <TooltipProvider>
@@ -781,7 +862,8 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
                 Cancel
               </button>
               <button
-                onClick={handleSubmit}
+                type="submit"
+                form="usecase-form"
                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
               >
                 Submit Use Case
@@ -791,7 +873,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
         </div>
 
         {/* FORM START */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form id="usecase-form" onSubmit={handleSubmit} className="p-6 space-y-6">
 
           {/* BASIC INFORMATION */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
@@ -810,6 +892,33 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
                             placeholder="e.g., Medical Image Analysis for Cancer Detection"
                             required
                           />
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <label className="block text-sm mb-2 text-gray-700">Description *</label>
+                          <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[120px]"
+                            placeholder="Provide a detailed description of your use case..."
+                            required
+                          />
+                        </div>
+
+                        {/* AI System Category */}
+                        <div>
+                          <label className="block text-sm mb-2 text-gray-700">AI System Category *</label>
+                          <select
+                            value={aiSystemCategory}
+                            onChange={(e) => setAiSystemCategory(e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            required
+                          >
+                            {categories.map((cat) => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
                         </div>
 
                     {/* File Upload */}
@@ -855,11 +964,80 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
                         </div>
                       )}
                     </div>
-                      </div>
-                    </form>
-                  </div>
+          </div>
+
+          {/* QUESTIONS SECTION */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+            <div>
+              <h3 className="text-lg text-gray-900 mb-4">📋 Use Case Questions</h3>
+              <p className="text-sm text-gray-600 mb-6">Please answer the following questions about your AI system use case.</p>
+            </div>
+
+            {loadingQuestions ? (
+              <div className="text-center py-8 text-gray-500">Loading questions...</div>
+            ) : questions.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">No questions available.</p>
+                <p className="text-sm text-gray-400">Please seed questions in the database first.</p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('http://127.0.0.1:5000/api/use-case-questions/seed', {
+                        method: 'POST'
+                      });
+                      if (response.ok) {
+                        alert('Questions seeded successfully! Please refresh the page.');
+                        window.location.reload();
+                      } else {
+                        alert('Failed to seed questions.');
+                      }
+                    } catch (error) {
+                      alert('Error seeding questions.');
+                    }
+                  }}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Seed Questions Now
+                </button>
+              </div>
+            ) : (
+            <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
+              {questions.map((question) => (
+                <div key={question.id} className="border-b border-gray-100 pb-6 last:border-b-0">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    {question.questionEn}
+                    <span className="block text-xs text-gray-500 mt-1 font-normal">{question.questionTr}</span>
+                  </label>
+                  
+                  {question.type === 'multiple-choice' && question.options ? (
+                    <select
+                      value={questionAnswers[question.id] || ''}
+                      onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="">Select an option...</option>
+                      {question.options.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <textarea
+                      value={questionAnswers[question.id] || ''}
+                      onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[100px]"
+                      placeholder="Enter your answer..."
+                    />
+                  )}
                 </div>
-              );
-            }
+              ))}
+            </div>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 

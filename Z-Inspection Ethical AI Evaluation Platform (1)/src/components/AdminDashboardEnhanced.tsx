@@ -438,7 +438,15 @@ export function AdminDashboardEnhanced({
               </button>
               
               {showNotifications && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] overflow-hidden flex flex-col" style={{ maxHeight: 'min(500px, calc(100vh - 80px))', maxWidth: 'min(320px, calc(100vw - 2rem))', bottom: 'auto' }}>
+                <div 
+                  className="absolute top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] overflow-hidden flex flex-col"
+                  style={{ 
+                    right: '0',
+                    width: 'min(320px, calc(100vw - 2rem))',
+                    maxHeight: 'min(500px, calc(100vh - 100px))',
+                    maxWidth: 'calc(100vw - 1rem)'
+                  }}
+                >
                   <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                     <h3 className="font-semibold text-gray-900">Notifications</h3>
                     <button

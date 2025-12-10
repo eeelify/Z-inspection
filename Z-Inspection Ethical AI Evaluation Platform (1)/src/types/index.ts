@@ -148,6 +148,15 @@ export interface UseCaseOwner {
   avatar?: string;
 }
 
+export interface UseCaseQuestion {
+  id: string;
+  questionEn: string;
+  questionTr: string;
+  type: 'text' | 'multiple-choice';
+  answer?: string;
+  options?: string[]; // For multiple-choice questions
+}
+
 export interface UseCase {
   id: string;
   title: string;
@@ -179,4 +188,9 @@ export interface UseCase {
     timestamp: string;
   }[];
   extendedInfo?: Record<string, any>;
+  answers?: Array<{ // Sadece cevaplar - questionId ve answer
+    questionId: string;
+    answer: string;
+  }>;
+  questions?: UseCaseQuestion[]; // Deprecated - use answers instead
 }

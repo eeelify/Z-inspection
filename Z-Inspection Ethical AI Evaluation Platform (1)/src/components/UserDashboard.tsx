@@ -320,7 +320,7 @@ export function UserDashboard({
     );
   };
 
-  // Download use case files
+  // Download use case files and Q&A
   const handleDownloadUseCase = async (project: Project) => {
     if (!project.useCase) {
       alert('No use case linked to this project.');
@@ -341,6 +341,54 @@ export function UserDashboard({
       }
 
       const useCase: UseCase = await response.json();
+
+      // Fetch questions and merge with answers
+      let questionsWithAnswers: any[] = [];
+      if (useCase.answers && useCase.answers.length > 0) {
+        try {
+          const questionsResponse = await fetch('http://127.0.0.1:5000/api/use-case-questions');
+          if (questionsResponse.ok) {
+            const allQuestions = await questionsResponse.json();
+            questionsWithAnswers = allQuestions.map((q: any) => {
+              const answer = useCase.answers?.find((a: any) => a.questionId === q.id);
+              return {
+                ...q,
+                answer: answer?.answer || ''
+              };
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching questions:', error);
+        }
+      }
+
+      // Create Q&A file first
+      if (questionsWithAnswers.length > 0) {
+        let qaContent = `USE CASE: ${useCase.title}\n`;
+        qaContent += `Category: ${useCase.aiSystemCategory || 'N/A'}\n`;
+        qaContent += `Status: ${useCase.status}\n`;
+        qaContent += `Created: ${new Date(useCase.createdAt).toLocaleDateString()}\n\n`;
+        qaContent += `DESCRIPTION:\n${useCase.description || 'N/A'}\n\n`;
+        qaContent += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
+        
+        questionsWithAnswers.forEach((q, idx) => {
+          qaContent += `${idx + 1}. ${q.questionEn}\n`;
+          if (q.questionTr) {
+            qaContent += `   (${q.questionTr})\n`;
+          }
+          qaContent += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
+        });
+        
+        const qaBlob = new Blob([qaContent], { type: 'text/plain' });
+        const qaUrl = URL.createObjectURL(qaBlob);
+        const qaLink = document.createElement('a');
+        qaLink.href = qaUrl;
+        qaLink.download = `${useCase.title.replace(/[^a-z0-9]/gi, '_')}_Questions_and_Answers.txt`;
+        document.body.appendChild(qaLink);
+        qaLink.click();
+        document.body.removeChild(qaLink);
+        URL.revokeObjectURL(qaUrl);
+      }
 
       // Download supporting files
       if (useCase.supportingFiles && useCase.supportingFiles.length > 0) {
@@ -368,10 +416,10 @@ export function UserDashboard({
             } else if (file.url) {
               window.open(file.url, '_blank');
             }
-          }, idx * 250);
+          }, (questionsWithAnswers.length > 0 ? 500 : 0) + idx * 250);
         });
-      } else {
-        alert('No files available to download for this use case.');
+      } else if (questionsWithAnswers.length === 0) {
+        alert('No files or Q&A available to download for this use case.');
       }
     } catch (error) {
       console.error('Download error:', error);

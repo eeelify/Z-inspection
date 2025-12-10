@@ -2,22 +2,46 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const compression = require('compression');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Enable compression for faster responses
+app.use(compression());
+
 // --- GÜNCELLEME: Dosya yükleme limiti 300MB yapıldı ---
 app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ limit: '300mb', extended: true }));
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  credentials: true
+}));
+
+// Set keep-alive timeout
+app.use((req, res, next) => {
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Keep-Alive', 'timeout=5, max=1000');
+  next();
+});
 
 // --- 1. VERİTABANI BAĞLANTISI ---
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://admin_merve:Sifre123@cluster0.tg8voq1.mongodb.net/zinspection?retryWrites=true&w=majority&appName=Cluster0';
 
+// Optimize MongoDB connection with connection pooling
 mongoose
-  .connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB Atlas Bağlantısı Başarılı'))
+  .connect(MONGO_URI, {
+    maxPoolSize: 10, // Maintain up to 10 socket connections
+    serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+    socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  })
+  .then(() => {
+    console.log('✅ MongoDB Atlas Bağlantısı Başarılı');
+    // Set mongoose options for better performance
+    mongoose.set('bufferCommands', false);
+    mongoose.set('strictQuery', false);
+  })
   .catch((err) => console.error('❌ Bağlantı Hatası:', err));
 
 
@@ -35,6 +59,8 @@ const UserSchema = new mongoose.Schema({
   preconditionApprovedAt: { type: Date },
   profileImage: { type: String } // Base64 image
 });
+// Index for faster login queries
+UserSchema.index({ email: 1, password: 1, role: 1 });
 const User = mongoose.model('User', UserSchema);
 
 // Project
@@ -61,7 +87,19 @@ const ProjectSchema = new mongoose.Schema({
 });
 const Project = mongoose.model('Project', ProjectSchema);
 
-// UseCase
+// UseCaseQuestion - Sorular ayrı collection'da
+const UseCaseQuestionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  questionEn: { type: String, required: true },
+  questionTr: { type: String, required: true },
+  type: { type: String, required: true }, // 'text' or 'multiple-choice'
+  options: { type: [String], default: [] }, // For multiple-choice questions
+  order: { type: Number, default: 0 } // Sıralama için
+});
+UseCaseQuestionSchema.index({ order: 1 }); // Sıralama için index
+const UseCaseQuestion = mongoose.model('UseCaseQuestion', UseCaseQuestionSchema);
+
+// UseCase - Sadece cevapları tutar
 const UseCaseSchema = new mongoose.Schema({
   title: String,
   description: String,
@@ -77,11 +115,18 @@ const UseCaseSchema = new mongoose.Schema({
     contentType: String,
     url: String
   }],
+  answers: [{ // Sadece cevaplar - questionId ve answer
+    questionId: { type: String, required: true },
+    answer: { type: String, default: '' }
+  }],
   createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
   extendedInfo: { type: Map, of: mongoose.Schema.Types.Mixed },
   feedback: [{ from: String, text: String, timestamp: { type: Date, default: Date.now } }],
   adminReflections: [{ id: String, text: String, visibleToExperts: Boolean, createdAt: { type: Date, default: Date.now } }]
 });
+UseCaseSchema.index({ ownerId: 1 }); // Owner'a göre arama için index
+UseCaseSchema.index({ status: 1 }); // Status'a göre arama için index
 const UseCase = mongoose.model('UseCase', UseCaseSchema);
 
 // Evaluation (gelişmiş sürüm)
@@ -169,10 +214,86 @@ const SharedDiscussion = mongoose.model('SharedDiscussion', SharedDiscussionSche
 
 // --- 3. ROUTES (API UÇLARI) ---
 
-// Use Cases
+// Use Case Questions - Soruları getir (cached for performance)
+let questionsCache = null;
+let questionsCacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+app.get('/api/use-case-questions', async (req, res) => {
+  try {
+    // Return cached data if available and fresh
+    const now = Date.now();
+    if (questionsCache && (now - questionsCacheTime) < CACHE_DURATION) {
+      return res.json(questionsCache);
+    }
+    
+    // Fetch from database
+    const questions = await UseCaseQuestion.find().sort({ order: 1 }).lean();
+    questionsCache = questions;
+    questionsCacheTime = now;
+    res.json(questions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Use Case Questions - Soruları seed et (ilk kurulum için)
+app.post('/api/use-case-questions/seed', async (req, res) => {
+  try {
+    const questions = [
+      { id: 'q1', questionEn: 'What is the name and version of the AI system used in this project?', questionTr: 'Bu projede kullanılan AI sisteminin adı ve versiyonu nedir?', type: 'text', options: [], order: 1 },
+      { id: 'q2', questionEn: 'Which organization or team is responsible for developing this AI system?', questionTr: 'Bu AI sistemini geliştiren organizasyon veya ekip kimdir?', type: 'text', options: [], order: 2 },
+      { id: 'q3', questionEn: 'Which application domain best describes how the system is used (e.g., healthcare, education, finance)?', questionTr: 'Sistemin kullanıldığı uygulama alanı nedir? (Örn. sağlık, eğitim, finans)', type: 'multiple-choice', options: ['Healthcare', 'Education', 'Finance', 'Transportation', 'Energy', 'Public Sector', 'Other'], order: 3 },
+      { id: 'q4', questionEn: 'What specific problem does this AI system aim to solve in your use case?', questionTr: 'Bu AI sistemi kullanım senaryonuzda hangi spesifik problemi çözmeyi amaçlıyor?', type: 'text', options: [], order: 4 },
+      { id: 'q5', questionEn: 'In what environment will the system be deployed (e.g., mobile app, hospital system, web app)?', questionTr: 'Sistem hangi ortamda kullanılacak? (Örn. mobil uygulama, hastane sistemi, web)', type: 'multiple-choice', options: ['Mobile App', 'Web App', 'Hospital System', 'Desktop Application', 'Cloud Platform', 'Edge Device', 'Other'], order: 5 },
+      { id: 'q6', questionEn: 'At what stage is the system currently (prototype, testing, live deployment)?', questionTr: 'Sistem şu anda hangi aşamada? (Prototip, test, aktif kullanım…)', type: 'multiple-choice', options: ['Prototype', 'Testing', 'Live Deployment', 'Pilot', 'Development'], order: 6 },
+      { id: 'q7', questionEn: 'What are the main performance or impact claims made about the system?', questionTr: 'Sistem hakkında yapılan temel performans, etki veya fayda iddiaları nelerdir?', type: 'text', options: [], order: 7 },
+      { id: 'q8', questionEn: 'Who are the primary and secondary users of this system?', questionTr: 'Bu sistemin birincil ve ikincil kullanıcıları kimlerdir?', type: 'text', options: [], order: 8 },
+      { id: 'q9', questionEn: 'What is the typical technical proficiency level of users interacting with the system?', questionTr: 'Sistemle etkileşime giren kullanıcıların tipik teknik yeterlilik seviyesi nedir?', type: 'text', options: [], order: 9 },
+      { id: 'q10', questionEn: 'How do you prevent users from over-relying on AI outputs?', questionTr: 'Kullanıcıların AI çıktısına aşırı güvenmesini nasıl engelliyorsunuz?', type: 'text', options: [], order: 10 },
+      { id: 'q11', questionEn: 'Does the system introduce delays or workflow challenges that affect usability?', questionTr: 'Sistem kullanımda gecikmelere veya iş akışında zorluklara neden oluyor mu?', type: 'text', options: [], order: 11 },
+      { id: 'q12', questionEn: 'What type of AI model does the system use?', questionTr: 'Sistem hangi tür AI modelini kullanıyor?', type: 'text', options: [], order: 12 },
+      { id: 'q13', questionEn: 'What data sources are used to train or run the AI system?', questionTr: 'AI sisteminin eğitimi veya çalışması için hangi veri kaynakları kullanılıyor?', type: 'text', options: [], order: 13 },
+      { id: 'q14', questionEn: 'What are the key characteristics (format, diversity, demographic range) of the training data?', questionTr: 'Eğitim verisinin formatı, çeşitliliği ve demografik kapsamı nedir?', type: 'text', options: [], order: 14 },
+      { id: 'q15', questionEn: 'Is the dataset size sufficient for reliable model performance?', questionTr: 'Veri seti boyutu güvenilir bir model performansı için yeterli mi?', type: 'text', options: [], order: 15 },
+      { id: 'q16', questionEn: 'Is the data relevant, high-quality, and free of major biases?', questionTr: 'Veri ilgili, yüksek kaliteli ve ciddi önyargılardan arındırılmış mı?', type: 'text', options: [], order: 16 },
+      { id: 'q17', questionEn: 'Is any federated learning or distributed method used, and how is quality monitored?', questionTr: 'Federated learning veya dağıtık öğrenme kullanılıyor mu? Kalite nasıl denetleniyor?', type: 'text', options: [], order: 17 },
+      { id: 'q18', questionEn: 'What ethical risks do you identify in this use case?', questionTr: 'Bu kullanım senaryosunda gördüğünüz etik riskler nelerdir?', type: 'text', options: [], order: 18 },
+      { id: 'q19', questionEn: 'Could system performance vary depending on users\' resources or access levels?', questionTr: 'Sistem performansı kullanıcıların kaynak seviyesine veya erişimine göre değişebilir mi?', type: 'text', options: [], order: 19 },
+      { id: 'q20', questionEn: 'What negative outcomes could arise from using this system in your use case?', questionTr: 'Bu sistemin kullanımından doğabilecek olumsuz sonuçlar nelerdir?', type: 'text', options: [], order: 20 },
+      { id: 'q21', questionEn: 'What explainability methods (SHAP, LIME, etc.) are used to make decisions understandable?', questionTr: 'Kararları anlaşılır kılmak için hangi açıklanabilirlik yöntemleri (SHAP, LIME vb.) kullanılıyor?', type: 'text', options: [], order: 21 },
+      { id: 'q22', questionEn: 'What documentation exists for the system (model card, data sheet, architecture notes)?', questionTr: 'Sistem için hangi dokümanlar mevcut? (model card, data sheet vb.)', type: 'text', options: [], order: 22 },
+      { id: 'q23', questionEn: 'How is user feedback collected and incorporated into system improvements?', questionTr: 'Kullanıcı geri bildirimleri nasıl toplanıyor ve sistem iyileştirmelerine nasıl dahil ediliyor?', type: 'text', options: [], order: 23 }
+    ];
+
+    // Mevcut soruları sil ve yenilerini ekle
+    await UseCaseQuestion.deleteMany({});
+    const inserted = await UseCaseQuestion.insertMany(questions);
+    // Clear cache after seeding
+    questionsCache = null;
+    questionsCacheTime = 0;
+    res.json({ message: 'Questions seeded successfully', count: inserted.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Use Cases - Optimize: don't fetch answers for list view
 app.get('/api/use-cases', async (req, res) => {
   try {
-    const useCases = await UseCase.find();
+    const { ownerId } = req.query;
+    let query = UseCase.find();
+    
+    // Filter by ownerId if provided (for performance)
+    if (ownerId) {
+      query = query.where('ownerId').equals(ownerId);
+    }
+    
+    const useCases = await query
+      .select('-answers -extendedInfo -supportingFiles.data') // Don't fetch file data for list
+      .lean()
+      .limit(1000) // Limit results for performance
+      .sort({ createdAt: -1 }); // Sort by newest first
     res.json(useCases);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -466,15 +587,31 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const user = await User.findOne({ 
+    // Add timeout to prevent hanging
+    const loginPromise = User.findOne({ 
       email: req.body.email, 
       password: req.body.password, 
       role: req.body.role 
-    });
-    if (user) res.json(user);
-    else res.status(401).json({ message: "Invalid credentials" });
+    }).select('-profileImage').lean().maxTimeMS(5000); // Exclude large profileImage, add timeout
+    
+    const user = await Promise.race([
+      loginPromise,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login timeout')), 5000)
+      )
+    ]);
+    
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(401).json({ message: "Invalid credentials" });
+    }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (err.message === 'Login timeout') {
+      res.status(504).json({ error: 'Login request timed out. Please try again.' });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
@@ -499,7 +636,11 @@ app.post('/api/users/:id/precondition-approval', async (req, res) => {
 
 app.get('/api/projects', async (req, res) => {
   try {
-    const projects = await Project.find();
+    const projects = await Project.find()
+      .select('-fullDescription') // Exclude large description for list view
+      .lean()
+      .maxTimeMS(5000)
+      .limit(1000);
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -884,7 +1025,10 @@ app.delete('/api/messages/delete-conversation', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find({}, '-password');
+    const users = await User.find({}, '-password -profileImage') // Exclude password and large profileImage
+      .lean()
+      .maxTimeMS(5000)
+      .limit(1000);
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });

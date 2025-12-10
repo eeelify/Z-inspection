@@ -48,6 +48,7 @@ export function ProjectDetail({
   const [tensions, setTensions] = useState<Tension[]>([]); 
   // Yeni: Bağlı Use Case verisini tutacak state
   const [linkedUseCase, setLinkedUseCase] = useState<UseCase | null>(null);
+  const [useCaseQuestions, setUseCaseQuestions] = useState<any[]>([]);
   // Chat panel state
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatOtherUser, setChatOtherUser] = useState<User | null>(null);
@@ -183,10 +184,28 @@ export function ProjectDetail({
           ? project.useCase 
           : (project.useCase as any).url || project.useCase;
         
-        const response = await fetch(`http://localhost:5000/api/use-cases/${useCaseId}`);
-        if (response.ok) {
-            const data = await response.json();
+        // Paralel olarak use case ve questions'ı çek
+        const [useCaseResponse, questionsResponse] = await Promise.all([
+          fetch(`http://localhost:5000/api/use-cases/${useCaseId}`),
+          fetch('http://127.0.0.1:5000/api/use-case-questions')
+        ]);
+        
+        if (useCaseResponse.ok) {
+            const data = await useCaseResponse.json();
             setLinkedUseCase(data);
+            
+            // Fetch questions and merge with answers
+            if (data.answers && data.answers.length > 0 && questionsResponse.ok) {
+              const allQuestions = await questionsResponse.json();
+              const questionsWithAnswers = allQuestions.map((q: any) => {
+                const answer = data.answers.find((a: any) => a.questionId === q.id);
+                return {
+                  ...q,
+                  answer: answer?.answer || ''
+                };
+              });
+              setUseCaseQuestions(questionsWithAnswers);
+            }
         }
     } catch (error) {
         console.error("Use Case load error:", error);
@@ -303,14 +322,42 @@ export function ProjectDetail({
     }
   };
 
-  // Download supporting files from use case (not JSON)
-  const handleDownloadUseCase = (forUser?: User) => {
+  // Download supporting files and Q&A from use case
+  const handleDownloadUseCase = async (forUser?: User) => {
     if (!linkedUseCase) {
       alert('No linked use case to download.');
       return;
     }
 
     try {
+      // Create Q&A file first if questions exist
+      if (useCaseQuestions && useCaseQuestions.length > 0) {
+        let qaContent = `USE CASE: ${linkedUseCase.title}\n`;
+        qaContent += `Category: ${linkedUseCase.aiSystemCategory || 'N/A'}\n`;
+        qaContent += `Status: ${linkedUseCase.status}\n`;
+        qaContent += `Created: ${new Date(linkedUseCase.createdAt).toLocaleDateString()}\n\n`;
+        qaContent += `DESCRIPTION:\n${linkedUseCase.description || 'N/A'}\n\n`;
+        qaContent += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
+        
+        useCaseQuestions.forEach((q, idx) => {
+          qaContent += `${idx + 1}. ${q.questionEn}\n`;
+          if (q.questionTr) {
+            qaContent += `   (${q.questionTr})\n`;
+          }
+          qaContent += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
+        });
+        
+        const qaBlob = new Blob([qaContent], { type: 'text/plain' });
+        const qaUrl = URL.createObjectURL(qaBlob);
+        const qaLink = document.createElement('a');
+        qaLink.href = qaUrl;
+        qaLink.download = `${linkedUseCase.title.replace(/[^a-z0-9]/gi, '_')}_Questions_and_Answers.txt`;
+        document.body.appendChild(qaLink);
+        qaLink.click();
+        document.body.removeChild(qaLink);
+        URL.revokeObjectURL(qaUrl);
+      }
+
       // Download supporting files (if any)
       if (linkedUseCase.supportingFiles && linkedUseCase.supportingFiles.length > 0) {
         linkedUseCase.supportingFiles.forEach((file: any, idx: number) => {
@@ -338,10 +385,10 @@ export function ProjectDetail({
             } else if (file.url) {
               window.open(file.url, '_blank');
             }
-          }, idx * 250);
+          }, (useCaseQuestions && useCaseQuestions.length > 0 ? 500 : 0) + idx * 250);
         });
-      } else {
-        alert('No files available to download for this use case.');
+      } else if (!useCaseQuestions || useCaseQuestions.length === 0) {
+        alert('No files or Q&A available to download for this use case.');
       }
     } catch (err) {
       console.error('Download error', err);
@@ -444,56 +491,6 @@ export function ProjectDetail({
           </div>
         </div>
 
-        {/* All Team Members - Contact any user */}
-        {/* Use-case-owner can only contact admin, others can contact everyone */}
-        {(() => {
-          // Filter users based on current user role
-          let availableUsers = users.filter(u => u.id !== currentUser.id);
-          
-          // If current user is use-case-owner, only show admin
-          if (currentUser.role === 'use-case-owner') {
-            availableUsers = availableUsers.filter(u => u.role === 'admin');
-          }
-          // If current user is admin, show everyone except use-case-owner (they contact admin separately)
-          // Actually, admin should see everyone including use-case-owner
-          
-          return availableUsers.length > 0 ? (
-            <div className="bg-white p-4 rounded-lg shadow-sm border mb-6">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">
-                {currentUser.role === 'use-case-owner' ? 'Contact Admin' : 'All Team Members'}
-              </h4>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {availableUsers.map((u) => {
-                  const isAssigned = project.assignedUsers.includes(u.id);
-                  return (
-                    <div key={u.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3">{u.name?.charAt(0) || 'U'}</div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{u.name}</div>
-                          <div className="text-xs text-gray-500">{u.role} {isAssigned && <span className="text-green-600">(Assigned)</span>}</div>
-                        </div>
-                      </div>
-                      <div>
-                        <button
-                          onClick={() => {
-                            console.log('Contact button clicked for user:', u);
-                            handleContactUser(u);
-                          }}
-                          className="inline-flex items-center px-3 py-1.5 text-sm rounded text-blue-600 hover:bg-blue-50"
-                        >
-                          <MessageSquare className="w-4 h-4 mr-2" />
-                          Contact
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null;
-        })()}
-
         <div className="bg-white rounded-lg shadow-sm border">
           <div className="border-b border-gray-200 flex">
             {['evaluation', 'tensions', 'usecase', 'owners'].map((tab) => {
@@ -576,6 +573,65 @@ export function ProjectDetail({
                             </p>
                         </div>
 
+                        {/* Questions and Answers */}
+                        {useCaseQuestions && useCaseQuestions.length > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-lg font-semibold text-gray-900">Questions & Answers</h3>
+                              <button
+                                onClick={() => {
+                                  // Create a text file with Q&A
+                                  let content = `USE CASE: ${linkedUseCase.title}\n`;
+                                  content += `Category: ${linkedUseCase.aiSystemCategory}\n`;
+                                  content += `Status: ${linkedUseCase.status}\n`;
+                                  content += `Created: ${new Date(linkedUseCase.createdAt).toLocaleDateString()}\n\n`;
+                                  content += `DESCRIPTION:\n${linkedUseCase.description}\n\n`;
+                                  content += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
+                                  
+                                  useCaseQuestions.forEach((q, idx) => {
+                                    content += `${idx + 1}. ${q.questionEn}\n`;
+                                    if (q.questionTr) {
+                                      content += `   (${q.questionTr})\n`;
+                                    }
+                                    content += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
+                                  });
+                                  
+                                  const blob = new Blob([content], { type: 'text/plain' });
+                                  const url = URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = `${linkedUseCase.title.replace(/[^a-z0-9]/gi, '_')}_Q&A.txt`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  URL.revokeObjectURL(url);
+                                }}
+                                className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50"
+                              >
+                                <Download className="w-4 h-4 mr-1" />
+                                Download Q&A as File
+                              </button>
+                            </div>
+                            <div className="space-y-4 max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+                              {useCaseQuestions.map((q, idx) => (
+                                <div key={q.id || idx} className="bg-white p-4 rounded-lg border border-gray-200">
+                                  <div className="text-sm font-medium text-gray-900 mb-2">
+                                    {idx + 1}. {q.questionEn}
+                                    {q.questionTr && (
+                                      <span className="block text-xs text-gray-500 mt-1 font-normal">
+                                        ({q.questionTr})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mt-2">
+                                    {q.answer || <span className="text-gray-400 italic">No answer provided</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {linkedUseCase.supportingFiles && linkedUseCase.supportingFiles.length > 0 && (
                           <div>
                             <h3 className="text-lg font-semibold text-gray-900 mb-3">Supporting Files</h3>
@@ -641,6 +697,7 @@ export function ProjectDetail({
           project={chatProject}
           currentUser={currentUser}
           otherUser={chatOtherUser}
+          defaultFullscreen={true}
           onClose={() => {
             setChatPanelOpen(false);
             setChatOtherUser(null);

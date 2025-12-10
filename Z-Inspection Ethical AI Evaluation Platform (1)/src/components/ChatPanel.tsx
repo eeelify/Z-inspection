@@ -10,15 +10,16 @@ interface ChatPanelProps {
   onMessageSent?: () => void; // Callback to refresh notifications
   inline?: boolean; // If true, render inline instead of fixed position
   onDeleteConversation?: () => void; // Callback when conversation is deleted
+  defaultFullscreen?: boolean; // If true, start in fullscreen mode
 }
 
-export function ChatPanel({ project, currentUser, otherUser, onClose, onMessageSent, inline = false, onDeleteConversation }: ChatPanelProps) {
+export function ChatPanel({ project, currentUser, otherUser, onClose, onMessageSent, inline = false, onDeleteConversation, defaultFullscreen = false }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(defaultFullscreen);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 

@@ -23,7 +23,35 @@ const statusLabels = {
 
 export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDetailProps) {
   const [uc, setUc] = useState<UseCase>(useCase);
+  const [questions, setQuestions] = useState<any[]>([]);
+  
   useEffect(() => setUc(useCase), [useCase]);
+  
+  // Fetch questions and merge with answers
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:5000/api/use-case-questions');
+        if (response.ok) {
+          const allQuestions = await response.json();
+          // Merge questions with answers
+          const questionsWithAnswers = allQuestions.map((q: any) => {
+            const answer = uc.answers?.find((a: any) => a.questionId === q.id);
+            return {
+              ...q,
+              answer: answer?.answer || ''
+            };
+          });
+          setQuestions(questionsWithAnswers);
+        }
+      } catch (error) {
+        console.error('Error fetching questions:', error);
+      }
+    };
+    if (uc.answers) {
+      fetchQuestions();
+    }
+  }, [uc.answers]);
 
   const isOwner = uc.ownerId === currentUser.id;
   const assignedExperts = users.filter(u => uc.assignedExperts?.includes(u.id));
@@ -170,6 +198,28 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
                 </div>
               </div>
             </div>
+
+            {/* Questions and Answers */}
+            {questions && questions.length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg text-gray-900 mb-4">Questions & Answers</h3>
+                <div className="space-y-6">
+                  {questions.map((q) => (
+                    <div key={q.id} className="border-b border-gray-100 pb-4 last:border-b-0">
+                      <div className="text-sm font-medium text-gray-900 mb-2">
+                        {q.questionEn}
+                        {q.questionTr && (
+                          <span className="block text-xs text-gray-500 mt-1 font-normal">{q.questionTr}</span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mt-2">
+                        {q.answer || <span className="text-gray-400 italic">No answer provided</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Supporting Files */}
             {uc.supportingFiles && uc.supportingFiles.length > 0 && (
