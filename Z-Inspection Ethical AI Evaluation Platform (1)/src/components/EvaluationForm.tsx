@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, FormEvent } from 'react';
 import { 
   ArrowLeft, Save, Send, Plus, AlertTriangle, CheckCircle, XCircle, 
   Info, ChevronRight, ChevronLeft, Loader2, Trash2, Upload 
 } from 'lucide-react';
 
-import { Project, User, Question, StageKey, QuestionType, UseCase, EthicalPrinciple, Tension } from '../types';
+import { Project, User, Question, StageKey, QuestionType, UseCase, EthicalPrinciple, Tension, QuestionOption } from '../types';
 import { getQuestionsByRole } from '../data/questions'; 
 import { api } from '../api';
 import { EthicalTensionSelector } from './EthicalTensionSelector';
@@ -76,6 +76,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const roleKey = currentUser.role.toLowerCase().replace(' ', '-') || 'admin';
   const roleColor = roleColors[roleKey] || '#3B82F6';
 
+  const getOptionValue = (option: QuestionOption) => typeof option === 'string' ? option : option.value;
+  const getOptionLabel = (option: QuestionOption) => typeof option === 'string' ? option : option.label;
+
   const currentQuestions = useMemo(() => {
     const roleQuestions = getQuestionsByRole(roleKey);
     const allQuestions = [...roleQuestions, ...customQuestions];
@@ -131,14 +134,13 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           if (response.ok) {
             const data = await response.json();
             if (data.generalRisks && Array.isArray(data.generalRisks)) {
-              // Riskler varsa yükle, yoksa mevcut state'i koru (review screen'de önemli)
-              if (data.generalRisks.length > 0) {
-                setGeneralRisks(data.generalRisks.map((r: any) => ({
-                  ...r,
-                  severity: r.severity || 'medium',
-                  relatedQuestions: r.relatedQuestions || []
-                })));
-              }
+              setGeneralRisks(data.generalRisks.map((r: any) => ({
+                ...r,
+                severity: r.severity || 'medium',
+                relatedQuestions: r.relatedQuestions || []
+              })));
+            } else {
+              setGeneralRisks([]);
             }
           }
         } catch (error) {
@@ -244,13 +246,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   };
 
   const handleForward = async () => {
-    // Set-up stage'inde en az 3 risk kontrolü
+    // Set-up stage: risks are optional, but existing ones must have titles
     if (currentStage === 'set-up') {
-      if (generalRisks.length < 3) {
-        alert("Please add at least 3 general risks before proceeding to the next stage.");
-        return;
-      }
-      // Tüm risklerin başlığı olmalı
       const hasEmptyTitle = generalRisks.some(risk => !risk.title.trim());
       if (hasEmptyTitle) {
         alert("Please ensure all risks have a title.");
@@ -288,8 +285,10 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           const response = await fetch(api(`/api/evaluations?projectId=${project.id || (project as any)._id}&userId=${currentUser.id || (currentUser as any)._id}&stage=set-up`));
           if (response.ok) {
             const data = await response.json();
-            if (data.generalRisks && Array.isArray(data.generalRisks) && data.generalRisks.length > 0) {
+            if (data.generalRisks && Array.isArray(data.generalRisks)) {
               setGeneralRisks(data.generalRisks);
+            } else {
+              setGeneralRisks([]);
             }
           }
         } catch (error) {
@@ -299,22 +298,10 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       await fetchSetUpRisksForReview();
       setShowReviewScreen(true);
     }
-    // 3. Submit (Resolve aşaması)
-    else if (currentStage === 'resolve') {
-      handleSubmitForm();
-    }
-    // 4. Sonraki Stage
-    else {
-      // Stage değiştirmeden önce kaydet
-      const success = await saveEvaluation('completed'); // O anki stage'i tamamlandı olarak işaretle
-      if (success) {
-        handleStageChange('next');
-      }
-    }
   };
 
   const handleStageChange = (direction: 'next' | 'prev') => {
-    const stageOrder: StageKey[] = ['set-up', 'assess', 'resolve'];
+    const stageOrder: StageKey[] = ['set-up', 'assess'];
     const currentIndex = stageOrder.indexOf(currentStage);
 
     if (direction === 'next' && currentIndex < stageOrder.length - 1) {
@@ -602,7 +589,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     const success = await saveEvaluation('completed');
     if (success) {
       setShowReviewScreen(false);
-      handleStageChange('next');
+      onSubmit(); // Completed assessment; parent handles navigation
     }
   };
 
@@ -650,7 +637,6 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     if (currentStage === 'set-up') return "Continue to Assess Stage";
     if (currentQuestions.length === 0) return "Next Stage";
     if (!isLastQuestion) return "Next Question";
-    if (currentStage === 'resolve') return "Submit Evaluation";
     if (currentStage === 'assess') return "Next";
     return "Finish Stage";
   };
@@ -742,462 +728,215 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
         <div className="flex-1 flex flex-col min-h-[500px]">
             {showReviewScreen ? (
-                // Review Screen: Cevaplar, Riskler ve Tension Ekleme
                 <div className="flex-1 flex flex-col gap-6">
                     <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 p-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Review & Add Tensions</h2>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Sol Taraf: Cevaplar ve Riskler */}
-                            <div className="space-y-6">
-                                {/* Assess Cevapları */}
-                                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-5">
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                        <Info className="w-5 h-5 mr-2 text-blue-600" />
-                                        Assessment Answers
-                                    </h3>
-                                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                                        {assessQuestions.map((question) => (
-                                            <div key={question.id} className="bg-white rounded-lg p-4 border border-gray-200">
-                                                <div className="text-sm font-medium text-gray-700 mb-2">{question.text}</div>
-                                                <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded">
-                                                    {answers[question.id] || 'No answer provided'}
-                                                </div>
-                                                {questionPriorities[question.id] && (
-                                                    <div className="mt-2">
-                                                        <span className={`text-xs px-2 py-1 rounded-full ${
-                                                            questionPriorities[question.id] === 'low' ? 'bg-green-100 text-green-700' :
-                                                            questionPriorities[question.id] === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                            'bg-red-100 text-red-700'
-                                                        }`}>
-                                                            Priority: {questionPriorities[question.id]}
-                                                        </span>
-                                                    </div>
-                                                )}
+                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Review</h2>
+                        <div className="space-y-6">
+                            {/* Assess Cevapları */}
+                            <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-5">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                    <Info className="w-5 h-5 mr-2 text-blue-600" />
+                                    Assessment Answers
+                                </h3>
+                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                    {assessQuestions.map((question) => (
+                                        <div key={question.id} className="bg-white rounded-lg p-4 border border-gray-200">
+                                            <div className="text-sm font-medium text-gray-700 mb-2">{question.text}</div>
+                                            <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded">
+                                                {answers[question.id] || 'No answer provided'}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Set-up Riskleri */}
-                                <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-5">
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                        <AlertTriangle className="w-5 h-5 mr-2 text-orange-600" />
-                                        General Risks
-                                    </h3>
-                                    <div className="space-y-3 max-h-80 overflow-y-auto">
-                                        {generalRisks.length === 0 ? (
-                                            <p className="text-sm text-gray-500 italic">No risks added</p>
-                                        ) : (
-                                            generalRisks.map((risk, index) => {
-                                                const severity = risk.severity || 'medium';
-                                                const relatedQuestions = risk.relatedQuestions || [];
-                                                const isEditing = editingRiskIdReview === risk.id;
-                                                return (
-                                                    <div
-                                                        key={risk.id}
-                                                        className="bg-white rounded-lg border border-gray-200 p-4 transition-colors"
-                                                        onClick={() => setEditingRiskIdReview(risk.id)}
-                                                    >
-                                                        <div className="flex items-start gap-3">
-                                                            <div className="flex-1 space-y-3" onClick={(e) => isEditing && e.stopPropagation()}>
-                                                                {!isEditing && (
-                                                                    <div className="flex items-center justify-between">
-                                                                        <div className="text-sm font-semibold text-gray-900">
-                                                                            Risk {index + 1}: {risk.title || 'Untitled risk'}
-                                                                        </div>
-                                                                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
-                                                                            severity === 'critical' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                                                            severity === 'high' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                                            severity === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                                            'bg-green-50 text-green-700 border-green-200'
-                                                                        }`}>
-                                                                            {severity}
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                                {isEditing && (
-                                                                    <>
-                                                                        <div className="flex items-center justify-between">
-                                                                            <span className="text-xs text-gray-500">Editing Risk {index + 1}</span>
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setEditingRiskIdReview(null);
-                                                                                }}
-                                                                                className="text-xs text-gray-500 hover:text-gray-800"
-                                                                            >
-                                                                                Done
-                                                                            </button>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                                                                            <input
-                                                                                type="text"
-                                                                                value={risk.title}
-                                                                                onChange={(e) => {
-                                                                                    const updated = [...generalRisks];
-                                                                                    updated[index].title = e.target.value;
-                                                                                    setGeneralRisks(updated);
-                                                                                    setIsDraft(true);
-                                                                                }}
-                                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                                                                placeholder="Enter risk title..."
-                                                                            />
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-                                                                            <textarea
-                                                                                value={risk.description}
-                                                                                onChange={(e) => {
-                                                                                    const updated = [...generalRisks];
-                                                                                    updated[index].description = e.target.value;
-                                                                                    setGeneralRisks(updated);
-                                                                                    setIsDraft(true);
-                                                                                }}
-                                                                                rows={2}
-                                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
-                                                                                placeholder="Add description..."
-                                                                            />
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
-                                                                            <select
-                                                                                value={severity}
-                                                                                onChange={(e) => {
-                                                                                    const updated = [...generalRisks];
-                                                                                    updated[index].severity = e.target.value as any;
-                                                                                    setGeneralRisks(updated);
-                                                                                    setIsDraft(true);
-                                                                                }}
-                                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                                                            >
-                                                                                {riskSeverityOptions.map(opt => (
-                                                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                                                ))}
-                                                                            </select>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="block text-sm font-medium text-gray-700 mb-2">Related Assess Questions (optional)</label>
-                                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50/50">
-                                                                                {assessQuestions.map(q => {
-                                                                                    const checked = relatedQuestions.includes(q.id);
-                                                                                    return (
-                                                                                        <label key={q.id} className="flex items-start gap-2 text-sm text-gray-700">
-                                                                                            <input
-                                                                                                type="checkbox"
-                                                                                                checked={checked}
-                                                                                                onChange={(e) => {
-                                                                                                    const updated = [...generalRisks];
-                                                                                                    const current = new Set(updated[index].relatedQuestions || []);
-                                                                                                    if (e.target.checked) current.add(q.id); else current.delete(q.id);
-                                                                                                    updated[index].relatedQuestions = Array.from(current);
-                                                                                                    setGeneralRisks(updated);
-                                                                                                    setIsDraft(true);
-                                                                                                }}
-                                                                                                className="mt-1"
-                                                                                            />
-                                                                                            <span>{q.text}</span>
-                                                                                        </label>
-                                                                                    );
-                                                                                })}
-                                                                            </div>
-                                                                        </div>
-                                                                    </>
-                                                                )}
-
-                                                                {!isEditing && (
-                                                                    <>
-                                                                        {risk.description && (
-                                                                            <div className="text-xs text-gray-600 mt-1">{risk.description}</div>
-                                                                        )}
-                                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                                            <span className="px-2 py-0.5 bg-gray-100 rounded-full border border-gray-200">
-                                                                                {relatedQuestions.length} related question(s)
-                                                                            </span>
-                                                                            <span className="text-gray-400">Click to edit</span>
-                                                                        </div>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setGeneralRisks(generalRisks.filter((_, i) => i !== index));
-                                                                    setIsDraft(true);
-                                                                }}
-                                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title="Remove risk"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Tensions List */}
-                                <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-5">
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                        <AlertTriangle className="w-5 h-5 mr-2 text-purple-600" />
-                                        Ethical Tensions
-                                    </h3>
-                                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                                        {tensions.length === 0 ? (
-                                            <p className="text-sm text-gray-500 italic">No tensions added yet</p>
-                                        ) : (
-                                            tensions.map((tension) => (
-                                                <div key={tension.id} className="bg-white rounded-lg p-4 border border-gray-200">
-                                                    {editingTensionId === tension.id ? (
-                                                        // Edit Form
-                                                        <div className="space-y-3">
-                                                            <EthicalTensionSelector
-                                                                principle1={editPrinciple1}
-                                                                principle2={editPrinciple2}
-                                                                onPrinciple1Change={setEditPrinciple1}
-                                                                onPrinciple2Change={setEditPrinciple2}
-                                                            />
-                                                            <div>
-                                                                <label className="block text-xs font-semibold mb-1 text-gray-700">Claim *</label>
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={editClaim} 
-                                                                    onChange={(e) => setEditClaim(e.target.value)} 
-                                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none" 
-                                                                    required 
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-semibold mb-1 text-gray-700">Argument *</label>
-                                                                <textarea 
-                                                                    value={editArgument} 
-                                                                    onChange={(e) => setEditArgument(e.target.value)} 
-                                                                    rows={2} 
-                                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none resize-none" 
-                                                                    required 
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-xs font-semibold mb-1 text-gray-700">Severity</label>
-                                                                <select 
-                                                                    value={editSeverity} 
-                                                                    onChange={(e) => setEditSeverity(Number(e.target.value))}
-                                                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                                                                >
-                                                                    <option value={1}>Low</option>
-                                                                    <option value={2}>Medium</option>
-                                                                    <option value={3}>High</option>
-                                                                </select>
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={() => handleUpdateTension(tension.id)}
-                                                                    className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
-                                                                >
-                                                                    Save
-                                                                </button>
-                                                                <button
-                                                                    onClick={handleCancelEdit}
-                                                                    className="flex-1 px-3 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        // Display Mode
-                                                        <div>
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <div className="flex-1">
-                                                                    <div className="text-xs font-semibold text-purple-700 mb-1">
-                                                                        {tension.principle1} vs {tension.principle2}
-                                                                    </div>
-                                                                    <div className="text-sm font-medium text-gray-900 mb-1">
-                                                                        {tension.claimStatement}
-                                                                    </div>
-                                                                    {tension.description && (
-                                                                        <div className="text-xs text-gray-600 mt-1">{tension.description}</div>
-                                                                    )}
-                                                                    <div className="flex items-center gap-2 mt-2">
-                                                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                                                            tension.severity === 'high' ? 'bg-red-100 text-red-700' :
-                                                                            tension.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                                            'bg-green-100 text-green-700'
-                                                                        }`}>
-                                                                            {tension.severity}
-                                                                        </span>
-                                                                        <span className="text-xs text-gray-500">
-                                                                            {tension.consensus?.agree || 0} agree, {tension.consensus?.disagree || 0} disagree
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex gap-1 ml-2">
-                                                                    <button
-                                                                        onClick={() => handleEditTension(tension)}
-                                                                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                                                                        title="Edit"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                                        </svg>
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDeleteTension(tension.id)}
-                                                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                                        title="Delete"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex gap-2 mt-3">
-                                                                <button
-                                                                    onClick={() => handleVoteTension(tension.id, 'agree')}
-                                                                    disabled={votingTensionId === tension.id}
-                                                                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center justify-center border-2 ${
-                                                                        tension.userVote === 'agree' 
-                                                                            ? 'bg-green-600 text-white border-green-700 shadow-md' 
-                                                                            : 'bg-white text-green-700 border-green-300 hover:bg-green-50 hover:border-green-400'
-                                                                    } ${votingTensionId === tension.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                                >
-                                                                    {votingTensionId === tension.id ? (
-                                                                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                                                                    ) : (
-                                                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                                                    )}
-                                                                    Agree ({tension.consensus?.agree || 0})
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleVoteTension(tension.id, 'disagree')}
-                                                                    disabled={votingTensionId === tension.id}
-                                                                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center justify-center border-2 ${
-                                                                        tension.userVote === 'disagree' 
-                                                                            ? 'bg-red-600 text-white border-red-700 shadow-md' 
-                                                                            : 'bg-white text-red-700 border-red-300 hover:bg-red-50 hover:border-red-400'
-                                                                    } ${votingTensionId === tension.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                                >
-                                                                    {votingTensionId === tension.id ? (
-                                                                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                                                                    ) : (
-                                                                        <XCircle className="w-3 h-3 mr-1" />
-                                                                    )}
-                                                                    Disagree ({tension.consensus?.disagree || 0})
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                            {questionPriorities[question.id] && (
+                                                <div className="mt-2">
+                                                    <span className={`text-xs px-2 py-1 rounded-full ${
+                                                        questionPriorities[question.id] === 'low' ? 'bg-green-100 text-green-700' :
+                                                        questionPriorities[question.id] === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-red-100 text-red-700'
+                                                    }`}>
+                                                        Priority: {questionPriorities[question.id]}
+                                                    </span>
                                                 </div>
-                                            ))
-                                        )}
-                                    </div>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Sağ Taraf: Tension Ekleme Formu */}
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                    <AlertTriangle className="w-5 h-5 mr-2 text-red-600" />
-                                    Add Ethical Tension
-                                </h3>
-                                <form onSubmit={handleTensionSubmit} className="space-y-4">
-                                    <EthicalTensionSelector
-                                        principle1={principle1}
-                                        principle2={principle2}
-                                        onPrinciple1Change={setPrinciple1}
-                                        onPrinciple2Change={setPrinciple2}
-                                    />
-
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-1 text-gray-700">Claim *</label>
-                                        <input 
-                                            type="text" 
-                                            value={claim} 
-                                            onChange={(e) => setClaim(e.target.value)} 
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" 
-                                            placeholder="State the core conflict briefly..." 
-                                            required 
-                                        />
+                            {/* Set-up Riskleri */}
+                            <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle className="w-5 h-5 text-orange-600" />
+                                        <h3 className="text-lg font-semibold text-gray-900">General Risks</h3>
                                     </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-1 text-gray-700">Argument *</label>
-                                        <textarea 
-                                            value={argument} 
-                                            onChange={(e) => setArgument(e.target.value)} 
-                                            rows={3} 
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" 
-                                            placeholder="Explain your reasoning..." 
-                                            required 
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-1 text-gray-700">Evidence (Optional)</label>
-                                        <textarea 
-                                            value={evidence} 
-                                            onChange={(e) => setEvidence(e.target.value)} 
-                                            rows={2} 
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none mb-2" 
-                                            placeholder="Describe supporting evidence..." 
-                                        />
-                                        <input 
-                                            type="file" 
-                                            onChange={handleFileChange} 
-                                            className="hidden" 
-                                            id="tension-file-input"
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => document.getElementById('tension-file-input')?.click()} 
-                                            className={`flex items-center text-sm px-3 py-1.5 rounded-md border transition-colors ${
-                                                selectedFile ? 'text-green-700 bg-green-50 border-green-200' : 'text-gray-600 hover:text-blue-600 bg-gray-50 border-gray-300'
-                                            }`}
-                                        >
-                                            {selectedFile ? (
-                                                <>
-                                                    <CheckCircle className="h-4 w-4 mr-2" />
-                                                    {selectedFile.name}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Upload className="h-4 w-4 mr-2" />
-                                                    Upload File
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-3 text-gray-700">Severity Level</label>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {[1, 2, 3].map((level) => (
-                                                <button
-                                                    key={level}
-                                                    type="button"
-                                                    onClick={() => setSeverity(level)}
-                                                    className={`py-2.5 px-3 rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
-                                                        severity === level 
-                                                            ? (level === 1 ? 'border-green-500 bg-green-50 text-green-700' : level === 2 ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-red-500 bg-red-50 text-red-700') + ' font-bold'
-                                                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                                                    }`}
-                                                >
-                                                    <div className={`w-2.5 h-2.5 rounded-full mb-1 ${severity === level ? (level === 1 ? 'bg-green-500' : level === 2 ? 'bg-yellow-500' : 'bg-red-500') : 'bg-gray-300'}`} />
-                                                    {level === 1 ? 'Low' : level === 2 ? 'Medium' : 'High'}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <button 
-                                        type="submit" 
-                                        disabled={!principle1 || !principle2 || !claim || !argument} 
-                                        className="w-full px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                                    <button
+                                        onClick={() => {
+                                            setGeneralRisks([
+                                              ...generalRisks,
+                                              { id: Date.now().toString(), title: '', description: '' }
+                                            ]);
+                                            setIsDraft(true);
+                                        }}
+                                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                                     >
-                                        Save Tension
+                                        <Plus className="w-4 h-4" />
+                                        Add Risk
                                     </button>
-                                </form>
+                                </div>
+                                <div className="space-y-3 max-h-80 overflow-y-auto">
+                                    {generalRisks.length === 0 ? (
+                                        <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                                            <AlertTriangle className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                                            <p className="text-sm text-gray-500 italic">No risks added yet.</p>
+                                        </div>
+                                    ) : (
+                                        generalRisks.map((risk, index) => {
+                                            const severity = risk.severity || 'medium';
+                                            const relatedQuestions = risk.relatedQuestions || [];
+                                            const isEditing = editingRiskIdReview === risk.id;
+                                            return (
+                                                <div
+                                                    key={risk.id}
+                                                    className="bg-white rounded-lg border border-gray-200 p-4 transition-colors"
+                                                    onClick={() => setEditingRiskIdReview(risk.id)}
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="flex-1 space-y-3" onClick={(e) => isEditing && e.stopPropagation()}>
+                                                            {!isEditing && (
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="text-sm font-semibold text-gray-900">
+                                                                        Risk {index + 1}: {risk.title || 'Untitled risk'}
+                                                                    </div>
+                                                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
+                                                                        severity === 'critical' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                                                        severity === 'high' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                        severity === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                                                        'bg-green-50 text-green-700 border-green-200'
+                                                                    }`}>
+                                                                        {severity}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {isEditing && (
+                                                                <>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-xs text-gray-500">Editing Risk {index + 1}</span>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setEditingRiskIdReview(null);
+                                                                            }}
+                                                                            className="text-xs text-gray-500 hover:text-gray-800"
+                                                                        >
+                                                                            Done
+                                                                        </button>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            value={risk.title}
+                                                                            onChange={(e) => {
+                                                                                const updated = [...generalRisks];
+                                                                                updated[index].title = e.target.value;
+                                                                                setGeneralRisks(updated);
+                                                                                setIsDraft(true);
+                                                                            }}
+                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                                                            placeholder="Enter risk title..."
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                                                                        <textarea
+                                                                            value={risk.description}
+                                                                            onChange={(e) => {
+                                                                                const updated = [...generalRisks];
+                                                                                updated[index].description = e.target.value;
+                                                                                setGeneralRisks(updated);
+                                                                                setIsDraft(true);
+                                                                            }}
+                                                                            rows={2}
+                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                                                                            placeholder="Add description..."
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                                                                        <select
+                                                                            value={severity}
+                                                                            onChange={(e) => {
+                                                                                const updated = [...generalRisks];
+                                                                                updated[index].severity = e.target.value as any;
+                                                                                setGeneralRisks(updated);
+                                                                                setIsDraft(true);
+                                                                            }}
+                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                                                        >
+                                                                            {riskSeverityOptions.map(opt => (
+                                                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-2">Related Assess Questions (optional)</label>
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50/50">
+                                                                            {assessQuestions.map(q => {
+                                                                                const checked = relatedQuestions.includes(q.id);
+                                                                                return (
+                                                                                    <label key={q.id} className="flex items-start gap-2 text-sm text-gray-700">
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            checked={checked}
+                                                                                            onChange={(e) => {
+                                                                                                const updated = [...generalRisks];
+                                                                                                const current = new Set(updated[index].relatedQuestions || []);
+                                                                                                if (e.target.checked) current.add(q.id); else current.delete(q.id);
+                                                                                                updated[index].relatedQuestions = Array.from(current);
+                                                                                                setGeneralRisks(updated);
+                                                                                                setIsDraft(true);
+                                                                                            }}
+                                                                                            className="mt-1"
+                                                                                        />
+                                                                                        <span>{q.text}</span>
+                                                                                    </label>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                </>
+                                                            )}
+
+                                                            {!isEditing && (
+                                                                <>
+                                                                    {risk.description && (
+                                                                        <div className="text-xs text-gray-600 mt-1">{risk.description}</div>
+                                                                    )}
+                                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                        <span className="px-2 py-0.5 bg-gray-100 rounded-full border border-gray-200">
+                                                                            {relatedQuestions.length} related question(s)
+                                                                        </span>
+                                                                        <span className="text-gray-400">Click to edit</span>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setGeneralRisks(generalRisks.filter((_, i) => i !== index));
+                                                                setIsDraft(true);
+                                                            }}
+                                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Remove risk"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1281,9 +1020,6 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                 <div className="flex items-center gap-2">
                                     <AlertTriangle className="w-5 h-5 text-orange-600" />
                                     <h3 className="text-lg font-semibold text-gray-900">General Risks</h3>
-                                    <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
-                                        Minimum 3 required
-                                    </span>
                                 </div>
                                 {generalRisks.length > 0 && (
                                     <button
@@ -1378,15 +1114,6 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                             })
                                         )}
                             </div>
-                            
-                            {generalRisks.length > 0 && generalRisks.length < 3 && (
-                                <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                                    <p className="text-sm text-yellow-800">
-                                        <AlertTriangle className="w-4 h-4 inline mr-1" />
-                                        Please add at least {3 - generalRisks.length} more risk{3 - generalRisks.length > 1 ? 's' : ''} to continue.
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -1423,30 +1150,35 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         {/* INPUT TYPES (Same as before) */}
                          {(activeQuestion.type === 'select' || activeQuestion.type === 'multiple-choice' || activeQuestion.type === 'radio') && (
                             <div className="space-y-3 max-w-2xl">
-                                {activeQuestion.options?.map((option) => (
-                                <label key={option} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                                    answers[activeQuestion.id] === option 
-                                    ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
-                                    : 'border-gray-200 hover:border-blue-300 hover:bg-white'
-                                }`}>
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${
-                                         answers[activeQuestion.id] === option ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
-                                    }`}>
-                                        <div className="w-2 h-2 rounded-full bg-white" />
-                                    </div>
-                                    <input
-                                    type="radio"
-                                    name={activeQuestion.id}
-                                    value={option}
-                                    checked={answers[activeQuestion.id] === option}
-                                    onChange={(e) => handleAnswerChange(activeQuestion.id, e.target.value)}
-                                    className="hidden"
-                                    />
-                                    <span className={`text-lg font-medium transition-colors ${
-                                        answers[activeQuestion.id] === option ? 'text-blue-900' : 'text-gray-700'
-                                    }`}>{option}</span>
-                                </label>
-                                ))}
+                                {activeQuestion.options?.map((option) => {
+                                    const optionValue = getOptionValue(option);
+                                    const optionLabel = getOptionLabel(option);
+                                    const isSelected = answers[activeQuestion.id] === optionValue;
+                                    return (
+                                        <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
+                                            isSelected 
+                                            ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
+                                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                                        }`}>
+                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${
+                                                 isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
+                                            }`}>
+                                                <div className="w-2 h-2 rounded-full bg-white" />
+                                            </div>
+                                            <input
+                                            type="radio"
+                                            name={activeQuestion.id}
+                                            value={optionValue}
+                                            checked={isSelected}
+                                            onChange={(e) => handleAnswerChange(activeQuestion.id, e.target.value)}
+                                            className="hidden"
+                                            />
+                                            <span className={`text-lg font-medium transition-colors ${
+                                                isSelected ? 'text-blue-900' : 'text-gray-700'
+                                            }`}>{optionLabel}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         )}
 
@@ -1469,21 +1201,22 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                     <span>{activeQuestion.max || 'High'}</span>
                                 </div>
                                 <div className="grid grid-cols-5 gap-3">
-                                    {(activeQuestion.options && activeQuestion.options.length > 0 ? activeQuestion.options : ['1', '2', '3', '4', '5']).map((option, idx) => {
-                                        const val = idx + 1;
-                                        const isSelected = answers[activeQuestion.id] === val || answers[activeQuestion.id] === option;
+                                    {(activeQuestion.options && activeQuestion.options.length > 0 ? activeQuestion.options : ['1', '2', '3', '4', '5']).map((option) => {
+                                        const optionValue = getOptionValue(option);
+                                        const optionLabel = getOptionLabel(option);
+                                        const isSelected = answers[activeQuestion.id] === optionValue;
                                         return (
                                             <button
-                                                key={idx}
+                                                key={optionValue}
                                                 type="button"
-                                                onClick={() => handleAnswerChange(activeQuestion.id, option)}
+                                                onClick={() => handleAnswerChange(activeQuestion.id, optionValue)}
                                                 className={`aspect-square rounded-2xl text-xl font-bold transition-all duration-200 flex items-center justify-center ${
                                                     isSelected
                                                     ? 'bg-blue-600 text-white shadow-md scale-105 ring-2 ring-blue-200'
                                                     : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
                                                 }`}
                                             >
-                                                {option}
+                                                {optionLabel}
                                             </button>
                                         )
                                     })}
@@ -1493,34 +1226,39 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         
                          {activeQuestion.type === 'checkbox' && (
                             <div className="space-y-3 max-w-2xl">
-                                {activeQuestion.options?.map((option) => (
-                                <label key={option} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                                    (answers[activeQuestion.id] || []).includes(option)
-                                    ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
-                                    : 'border-gray-200 hover:border-blue-300 hover:bg-white'
-                                }`}>
-                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center mr-4 transition-colors ${
-                                         (answers[activeQuestion.id] || []).includes(option) ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
-                                    }`}>
-                                        <CheckCircle className="w-4 h-4 text-white" />
-                                    </div>
-                                    <input
-                                    type="checkbox"
-                                    checked={(answers[activeQuestion.id] || []).includes(option)}
-                                    onChange={(e) => {
-                                        const currentAnswers: string[] = answers[activeQuestion.id] || [];
-                                        const newAnswers = e.target.checked
-                                        ? [...currentAnswers, option]
-                                        : currentAnswers.filter((a) => a !== option);
-                                        handleAnswerChange(activeQuestion.id, newAnswers);
-                                    }}
-                                    className="hidden"
-                                    />
-                                    <span className={`text-lg font-medium transition-colors ${
-                                        (answers[activeQuestion.id] || []).includes(option) ? 'text-blue-900' : 'text-gray-700'
-                                    }`}>{option}</span>
-                                </label>
-                                ))}
+                                {activeQuestion.options?.map((option) => {
+                                    const optionValue = getOptionValue(option);
+                                    const optionLabel = getOptionLabel(option);
+                                    const currentAnswers: string[] = answers[activeQuestion.id] || [];
+                                    const isChecked = currentAnswers.includes(optionValue);
+                                    return (
+                                        <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
+                                            isChecked
+                                            ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
+                                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                                        }`}>
+                                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center mr-4 transition-colors ${
+                                                 isChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
+                                            }`}>
+                                                <CheckCircle className="w-4 h-4 text-white" />
+                                            </div>
+                                            <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                                const newAnswers = e.target.checked
+                                                ? [...currentAnswers, optionValue]
+                                                : currentAnswers.filter((a) => a !== optionValue);
+                                                handleAnswerChange(activeQuestion.id, newAnswers);
+                                            }}
+                                            className="hidden"
+                                            />
+                                            <span className={`text-lg font-medium transition-colors ${
+                                                isChecked ? 'text-blue-900' : 'text-gray-700'
+                                            }`}>{optionLabel}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         )}
 
@@ -1594,70 +1332,19 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         <Info className="w-12 h-12 text-gray-300" />
                     </div>
                     
-                    {currentStage === 'resolve' ? (
-                        <>
-                            <h3 className="text-2xl font-bold text-gray-900 mb-3">Assessment Complete</h3>
-                            <p className="text-gray-500 max-w-md mx-auto mb-10 text-lg">
-                                You have reached the final stage. Please review the risk assessment below and submit your evaluation.
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <h3 className="text-2xl font-bold text-gray-900 mb-3">No Questions in this Stage</h3>
-                            <p className="text-gray-500 max-w-md mx-auto mb-10 text-lg">
-                                There are no questions defined for the <strong>{currentStage}</strong> stage for your role (<strong>{currentUser.role}</strong>).
-                            </p>
-                        </>
-                    )}
+                    <>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-3">No Questions in this Stage</h3>
+                        <p className="text-gray-500 max-w-md mx-auto mb-10 text-lg">
+                            There are no questions defined for the <strong>{currentStage}</strong> stage for your role (<strong>{currentUser.role}</strong>).
+                        </p>
+                    </>
                     
-                    {currentStage !== 'resolve' && (
-                        <button
-                            onClick={() => setShowAddQuestion(true)}
-                            className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors mb-8"
-                        >
-                            <Plus className="w-4 h-4" /> Add a custom question to this stage
-                        </button>
-                    )}
-                </div>
-            )}
-
-             {currentStage === 'resolve' && (
-                <div className="mt-8 bg-white rounded-3xl shadow-sm border border-gray-200 p-8 animate-in slide-in-from-bottom-2">
-                    <div className="flex items-center gap-3 mb-6">
-                        <AlertTriangle className="w-7 h-7 text-yellow-500" />
-                        <h3 className="text-2xl font-bold text-gray-900">Final Risk Assessment</h3>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-6">
-                         {['low', 'medium', 'high'].map((level) => (
-                            <label key={level} className={`relative flex flex-col items-center p-8 rounded-2xl border-2 cursor-pointer transition-all duration-300 overflow-hidden ${
-                                riskLevel === level 
-                                ? level === 'low' ? 'border-green-500 bg-green-50/50 shadow-sm' : level === 'medium' ? 'border-yellow-500 bg-yellow-50/50 shadow-sm' : 'border-red-500 bg-red-50/50 shadow-sm'
-                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                            }`}>
-                                <input
-                                    type="radio"
-                                    name="riskLevel"
-                                    value={level}
-                                    checked={riskLevel === level}
-                                    onChange={(e) => setRiskLevel(e.target.value as RiskLevel)}
-                                    className="hidden"
-                                />
-                                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors ${
-                                     riskLevel === level 
-                                     ? level === 'low' ? 'bg-green-100 text-green-600' : level === 'medium' ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'
-                                     : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                    {level === 'low' && <CheckCircle className="w-8 h-8" />}
-                                    {level === 'medium' && <AlertTriangle className="w-8 h-8" />}
-                                    {level === 'high' && <XCircle className="w-8 h-8" />}
-                                </div>
-                                <span className={`text-xl font-bold capitalize ${
-                                     riskLevel === level ? 'text-gray-900' : 'text-gray-500'
-                                }`}>{level} Risk</span>
-                            </label>
-                        ))}
-                    </div>
+                    <button
+                        onClick={() => setShowAddQuestion(true)}
+                        className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors mb-8"
+                    >
+                        <Plus className="w-4 h-4" /> Add a custom question to this stage
+                    </button>
                 </div>
             )}
         </div>
@@ -1718,11 +1405,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 <button
                     onClick={handleForward}
                     disabled={saving}
-                    className={`flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 ${
-                        currentStage === 'resolve' 
-                            ? 'bg-green-600 hover:bg-green-700' 
-                            : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
+                    className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
                 >
                     {getNextButtonText()} <ChevronRight className="w-5 h-5 ml-2" />
                 </button>
@@ -1760,7 +1443,7 @@ function AddQuestionModal({ currentStage, onClose, onAdd }: AddQuestionModalProp
   const [options, setOptions] = useState<string[]>(['Option 1', 'Option 2']);
   const [required, setRequired] = useState(true);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const newQuestion: Question = {
       id: `custom_${Date.now()}`,

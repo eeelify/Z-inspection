@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, AlertTriangle, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
+import { fetchUserProgress } from '../utils/userProgress';
 import { ChatPanel } from './ChatPanel';
 import { ProfileModal } from './ProfileModal';
 
@@ -34,6 +35,85 @@ const useCaseStatusColors = {
   'assigned': { bg: 'bg-blue-100', text: 'text-blue-800' },
   'in-review': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
   'completed': { bg: 'bg-green-100', text: 'text-green-800' }
+};
+
+const ProjectCard: React.FC<{
+  project: Project;
+  currentUser: User;
+  onViewProject: (p: Project) => void;
+  onStartEvaluation: (p: Project) => void;
+  onDeleteProject: (id: string) => void;
+}> = ({ project, currentUser, onViewProject, onStartEvaluation, onDeleteProject }) => {
+  const [userProgress, setUserProgress] = useState<number>(project.progress ?? 0);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchUserProgress(project, currentUser).then((val) => {
+      if (mounted) setUserProgress(val);
+    }).catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [project.id, (project as any)._id, currentUser.id, (currentUser as any)._id]);
+
+  const progressDisplay = Math.max(0, Math.min(100, userProgress));
+
+  return (
+    <div
+      key={project.id}
+      onClick={() => onViewProject(project)}
+      className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-all cursor-pointer group"
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
+            {project.title}
+          </h3>
+          <p className="text-sm text-gray-500 line-clamp-2 h-10">{project.shortDescription}</p>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const confirmed = window.confirm(`Delete project "${project.title}"?`);
+            if (confirmed) {
+              onDeleteProject(project.id);
+            }
+          }}
+          className="ml-3 inline-flex items-center px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Delete
+        </button>
+      </div>
+
+      <div className="flex items-center space-x-2 mb-4">
+        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
+          {project.status.toUpperCase()}
+        </span>
+        <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
+          {stageLabels[project.stage]}
+        </span>
+      </div>
+
+      <div className="mb-4">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+          <span>Progress</span>
+          <span className="font-medium text-gray-700">{progressDisplay}%</span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-1.5">
+          <div
+            className="bg-blue-600 h-1.5 rounded-full transition-all"
+            style={{ width: `${progressDisplay}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+        <span>Updated: {new Date(project.createdAt).toLocaleDateString()}</span>
+        {project.isNew && <span className="text-blue-600 font-medium">New Project</span>}
+      </div>
+    </div>
+  );
 };
 
 export function AdminDashboardEnhanced({

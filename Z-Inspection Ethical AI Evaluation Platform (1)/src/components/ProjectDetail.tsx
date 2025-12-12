@@ -8,6 +8,7 @@ import { UseCaseOwners } from './UseCaseOwners';
 import { TensionCard } from './TensionCard';
 import { AddTensionModal } from './AddTensionModal';
 import { ChatPanel } from './ChatPanel';
+import { fetchUserProgress } from '../utils/userProgress';
 
 interface ProjectDetailProps {
   project: Project;
@@ -53,6 +54,7 @@ export function ProjectDetail({
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatOtherUser, setChatOtherUser] = useState<User | null>(null);
   const [chatProject, setChatProject] = useState<Project | null>(null);
+  const [userProgress, setUserProgress] = useState<number>(project.progress || 0);
 
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
@@ -217,6 +219,15 @@ export function ProjectDetail({
     fetchUseCase();
   }, [project.id, currentUser.id, project.useCase]);
 
+  // Kullanıcıya özel ilerleme
+  useEffect(() => {
+    const loadUserProgress = async () => {
+      const computed = await fetchUserProgress(project, currentUser);
+      setUserProgress(computed);
+    };
+    loadUserProgress();
+  }, [project, currentUser]);
+
   const handleSaveTension = async (data: any) => {
     try {
       const severityString = data.severity === 3 ? 'high' : data.severity === 2 ? 'medium' : 'low';
@@ -290,6 +301,7 @@ export function ProjectDetail({
   const assignedUserDetails = users.filter((user) => project.assignedUsers.includes(user.id));
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors] || '#1F2937';
   const isAssigned = project.assignedUsers.includes(currentUser.id);
+  const progressDisplay = Math.max(0, Math.min(100, userProgress));
   const canViewOwners = currentUser.role === 'admin' || currentUser.role === 'ethical-expert';
 
   // Use Case Owner ismini bulma
@@ -412,7 +424,7 @@ export function ProjectDetail({
               <p className="text-gray-600">{project.shortDescription}</p>
             </div>
           </div>
-          {isAssigned && (
+          {isAssigned && progressDisplay < 100 && (
             <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
               Start Evaluation
             </button>
@@ -432,7 +444,7 @@ export function ProjectDetail({
           </div>
           <div className="bg-white p-4 rounded-lg shadow-sm border flex items-center">
             <Target className="h-5 w-5 text-gray-400 mr-3" />
-            <div><div className="text-xs text-gray-600">Progress</div><div className="text-sm font-medium">{project.progress}%</div></div>
+            <div><div className="text-xs text-gray-600">Progress</div><div className="text-sm font-medium">{progressDisplay}%</div></div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow-sm border flex items-center">
             <BarChart3 className="h-5 w-5 text-gray-400 mr-3" />

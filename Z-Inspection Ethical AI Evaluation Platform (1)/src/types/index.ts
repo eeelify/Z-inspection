@@ -6,12 +6,9 @@ export interface User {
 }
 
 export type StageKey = 'set-up' | 'assess' | 'resolve';
-export type QuestionType = 'multiple-choice' | 'checkbox' | 'text' | 'likert';
+export type QuestionType = 'multiple-choice' | 'checkbox' | 'text' | 'likert' | 'select' | 'radio' | 'rating';
 
-export interface QuestionOption {
-  value: string;
-  label: string;
-}
+export type QuestionOption = string | { value: string; label: string };
 
 export interface Question {
   id: string;

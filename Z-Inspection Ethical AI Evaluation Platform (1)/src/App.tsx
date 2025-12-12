@@ -382,7 +382,12 @@ function App() {
             project={selectedProject}
             currentUser={currentUser}
             onBack={() => setCurrentView("project-detail")}
-            onSubmit={handleBackToDashboard}
+            onSubmit={() => {
+              // Assessment finished: mark progress and return to project detail
+              setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, progress: 100 } : p));
+              setSelectedProject(prev => prev ? { ...prev, progress: 100 } : prev);
+              setCurrentView("project-detail");
+            }}
           />
         ) : null;
       case "shared-area":
