@@ -21,6 +21,7 @@ interface ProjectDetailProps {
   onViewOwner?: (owner: UseCaseOwner) => void;
   onCreateTension?: (data: any) => void;
   initialChatUserId?: string; // Optional: open chat with this user on mount
+  initialTab?: 'evaluation' | 'tensions' | 'usecase' | 'owners'; // Optional: set initial tab
 }
 
 const roleColors = {
@@ -43,8 +44,9 @@ export function ProjectDetail({
   onViewTension,
   onViewOwner,
   initialChatUserId,
+  initialTab = 'evaluation',
 }: ProjectDetailProps) {
-  const [activeTab, setActiveTab] = useState<'evaluation' | 'tensions' | 'usecase' | 'owners'>('evaluation');
+  const [activeTab, setActiveTab] = useState<'evaluation' | 'tensions' | 'usecase' | 'owners'>(initialTab);
   const [showAddTension, setShowAddTension] = useState(false);
   const [tensions, setTensions] = useState<Tension[]>([]); 
   // Yeni: Bağlı Use Case verisini tutacak state

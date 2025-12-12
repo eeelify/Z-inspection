@@ -1,0 +1,179 @@
+const express = require('express');
+const router = express.Router();
+const {
+  createAssignment,
+  saveDraftResponse,
+  submitResponse,
+  computeScores,
+  getHotspotQuestions
+} = require('../services/evaluationService');
+const {
+  projectLevelScoresByPrinciple,
+  roleLevelScoresByPrinciple,
+  hotspotQuestions,
+  expertCompletionStatus
+} = require('../services/aggregationPipelines');
+const Response = require('../models/response');
+const ProjectAssignment = require('../models/projectAssignment');
+const Question = require('../models/question');
+const Questionnaire = require('../models/questionnaire');
+
+/**
+ * Create or update assignment
+ * POST /api/evaluations/assignments
+ */
+router.post('/assignments', async (req, res) => {
+  try {
+    const { projectId, userId, role, questionnaires } = req.body;
+    const assignment = await createAssignment(projectId, userId, role, questionnaires);
+    res.json(assignment);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Save draft response
+ * POST /api/evaluations/responses/draft
+ */
+router.post('/responses/draft', async (req, res) => {
+  try {
+    const { projectId, userId, questionnaireKey, answers } = req.body;
+    const response = await saveDraftResponse(projectId, userId, questionnaireKey, answers);
+    res.json(response);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Submit response
+ * POST /api/evaluations/responses/submit
+ */
+router.post('/responses/submit', async (req, res) => {
+  try {
+    const { projectId, userId, questionnaireKey } = req.body;
+    const response = await submitResponse(projectId, userId, questionnaireKey);
+    res.json(response);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Get response
+ * GET /api/evaluations/responses
+ */
+router.get('/responses', async (req, res) => {
+  try {
+    const { projectId, userId, questionnaireKey } = req.query;
+    const response = await Response.findOne({ projectId, userId, questionnaireKey })
+      .populate('answers.questionId');
+    res.json(response || null);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get questions for a questionnaire
+ * GET /api/evaluations/questions
+ */
+router.get('/questions', async (req, res) => {
+  try {
+    const { questionnaireKey, role } = req.query;
+    const query = { questionnaireKey };
+    
+    // Filter by role if specified
+    if (role && role !== 'any') {
+      query.$or = [
+        { appliesToRoles: 'any' },
+        { appliesToRoles: role }
+      ];
+    }
+    
+    const questions = await Question.find(query).sort({ order: 1 });
+    res.json(questions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Compute scores
+ * POST /api/evaluations/scores/compute
+ */
+router.post('/scores/compute', async (req, res) => {
+  try {
+    const { projectId, userId, questionnaireKey } = req.body;
+    const scores = await computeScores(projectId, userId, questionnaireKey);
+    res.json(scores);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get project-level scores by principle
+ * GET /api/evaluations/scores/project/:projectId
+ */
+router.get('/scores/project/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { questionnaireKey } = req.query;
+    const pipeline = projectLevelScoresByPrinciple(projectId, questionnaireKey);
+    const scores = await Response.aggregate(pipeline);
+    res.json(scores);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get role-level scores by principle
+ * GET /api/evaluations/scores/role/:projectId
+ */
+router.get('/scores/role/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { questionnaireKey } = req.query;
+    const pipeline = roleLevelScoresByPrinciple(projectId, questionnaireKey);
+    const scores = await Response.aggregate(pipeline);
+    res.json(scores);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get hotspot questions
+ * GET /api/evaluations/hotspots/:projectId
+ */
+router.get('/hotspots/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { questionnaireKey, threshold } = req.query;
+    const hotspots = await getHotspotQuestions(projectId, questionnaireKey);
+    res.json(hotspots);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get expert completion status
+ * GET /api/evaluations/completion/:projectId
+ */
+router.get('/completion/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const pipeline = expertCompletionStatus(projectId);
+    const status = await Response.aggregate(pipeline);
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;
+

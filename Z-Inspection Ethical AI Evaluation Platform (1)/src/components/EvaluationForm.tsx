@@ -246,6 +246,15 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   };
 
   const handleForward = async () => {
+    // If there are no questions in current stage, go to project detail
+    if (currentQuestions.length === 0) {
+      const success = await saveEvaluation('draft');
+      if (success) {
+        onSubmit(); // This will navigate to project detail
+      }
+      return;
+    }
+
     // Set-up stage: risks are optional, but existing ones must have titles
     if (currentStage === 'set-up') {
       const hasEmptyTitle = generalRisks.some(risk => !risk.title.trim());

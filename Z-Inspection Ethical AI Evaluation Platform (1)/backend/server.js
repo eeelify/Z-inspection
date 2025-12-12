@@ -150,6 +150,51 @@ const EvaluationSchema = new mongoose.Schema({
 EvaluationSchema.index({ projectId: 1, userId: 1, stage: 1 }, { unique: true });
 const Evaluation = mongoose.model('Evaluation', EvaluationSchema);
 
+// GeneralQuestionsAnswers - General questions answers stored separately by role, organized by ethical principles
+const GeneralQuestionsAnswersSchema = new mongoose.Schema({
+  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  userRole: { type: String, required: true }, // Store role separately for filtering
+  // Organized by ethical principle
+  principles: {
+    TRANSPARENCY: {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} }, // questionId -> answer
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }   // questionId -> risk score (0-4)
+    },
+    'HUMAN AGENCY & OVERSIGHT': {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }
+    },
+    'TECHNICAL ROBUSTNESS & SAFETY': {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }
+    },
+    'PRIVACY & DATA GOVERNANCE': {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }
+    },
+    'DIVERSITY, NON-DISCRIMINATION & FAIRNESS': {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }
+    },
+    'SOCIETAL & INTERPERSONAL WELL-BEING': {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }
+    },
+    ACCOUNTABILITY: {
+      answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+      risks: { type: mongoose.Schema.Types.Mixed, default: {} }
+    }
+  },
+  // Legacy support - keep flat structure for backward compatibility
+  answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+  risks: { type: mongoose.Schema.Types.Mixed, default: {} },
+  updatedAt: { type: Date, default: Date.now }
+});
+GeneralQuestionsAnswersSchema.index({ projectId: 1, userId: 1 }, { unique: true });
+GeneralQuestionsAnswersSchema.index({ projectId: 1, userRole: 1 }); // Index for role-based queries
+const GeneralQuestionsAnswers = mongoose.model('GeneralQuestionsAnswers', GeneralQuestionsAnswersSchema);
+
 // Tension (GÜNCELLENDİ: Evidence Array, Comment ve Dosya Desteği)
 const TensionSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
@@ -542,24 +587,158 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
   }
 });
 
-// Evaluations
+// Evaluations (Legacy endpoint - also saves to new responses collection)
 app.post('/api/evaluations', async (req, res) => {
   try {
     const { projectId, userId, stage, answers, questionPriorities, riskLevel, generalRisks, status } = req.body;
+    
+    // Convert IDs to ObjectId if needed
+    const projectIdObj = mongoose.Types.ObjectId.isValid(projectId) 
+      ? new mongoose.Types.ObjectId(projectId) 
+      : projectId;
+    const userIdObj = mongoose.Types.ObjectId.isValid(userId) 
+      ? new mongoose.Types.ObjectId(userId) 
+      : userId;
+    
+    // Save to old Evaluation collection (for backward compatibility)
     const evaluation = await Evaluation.findOneAndUpdate(
-      { projectId, userId, stage },
+      { projectId: projectIdObj, userId: userIdObj, stage },
       { 
-        answers, 
-        questionPriorities, 
-        riskLevel, 
+        projectId: projectIdObj,
+        userId: userIdObj,
+        stage,
+        answers: answers || {}, 
+        questionPriorities: questionPriorities || {}, 
+        riskLevel: riskLevel || 'medium', 
         generalRisks: generalRisks || [], 
         status: status || 'draft', 
         updatedAt: new Date() 
       },
       { new: true, upsert: true }
     );
+
+    // Also try to save to new responses collection (non-blocking)
+    if (answers && Object.keys(answers).length > 0 && stage === 'assess') {
+      try {
+        const Response = require('./models/response');
+        const ProjectAssignment = require('./models/projectAssignment');
+        
+        // Get user role
+        const user = await User.findById(userIdObj);
+        const role = user?.role || 'unknown';
+        
+        // Determine questionnaire key based on role
+        let questionnaireKey = 'general-v1'; // Default
+        if (role === 'technical-expert') questionnaireKey = 'technical-v1';
+        else if (role === 'ethical-expert') questionnaireKey = 'ethical-v1';
+        else if (role === 'medical-expert') questionnaireKey = 'medical-v1';
+        else if (role === 'legal-expert') questionnaireKey = 'legal-v1';
+        
+        // Create or get assignment
+        let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+        if (!assignment) {
+          const { createAssignment } = require('./services/evaluationService');
+          assignment = await createAssignment(projectIdObj, userIdObj, role, [questionnaireKey, 'general-v1']);
+        }
+        
+        // Get questionnaire
+        const Questionnaire = require('./models/questionnaire');
+        let questionnaire = await Questionnaire.findOne({ key: questionnaireKey, isActive: true });
+        
+        // If questionnaire doesn't exist, create it
+        if (!questionnaire) {
+          questionnaire = await Questionnaire.create({
+            key: questionnaireKey,
+            title: `${role} Questions v1`,
+            language: 'en-tr',
+            version: 1,
+            isActive: true
+          });
+        }
+        
+        // Convert answers to new format (simplified - store as-is for now)
+        const responseAnswers = [];
+        const Question = require('./models/question');
+        
+        for (const [questionId, answerValue] of Object.entries(answers)) {
+          // Try to find question
+          let question = await Question.findOne({ 
+            $or: [
+              { _id: questionId },
+              { code: questionId },
+              { questionnaireKey, code: questionId }
+            ]
+          });
+          
+          // If question doesn't exist in DB, create a minimal entry or skip
+          if (!question) {
+            // For now, skip questions that don't exist in DB
+            // In production, you'd want to seed all questions first
+            continue;
+          }
+          
+          // Determine score
+          let score = 2; // Default
+          if (questionPriorities && questionPriorities[questionId]) {
+            const priority = questionPriorities[questionId];
+            if (priority === 'low') score = 3;
+            else if (priority === 'medium') score = 2;
+            else if (priority === 'high') score = 1;
+          }
+          
+          // Format answer
+          let answerFormat = {};
+          if (question.answerType === 'single_choice') {
+            const option = question.options?.find(opt => 
+              opt.label?.en === answerValue || opt.label?.tr === answerValue || opt.key === answerValue
+            );
+            answerFormat.choiceKey = option ? option.key : answerValue;
+            if (option?.score !== undefined) score = option.score;
+          } else if (question.answerType === 'open_text') {
+            answerFormat.text = answerValue;
+          } else if (question.answerType === 'multi_choice') {
+            answerFormat.multiChoiceKeys = Array.isArray(answerValue) ? answerValue : [answerValue];
+          }
+          
+          responseAnswers.push({
+            questionId: question._id,
+            questionCode: question.code,
+            answer: answerFormat,
+            score: score,
+            notes: null,
+            evidence: []
+          });
+        }
+        
+        // Save to responses collection if we have answers
+        if (responseAnswers.length > 0) {
+          await Response.findOneAndUpdate(
+            { projectId: projectIdObj, userId: userIdObj, questionnaireKey },
+            {
+              projectId: projectIdObj,
+              assignmentId: assignment._id,
+              userId: userIdObj,
+              role: role,
+              questionnaireKey,
+              questionnaireVersion: questionnaire.version,
+              answers: responseAnswers,
+              status: status === 'completed' ? 'submitted' : 'draft',
+              submittedAt: status === 'completed' ? new Date() : null,
+              updatedAt: new Date()
+            },
+            { new: true, upsert: true }
+          );
+          console.log(`✅ Saved ${responseAnswers.length} answers to responses collection for ${role}`);
+        }
+      } catch (newSystemError) {
+        // Log error but don't fail the request - old system still works
+        console.error('⚠️ Error saving to new responses collection (non-critical):', newSystemError.message);
+      }
+    }
+    
     res.json(evaluation);
   } catch (err) {
+    console.error('❌ Error in /api/evaluations:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -569,6 +748,135 @@ app.get('/api/evaluations', async (req, res) => {
     const { projectId, userId, stage } = req.query;
     const evaluation = await Evaluation.findOne({ projectId, userId, stage });
     res.json(evaluation || { answers: {}, riskLevel: 'medium' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// General Questions Answers - Test endpoint
+app.get('/api/general-questions/test', (req, res) => {
+  res.json({ message: 'General questions endpoint is working!' });
+});
+
+// General Questions Answers
+app.post('/api/general-questions', async (req, res) => {
+  try {
+    const { projectId, userId, userRole, answers, risks, principles } = req.body;
+    
+    // Convert string IDs to ObjectId if needed
+    const projectIdObj = mongoose.Types.ObjectId.isValid(projectId) 
+      ? new mongoose.Types.ObjectId(projectId) 
+      : projectId;
+    const userIdObj = mongoose.Types.ObjectId.isValid(userId) 
+      ? new mongoose.Types.ObjectId(userId) 
+      : userId;
+    
+    // Organize answers and risks by principle if provided
+    let principlesData = {};
+    if (principles) {
+      principlesData = { principles };
+    } else if (answers && risks) {
+      // Legacy: organize flat answers/risks by principle
+      const principleMap = {
+        'T1': 'TRANSPARENCY', 'T2': 'TRANSPARENCY',
+        'H1': 'HUMAN AGENCY & OVERSIGHT', 'H2': 'HUMAN AGENCY & OVERSIGHT',
+        'S1': 'TECHNICAL ROBUSTNESS & SAFETY',
+        'P1': 'PRIVACY & DATA GOVERNANCE', 'P2': 'PRIVACY & DATA GOVERNANCE',
+        'F1': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
+        'W1': 'SOCIETAL & INTERPERSONAL WELL-BEING', 'W2': 'SOCIETAL & INTERPERSONAL WELL-BEING',
+        'A1': 'ACCOUNTABILITY', 'A2': 'ACCOUNTABILITY'
+      };
+      
+      principlesData = {
+        principles: {
+          TRANSPARENCY: { answers: {}, risks: {} },
+          'HUMAN AGENCY & OVERSIGHT': { answers: {}, risks: {} },
+          'TECHNICAL ROBUSTNESS & SAFETY': { answers: {}, risks: {} },
+          'PRIVACY & DATA GOVERNANCE': { answers: {}, risks: {} },
+          'DIVERSITY, NON-DISCRIMINATION & FAIRNESS': { answers: {}, risks: {} },
+          'SOCIETAL & INTERPERSONAL WELL-BEING': { answers: {}, risks: {} },
+          ACCOUNTABILITY: { answers: {}, risks: {} }
+        }
+      };
+      
+      // Organize by principle
+      Object.keys(answers).forEach(qId => {
+        const principle = principleMap[qId];
+        if (principle && principlesData.principles[principle]) {
+          principlesData.principles[principle].answers[qId] = answers[qId];
+        }
+      });
+      
+      Object.keys(risks).forEach(qId => {
+        const principle = principleMap[qId];
+        if (principle && principlesData.principles[principle]) {
+          principlesData.principles[principle].risks[qId] = risks[qId];
+        }
+      });
+    }
+    
+    const generalAnswers = await GeneralQuestionsAnswers.findOneAndUpdate(
+      { projectId: projectIdObj, userId: userIdObj },
+      {
+        projectId: projectIdObj,
+        userId: userIdObj,
+        userRole: userRole || 'unknown',
+        ...principlesData,
+        answers: answers || {}, // Keep for backward compatibility
+        risks: risks || {},     // Keep for backward compatibility
+        updatedAt: new Date()
+      },
+      { new: true, upsert: true, runValidators: true }
+    );
+    res.json(generalAnswers);
+  } catch (err) {
+    console.error('Error saving general questions:', err);
+    res.status(500).json({ error: err.message || 'Failed to save general questions' });
+  }
+});
+
+app.get('/api/general-questions', async (req, res) => {
+  try {
+    const { projectId, userId } = req.query;
+    
+    // Convert string IDs to ObjectId if needed
+    const projectIdObj = mongoose.Types.ObjectId.isValid(projectId) 
+      ? new mongoose.Types.ObjectId(projectId) 
+      : projectId;
+    const userIdObj = mongoose.Types.ObjectId.isValid(userId) 
+      ? new mongoose.Types.ObjectId(userId) 
+      : userId;
+    
+    const generalAnswers = await GeneralQuestionsAnswers.findOne({ 
+      projectId: projectIdObj, 
+      userId: userIdObj 
+    });
+    
+    // Return the result with principles structure
+    const result = generalAnswers ? {
+      _id: generalAnswers._id,
+      projectId: generalAnswers.projectId,
+      userId: generalAnswers.userId,
+      userRole: generalAnswers.userRole,
+      principles: generalAnswers.principles || {},
+      answers: generalAnswers.answers || {}, // Keep for backward compatibility
+      risks: generalAnswers.risks || {},     // Keep for backward compatibility
+      updatedAt: generalAnswers.updatedAt
+    } : { principles: {}, answers: {}, risks: {} };
+    
+    res.json(result);
+  } catch (err) {
+    console.error('Error loading general questions:', err);
+    res.status(500).json({ error: err.message || 'Failed to load general questions' });
+  }
+});
+
+// Get all general questions answers for a project (grouped by role)
+app.get('/api/general-questions/project/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const allAnswers = await GeneralQuestionsAnswers.find({ projectId }).populate('userId', 'name email role');
+    res.json(allAnswers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1286,5 +1594,9 @@ app.delete('/api/shared-discussions/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// New Evaluation API Routes
+const evaluationRoutes = require('./routes/evaluationRoutes');
+app.use('/api/evaluations', evaluationRoutes);
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

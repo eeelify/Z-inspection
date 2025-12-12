@@ -8,6 +8,8 @@ import { TensionDetail } from "./components/TensionDetail";
 import { UseCaseOwnerDetail } from "./components/UseCaseOwnerDetail";
 import { UseCaseDetail } from "./components/UseCaseDetail";
 import { EvaluationForm } from "./components/EvaluationForm";
+import { GeneralQuestions } from "./components/GeneralQuestions";
+import { AddGeneralQuestion } from "./components/AddGeneralQuestion";
 import { SharedArea } from "./components/SharedArea";
 import { OtherMembers } from "./components/OtherMembers";
 import { PreconditionApproval } from "./components/PreconditionApproval";
@@ -161,7 +163,12 @@ function App() {
 
   const handleStartEvaluation = (project: Project) => {
     setSelectedProject(project);
-    setCurrentView("evaluation");
+    // Show general questions first for non-usecase and non-admin users
+    if (currentUser && currentUser.role !== 'use-case-owner' && currentUser.role !== 'admin') {
+      setCurrentView("general-questions");
+    } else {
+      setCurrentView("evaluation");
+    }
   };
 
   const handleBackToDashboard = () => {
@@ -178,6 +185,11 @@ function App() {
   };
 
   const handleBackToProject = () => {
+    // Clear openTensionsTab flag when going back
+    if (selectedProject) {
+      const { openTensionsTab, ...projectWithoutFlag } = selectedProject as any;
+      setSelectedProject(projectWithoutFlag);
+    }
     setCurrentView("project-detail");
     setSelectedTension(null);
     setSelectedOwner(null);
@@ -355,6 +367,8 @@ function App() {
             onViewTension={handleViewTension}
             onViewOwner={handleViewOwner}
             onCreateTension={handleCreateTension}
+            initialTab={(selectedProject as any).openTensionsTab ? 'tensions' : undefined}
+            key={(selectedProject as any).openTensionsTab ? 'tensions-tab' : 'default-tab'}
           />
         ) : null;
       case "tension-detail":
@@ -376,12 +390,47 @@ function App() {
             onViewTension={handleViewTension}
           />
         ) : null;
+      case "general-questions":
+        return selectedProject ? (
+          <GeneralQuestions
+            project={selectedProject}
+            currentUser={currentUser}
+            onBack={() => setCurrentView("project-detail")}
+            onComplete={() => {
+              // After completing general questions, go to add question screen
+              setCurrentView("add-general-question");
+            }}
+          />
+        ) : null;
+      case "add-general-question":
+        return selectedProject ? (
+          <AddGeneralQuestion
+            project={selectedProject}
+            currentUser={currentUser}
+            onBack={() => setCurrentView("general-questions")}
+            onComplete={() => {
+              // After adding questions (or skipping), go to project detail with tensions tab open
+              if (selectedProject) {
+                setSelectedProject({ ...selectedProject, openTensionsTab: true } as any);
+                setCurrentView("project-detail");
+              }
+            }}
+          />
+        ) : null;
       case "evaluation":
         return selectedProject ? (
           <EvaluationForm
             project={selectedProject}
             currentUser={currentUser}
-            onBack={() => setCurrentView("project-detail")}
+            onBack={() => {
+              // If user came from general questions, go back to general questions
+              // Otherwise go back to project detail
+              if (currentUser && currentUser.role !== 'use-case-owner' && currentUser.role !== 'admin') {
+                setCurrentView("general-questions");
+              } else {
+                setCurrentView("project-detail");
+              }
+            }}
             onSubmit={() => {
               // Assessment finished: mark progress and return to project detail
               setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, progress: 100 } : p));
