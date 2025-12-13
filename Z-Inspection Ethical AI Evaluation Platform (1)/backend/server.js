@@ -1333,7 +1333,14 @@ app.delete('/api/messages/delete-conversation', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find({}, '-password -profileImage') // Exclude password and large profileImage
+    const { includeProfileImages } = req.query;
+    // By default, exclude profileImage for performance (large base64 strings)
+    // But allow including them if explicitly requested
+    const selectFields = includeProfileImages === 'true' 
+      ? '-password' 
+      : '-password -profileImage';
+    
+    const users = await User.find({}, selectFields)
       .lean()
       .maxTimeMS(5000)
       .limit(1000);
@@ -1344,6 +1351,51 @@ app.get('/api/users', async (req, res) => {
 });
 
 // Profile endpoints - SPECIFIC routes must come BEFORE general /:id route
+// GET single user's profile image
+app.get('/api/users/:id/profile-image', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    
+    const user = await User.findById(userId).select('profileImage');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ profileImage: user.profileImage || null });
+  } catch (err) {
+    console.error('❌ Error fetching profile image:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch profile image' });
+  }
+});
+
+// GET single user with profile image
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    
+    const user = await User.findById(userId).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (err) {
+    console.error('❌ Error fetching user:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch user' });
+  }
+});
+
+// POST update profile image
 app.post('/api/users/:id/profile-image', async (req, res) => {
   console.log('🔍 Route hit: POST /api/users/:id/profile-image');
   console.log('🔍 Request params:', req.params);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageSquare, Minimize2, Maximize2, Square, Trash2 } from 'lucide-react';
+import { X, Send, MessageSquare, Minimize2, Maximize2, Trash2 } from 'lucide-react';
 import { Message, User, Project } from '../types';
 
 interface ChatPanelProps {
@@ -314,24 +314,24 @@ export function ChatPanel({ project, currentUser, otherUser, onClose, onMessageS
               <div className="text-xs text-gray-500">{project.title}</div>
             </div>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setIsMinimized(false);
               }}
-              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              className="p-2.5 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <Maximize2 className="h-4 w-4 text-gray-600" />
+              <Maximize2 className="h-5 w-5 text-gray-600" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onClose();
               }}
-              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              className="p-2.5 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <X className="h-4 w-4 text-gray-600" />
+              <X className="h-6 w-6 text-gray-600" />
             </button>
           </div>
         </div>
@@ -360,39 +360,30 @@ export function ChatPanel({ project, currentUser, otherUser, onClose, onMessageS
             <div className="text-xs text-gray-500">{project.title}</div>
           </div>
         </div>
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-2">
           {/* Delete conversation button */}
           <button
             onClick={handleDeleteConversation}
-            className="p-1.5 hover:bg-red-50 rounded transition-colors text-red-600 hover:text-red-700"
+            className="p-2.5 hover:bg-red-50 rounded-lg transition-colors text-red-600 hover:text-red-700"
             title="Delete conversation"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-5 w-5" />
           </button>
           {!inline && (
-            <>
-              <button
-                onClick={() => setIsMinimized(true)}
-                className="p-1.5 hover:bg-gray-200 rounded transition-colors"
-                title="Minimize"
-              >
-                <Minimize2 className="h-4 w-4 text-gray-600" />
-              </button>
-              <button
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1.5 hover:bg-gray-200 rounded transition-colors"
-                title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-              >
-                <Square className="h-4 w-4 text-gray-600" />
-              </button>
-            </>
+            <button
+              onClick={() => setIsMinimized(true)}
+              className="p-2.5 hover:bg-gray-200 rounded-lg transition-colors"
+              title="Minimize"
+            >
+              <Minimize2 className="h-5 w-5 text-gray-600" />
+            </button>
           )}
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+            className="p-2.5 hover:bg-gray-200 rounded-lg transition-colors"
             title="Close"
           >
-            <X className="h-5 w-5 text-gray-600" />
+            <X className="h-6 w-6 text-gray-600" />
           </button>
         </div>
       </div>

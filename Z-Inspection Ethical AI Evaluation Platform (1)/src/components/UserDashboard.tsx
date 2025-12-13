@@ -540,17 +540,11 @@ export function UserDashboard({
                 )}
               </div>
 
-              {/* User Avatar */}
-              <div className="flex items-center space-x-2">
+              {/* User Info */}
+              <div className="flex items-center">
                 <div className="text-sm">
                   <div className="font-medium text-gray-900">{currentUser.name}</div>
                   <div className="text-gray-600">{formatRoleName(currentUser.role)}</div>
-                </div>
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white"
-                  style={{ backgroundColor: roleColor }}
-                >
-                  {currentUser.name.charAt(0)}
                 </div>
               </div>
             </div>
@@ -609,18 +603,6 @@ export function UserDashboard({
               >
                 <Folder className="h-4 w-4 mr-3" />
                 My Projects
-              </button>
-              <button
-                onClick={() => {
-                  setShowChats(true);
-                  fetchConversations();
-                }}
-                className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${
-                  showChats ? 'bg-blue-50 border-r-2 border-blue-500' : ''
-                }`}
-              >
-                <MessageSquare className="h-4 w-4 mr-3" />
-                Chats
               </button>
               <button
                 onClick={() => onNavigate("shared-area")}

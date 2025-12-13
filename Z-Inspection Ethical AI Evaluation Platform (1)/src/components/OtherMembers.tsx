@@ -506,36 +506,6 @@ export function OtherMembers({ currentUser, users, projects, onBack }: OtherMemb
           </div>
         </div>
           )}
-
-          {/* Basit İstatistikler */}
-          <div className="bg-white border-t px-6 py-4 mt-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <div className="text-2xl text-gray-900">
-              {users.filter((u) => u.role === 'admin').length}
-            </div>
-            <div className="text-sm text-gray-600">Admins</div>
-          </div>
-          <div>
-            <div className="text-2xl text-gray-900">
-              {users.filter((u) => u.role === 'ethical-expert').length}
-            </div>
-            <div className="text-sm text-gray-600">Ethical Experts</div>
-          </div>
-          <div>
-            <div className="text-2xl text-gray-900">
-              {users.filter((u) => u.role === 'technical-expert').length}
-            </div>
-            <div className="text-sm text-gray-600">Technical Experts</div>
-          </div>
-          <div>
-            <div className="text-2xl text-gray-900">
-              {users.filter((u) => u.role === 'medical-expert').length}
-            </div>
-            <div className="text-sm text-gray-600">Medical Experts</div>
-          </div>
-        </div>
-          </div>
         </div>
       </div>
 
