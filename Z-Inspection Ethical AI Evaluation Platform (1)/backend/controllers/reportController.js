@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { generateReport } = require('../services/geminiService');
+const { generatePDFFromMarkdown } = require('../services/pdfService');
 
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
@@ -270,6 +271,44 @@ exports.deleteReport = async (req, res) => {
   } catch (err) {
     console.error('Error deleting report:', err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * GET /api/reports/:id/download
+ * Download report as PDF
+ */
+exports.downloadReportPDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const report = await Report.findById(id)
+      .populate('projectId', 'title')
+      .lean();
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    console.log('📄 Generating PDF for report:', id);
+
+    // Generate PDF from markdown content
+    const pdfBuffer = await generatePDFFromMarkdown(
+      report.content,
+      report.title
+    );
+
+    // Set response headers for PDF download
+    const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.pdf`;
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Error generating PDF:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 };
 

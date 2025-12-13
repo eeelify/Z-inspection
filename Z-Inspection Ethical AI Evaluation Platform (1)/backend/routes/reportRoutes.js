@@ -40,6 +40,9 @@ router.post('/generate', reportController.generateReport);
 // GET /api/reports - Get all reports
 router.get('/', reportController.getAllReports);
 
+// GET /api/reports/:id/download - Download report as PDF (must be before /:id route)
+router.get('/:id/download', reportController.downloadReportPDF);
+
 // GET /api/reports/:id - Get specific report
 router.get('/:id', reportController.getReportById);
 

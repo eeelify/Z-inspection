@@ -9,6 +9,7 @@ import { TensionCard } from './TensionCard';
 import { AddTensionModal } from './AddTensionModal';
 import { ChatPanel } from './ChatPanel';
 import { fetchUserProgress } from '../utils/userProgress';
+import { api } from '../api';
 
 interface ProjectDetailProps {
   project: Project;
@@ -57,6 +58,7 @@ export function ProjectDetail({
   const [chatOtherUser, setChatOtherUser] = useState<User | null>(null);
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [userProgress, setUserProgress] = useState<number>(project.progress || 0);
+  const [generating, setGenerating] = useState(false);
 
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
@@ -336,6 +338,35 @@ export function ProjectDetail({
     }
   };
 
+  // Generate report for a project
+  const handleGenerateReport = async () => {
+    try {
+      setGenerating(true);
+      const projectId = project.id || (project as any)._id;
+      const response = await fetch(api('/api/reports/generate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: projectId,
+          userId: currentUser?.id || currentUser?._id
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert('✅ Rapor başarıyla oluşturuldu!');
+      } else {
+        const error = await response.json();
+        alert('❌ Hata: ' + (error.error || 'Rapor oluşturulamadı'));
+      }
+    } catch (error: any) {
+      console.error('Error generating report:', error);
+      alert('❌ Hata: ' + (error.message || 'Rapor oluşturulamadı'));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // Download supporting files and Q&A from use case
   const handleDownloadUseCase = async (forUser?: User) => {
     if (!linkedUseCase) {
@@ -426,11 +457,26 @@ export function ProjectDetail({
               <p className="text-gray-600">{project.shortDescription}</p>
             </div>
           </div>
-          {isAssigned && progressDisplay < 100 && (
-            <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
-              Start Evaluation
-            </button>
-          )}
+          <div className="flex items-center space-x-3">
+            {currentUser.role === 'admin' && (
+              <button
+                onClick={handleGenerateReport}
+                disabled={generating}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  generating
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {generating ? 'Oluşturuluyor...' : 'Report'}
+              </button>
+            )}
+            {isAssigned && progressDisplay < 100 && (
+              <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
+                Start Evaluation
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

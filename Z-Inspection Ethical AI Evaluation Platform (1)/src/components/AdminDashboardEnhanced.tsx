@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, AlertTriangle, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock } from 'lucide-react';
+import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, AlertTriangle, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
 import { fetchUserProgress } from '../utils/userProgress';
 import { ChatPanel } from './ChatPanel';
@@ -454,20 +454,20 @@ export function AdminDashboardEnhanced({
             Create Project
           </button>
           <button
+            onClick={() => setActiveTab('created-reports')}
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'created-reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <FileText className="h-5 w-5 mr-3" />
+            Created Reports
+          </button>
+          <button
             onClick={() => onNavigate('other-members')}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
             <Users className="h-5 w-5 mr-3" />
             Members
-          </button>
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <BarChart3 className="h-5 w-5 mr-3" />
-            Analytics
           </button>
           <button
             onClick={() => {
@@ -500,7 +500,7 @@ export function AdminDashboardEnhanced({
               {activeTab === 'dashboard' && 'Dashboard'}
               {activeTab === 'use-case-assignments' && 'Use Case Assignments'}
               {activeTab === 'project-creation' && 'Create Project'}
-              {activeTab === 'reports' && 'Reports'}
+              {activeTab === 'created-reports' && 'Created Reports'}
               {activeTab === 'chats' && 'Chats'}
             </h2>
           </div>
@@ -617,10 +617,9 @@ export function AdminDashboardEnhanced({
             />
           )}
 
-          {activeTab === 'reports' && (
-            <ReportsTab
+          {activeTab === 'created-reports' && (
+            <CreatedReportsTab
               projects={projects}
-              riskLevels={riskLevels}
               currentUser={currentUser}
             />
           )}
@@ -1337,6 +1336,222 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
           </form>
         </div>
       </div>
+    </>
+  );
+}
+
+function CreatedReportsTab({ projects, currentUser }: any) {
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [filterProjectId, setFilterProjectId] = useState<string>('');
+
+  // Fetch all reports
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const url = filterProjectId 
+        ? api(`/api/reports?projectId=${filterProjectId}`)
+        : api('/api/reports');
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setReports(data);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // View report
+  const handleViewReport = async (reportId: string) => {
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}`));
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedReport(data);
+      } else {
+        alert('Rapor yüklenemedi');
+      }
+    } catch (error) {
+      console.error('Error fetching report:', error);
+      alert('Rapor yüklenemedi');
+    }
+  };
+
+  // Download report as PDF
+  const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent card click event
+    }
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json();
+        alert('PDF indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading PDF:', error);
+      alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, [filterProjectId]);
+
+  return (
+    <>
+      <div className="bg-white border-b border-gray-200 px-8 py-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Created Reports</h1>
+            <p className="text-gray-600">Oluşturulan raporları görüntüleyin</p>
+          </div>
+          <select
+            value={filterProjectId}
+            onChange={(e) => setFilterProjectId(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Tüm Projeler</option>
+            {projects.map((p: any) => (
+              <option key={p.id || p._id} value={p.id || p._id}>
+                {p.title}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="px-8 py-6">
+        {/* Reports List */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Oluşturulan Raporlar</h2>
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Yükleniyor...</div>
+          ) : reports.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-lg">
+              <p className="text-gray-500 mb-2">Henüz rapor oluşturulmamış</p>
+              <p className="text-sm text-gray-400">Proje detay sayfasından rapor oluşturabilirsiniz</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reports.map((report: any) => {
+                const reportId = report._id || report.id;
+                const projectTitle = report.projectId?.title || 'Bilinmeyen Proje';
+                const generatedBy = report.generatedBy?.name || 'Sistem';
+                const generatedAt = new Date(report.generatedAt || report.createdAt).toLocaleString('tr-TR');
+
+                return (
+                  <div
+                    key={reportId}
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleViewReport(reportId)}
+                      >
+                        <h3 className="font-medium text-gray-900 mb-1">{report.title}</h3>
+                        <p className="text-sm text-gray-600 mb-2">{projectTitle}</p>
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <span>Oluşturan: {generatedBy}</span>
+                          <span>•</span>
+                          <span>{generatedAt}</span>
+                          {report.metadata && (
+                            <>
+                              <span>•</span>
+                              <span>{report.metadata.totalScores || 0} puan</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="PDF İndir"
+                        >
+                          <Download className="h-4 w-4" />
+                          PDF
+                        </button>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {report.status === 'final' ? 'Final' :
+                           report.status === 'archived' ? 'Arşiv' : 'Taslak'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Report View Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{selectedReport.title}</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedReport.projectId?.title} • {new Date(selectedReport.generatedAt || selectedReport.createdAt).toLocaleString('tr-TR')}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
+                {selectedReport.content}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <button
+                onClick={() => {
+                  if (selectedReport) {
+                    const reportId = selectedReport._id || selectedReport.id;
+                    handleDownloadPDF(reportId, selectedReport.title);
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                PDF İndir
+              </button>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -30,7 +30,7 @@ const generationConfig = {
 async function testApiKey() {
   try {
     const model = genAI.getGenerativeModel({
-      model: "models/gemini-1.5-flash"
+      model: "models/gemini-2.5-flash"
     });
 
     const result = await model.generateContent("Hello");
@@ -38,7 +38,7 @@ async function testApiKey() {
 
     return {
       valid: Boolean(text),
-      availableModels: ["gemini-1.5-flash"]
+      availableModels: ["gemini-2.5-flash"]
     };
   } catch (error) {
     return {
@@ -60,56 +60,82 @@ async function generateReport(analysisData) {
   const systemInstruction = `
 You are an expert AI Ethics Evaluator and Auditor specializing in the Z-Inspection methodology.
 Your task is to analyze raw AI ethics assessment data and generate a comprehensive, professional,
-and actionable evaluation report for stakeholders.
+and actionable evaluation report for stakeholders. This report will be converted to PDF format.
 
 Requirements:
-- Clear structure and headings
+- Clear structure and headings (use # for main title, ## for sections, ### for subsections)
 - Evidence-based analysis
 - Identification of risks and strengths
 - Actionable recommendations
-- Professional Markdown formatting
+- Professional Markdown formatting suitable for PDF conversion
 - Clear and professional English
+- Use proper Markdown syntax: **bold**, *italic*, lists (- or 1.), tables, code blocks
+- Structure the report with clear sections that will render well in PDF format
+- Include page-break considerations in your structure
 `;
 
-  try {
-    console.log("🤖 Gemini (gemini-1.5-flash) rapor üretiyor...");
+  // Try gemini-2.5-flash model formats only
+  const modelNamesToTry = [
+    "models/gemini-2.5-flash",
+    "gemini-2.5-flash"
+  ];
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction
-    });
+  let lastError = null;
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig
-    });
+  for (const modelName of modelNamesToTry) {
+    try {
+      console.log(`🤖 Gemini (${modelName}) rapor üretiyor...`);
 
-    const report = result.response.text();
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction
+      });
 
-    if (!report) {
-      throw new Error("❌ Gemini boş yanıt döndü.");
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig
+      });
+
+      const report = result.response.text();
+
+      if (!report) {
+        throw new Error("❌ Gemini boş yanıt döndü.");
+      }
+
+      console.log(`✅ Rapor başarıyla oluşturuldu (${modelName}).`);
+      return report;
+
+    } catch (error) {
+      console.error(`❌ Model ${modelName} başarısız:`, error.message);
+      lastError = error;
+      
+      // If it's not a 404 (model not found), don't try other models
+      if (!error.message.includes("404") && !error.message.includes("not found")) {
+        break;
+      }
     }
+  }
 
-    console.log("✅ Rapor başarıyla oluşturuldu.");
-    return report;
+  // If we get here, all models failed
+  console.error("❌ Tüm Gemini modelleri başarısız oldu.");
 
-  } catch (error) {
-    console.error("❌ Gemini rapor üretim hatası:", error.message);
-
-    if (error.message.includes("403")) {
+  if (lastError) {
+    if (lastError.message.includes("403")) {
       throw new Error("❌ Gemini API Key geçersiz veya yetkisiz.");
     }
 
-    if (error.message.includes("429")) {
+    if (lastError.message.includes("429")) {
       throw new Error("❌ Gemini API quota aşıldı.");
     }
 
-    if (error.message.includes("404")) {
-      throw new Error("❌ Gemini modeli bulunamadı (gemini-1.5-flash).");
+    if (lastError.message.includes("404") || lastError.message.includes("not found")) {
+      throw new Error("❌ Gemini modeli bulunamadı. Lütfen API key'inizi ve model erişiminizi kontrol edin.");
     }
 
-    throw new Error(`❌ Rapor oluşturulamadı: ${error.message}`);
+    throw new Error(`❌ Rapor oluşturulamadı: ${lastError.message}`);
   }
+
+  throw new Error("❌ Rapor oluşturulamadı: Bilinmeyen hata.");
 }
 
 /* ============================================================
@@ -195,14 +221,46 @@ function buildUserPrompt(data) {
   prompt += `
 ---
 # REPORT STRUCTURE
-1. Executive Summary
-2. Risk Assessment Matrix
-3. Principle-by-Principle Analysis
-4. Tension Analysis
-5. Actionable Recommendations
-6. Conclusion
+Generate a comprehensive PDF-ready report with the following structure:
 
-Use professional Markdown formatting.
+1. **Executive Summary**
+   - Brief overview of the project
+   - Key findings and overall risk assessment
+   - Main recommendations
+
+2. **Risk Assessment Matrix**
+   - Visual representation of risks by principle
+   - Severity levels and impact analysis
+
+3. **Principle-by-Principle Analysis**
+   - Detailed analysis for each ethical principle
+   - Scores, evaluations, and evidence
+   - Strengths and weaknesses identified
+
+4. **Tension Analysis**
+   - Identified ethical tensions
+   - Conflict resolution strategies
+   - Consensus building approaches
+
+5. **Actionable Recommendations**
+   - Prioritized recommendations
+   - Implementation steps
+   - Timeline and resource requirements
+
+6. **Conclusion**
+   - Summary of key points
+   - Next steps
+   - Contact information
+
+**IMPORTANT FORMATTING REQUIREMENTS:**
+- Use proper Markdown syntax for PDF conversion
+- Use # for main title, ## for major sections, ### for subsections
+- Use **bold** for emphasis, *italic* for important notes
+- Use numbered lists (1., 2., 3.) for sequential items
+- Use bullet points (- or *) for non-sequential items
+- Use tables for structured data when appropriate
+- Ensure all content is professional and suitable for PDF export
+- Format dates, numbers, and technical terms clearly
 `;
 
   return prompt;
