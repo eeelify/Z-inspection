@@ -57,7 +57,7 @@ export function OtherMembers({ currentUser, users, projects, onBack }: OtherMemb
     }
 
     return list;
-  }, [conversations, selectedConversation, chatOtherUser, chatProject]);
+  }, [conversationStore, selectedConversation, chatOtherUser, chatProject]);
 
   // Kendim hariç diğer kullanıcılar
   // Admin hariç diğer uzmanlar use-case-owner'ı göremez
@@ -598,7 +598,7 @@ const fetchConversations = async () => {
             </div>
 
             {/* Chat area */}
-            <div className="flex-1 bg-white flex flex-col min-h-0 h-full">
+            <div className="flex-1 bg-white flex flex-col min-h-0">
               {chatPanelOpen && chatOtherUser && chatProject ? (
                 <div className="flex-1 min-h-0">
                   <ChatPanel

@@ -110,7 +110,7 @@ export function ChatPanel({
           otherUserId: otherUserId
         }),
       });
-
+      
       if (response.ok) {
         await response.json();
         setMessages([]);
@@ -169,7 +169,7 @@ export function ChatPanel({
 
   useEffect(() => {
     if (!normalizedProjectId || !currentUserId || !otherUserId) return;
-
+    
     fetchMessages();
     markAsRead();
 
@@ -213,7 +213,7 @@ export function ChatPanel({
     if (date.toDateString() === today.toDateString()) return 'Today';
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
 
-    return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   const groupMessages = (msgs: any[]) => {
@@ -269,7 +269,7 @@ export function ChatPanel({
   if (isMinimized && !inline) {
     return (
       <div className="fixed bottom-4 right-4 w-80 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
-        <div
+        <div 
           className="bg-gray-50 border-b border-gray-200 p-3 flex items-center justify-between cursor-pointer rounded-t-lg"
           onClick={() => setIsMinimized(false)}
         >
@@ -311,7 +311,7 @@ export function ChatPanel({
   const containerClasses = inline
     ? `w-full h-full max-w-full bg-white border border-gray-200 overflow-hidden flex flex-col min-h-0`
     : `fixed ${isFullscreen ? 'inset-0' : 'bottom-4 right-4 w-96'} bg-white shadow-2xl z-50 border border-gray-200 rounded-lg overflow-hidden flex flex-col min-h-0`;
-
+  
   const fixedHeight = isFullscreen ? '100vh' : `min(600px, calc(100vh - 2rem))`;
 
   return (

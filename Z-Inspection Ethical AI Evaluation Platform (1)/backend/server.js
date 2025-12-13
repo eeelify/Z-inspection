@@ -1263,62 +1263,75 @@ app.get('/api/messages/conversations', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId parameter' });
     }
 
-    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    const userIdObj = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
 
-    // Get all messages where user is involved (as sender or receiver)
+    const userIdStr = mongoose.Types.ObjectId.isValid(userId)
+      ? userIdObj.toString()
+      : String(userId);
+
+    // lean() -> populate edilmiş alanlar plain object olur, daha stabil
     const allMessages = await Message.find({
-      $or: [
-        { fromUserId: userIdObj },
-        { toUserId: userIdObj }
-      ]
+      $or: [{ fromUserId: userIdObj }, { toUserId: userIdObj }],
     })
-    .populate('projectId', 'title')
-    .populate('fromUserId', 'name email role')
-    .populate('toUserId', 'name email role')
-    .sort({ createdAt: -1 });
+      .populate('projectId', 'title')
+      .populate('fromUserId', 'name email role')
+      .populate('toUserId', 'name email role')
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // Group by project and other user
     const conversationsMap = {};
-    
-    allMessages.forEach(msg => {
-      const projectId = msg.projectId._id.toString();
-      const otherUserId = msg.fromUserId._id.toString() === userId ? 
-        msg.toUserId._id.toString() : 
-        msg.fromUserId._id.toString();
+
+    for (const msg of allMessages) {
+      // populate bazen null gelebilir (silinmiş user/project vs.)
+      if (!msg || !msg.projectId || !msg.fromUserId || !msg.toUserId) continue;
+
+      const projectIdRaw = msg.projectId._id || msg.projectId;
+      const fromRaw = msg.fromUserId._id || msg.fromUserId;
+      const toRaw = msg.toUserId._id || msg.toUserId;
+
+      if (!projectIdRaw || !fromRaw || !toRaw) continue;
+
+      const projectId = String(projectIdRaw);
+      const fromId = String(fromRaw);
+      const toId = String(toRaw);
+
+      const otherUserId = fromId === userIdStr ? toId : fromId;
       const key = `${projectId}-${otherUserId}`;
 
       if (!conversationsMap[key]) {
+        const otherUser =
+          fromId === userIdStr ? msg.toUserId : msg.fromUserId;
+
         conversationsMap[key] = {
-          projectId: projectId,
-          projectTitle: msg.projectId.title,
-          otherUserId: otherUserId,
-          otherUserName: msg.fromUserId._id.toString() === userId ? 
-            msg.toUserId.name : 
-            msg.fromUserId.name,
-          otherUserRole: msg.fromUserId._id.toString() === userId ? 
-            msg.toUserId.role : 
-            msg.fromUserId.role,
-          lastMessage: msg.text,
-          lastMessageTime: msg.createdAt,
-          unreadCount: 0
+          projectId,
+          projectTitle: msg.projectId.title || '(No title)',
+          otherUserId,
+          otherUserName: otherUser?.name || 'Unknown',
+          otherUserRole: otherUser?.role || 'unknown',
+          lastMessage: msg.text || '',
+          lastMessageTime: msg.createdAt || new Date().toISOString(),
+          unreadCount: 0,
         };
       }
 
-      // Update last message if this is newer
-      if (new Date(msg.createdAt) > new Date(conversationsMap[key].lastMessageTime)) {
-        conversationsMap[key].lastMessage = msg.text;
-        conversationsMap[key].lastMessageTime = msg.createdAt;
-      }
-
-      // Count unread messages (where user is receiver and message is unread)
-      if (msg.toUserId._id.toString() === userId && !msg.readAt) {
+      // unread count: user receiver ise ve readAt yoksa
+      if (toId === userIdStr && !msg.readAt) {
         conversationsMap[key].unreadCount++;
       }
-    });
 
-    // Convert to array and sort by last message time
-    const conversations = Object.values(conversationsMap).sort((a, b) => 
-      new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
+      // last message update
+      const prevTime = new Date(conversationsMap[key].lastMessageTime).getTime();
+      const curTime = new Date(msg.createdAt).getTime();
+      if (curTime > prevTime) {
+        conversationsMap[key].lastMessage = msg.text || '';
+        conversationsMap[key].lastMessageTime = msg.createdAt;
+      }
+    }
+
+    const conversations = Object.values(conversationsMap).sort(
+      (a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
     );
 
     res.json(conversations);
@@ -1327,6 +1340,7 @@ app.get('/api/messages/conversations', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // DELETE /api/messages/delete-conversation
 app.delete('/api/messages/delete-conversation', async (req, res) => {
