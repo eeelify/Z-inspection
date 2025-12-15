@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const compression = require('compression');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
@@ -35,7 +36,10 @@ app.use((req, res, next) => {
 });
 
 // --- 1. VERİTABANI BAĞLANTISI ---
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://admin_merve:Sifre123@cluster0.tg8voq1.mongodb.net/zinspection?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI;
+if (!MONGO_URI) {
+  throw new Error("❌ MONGO_URI environment variable bulunamadı!");
+}
 
 // Optimize MongoDB connection with connection pooling
 mongoose
@@ -530,8 +534,31 @@ app.put('/api/tensions/:id', async (req, res) => {
 // Tension sil
 app.delete('/api/tensions/:id', async (req, res) => {
   try {
-    const deleted = await Tension.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Not found' });
+    const requesterUserId = (req.query.userId || req.body?.userId || '').toString();
+    if (!requesterUserId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+
+    const tension = await Tension.findById(req.params.id);
+    if (!tension) return res.status(404).json({ error: 'Not found' });
+
+    // Verify requester role from DB (do not trust client-provided role)
+    let isAdmin = false;
+    try {
+      const user = await User.findById(requesterUserId).select('role');
+      isAdmin = user?.role === 'admin';
+    } catch {
+      // ignore (keep isAdmin=false)
+    }
+
+    const isCreator = Boolean(tension.createdBy) && tension.createdBy.toString() === requesterUserId;
+
+    // Backward-compat: if createdBy is missing, only admin can delete
+    if (!isAdmin && !isCreator) {
+      return res.status(403).json({ error: 'Not authorized to delete this tension' });
+    }
+
+    await Tension.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -985,6 +1012,20 @@ app.get('/api/projects', async (req, res) => {
 
 app.post('/api/projects', async (req, res) => {
   try {
+    // If a useCase is linked, ensure its owner is assigned to the project (server-side safety).
+    if (req.body?.useCase) {
+      try {
+        const uc = await UseCase.findById(req.body.useCase).select('ownerId').lean();
+        const ownerId = uc?.ownerId?.toString();
+        if (ownerId) {
+          const currentAssigned = Array.isArray(req.body.assignedUsers) ? req.body.assignedUsers.map(String) : [];
+          req.body.assignedUsers = Array.from(new Set([...currentAssigned, ownerId]));
+        }
+      } catch {
+        // ignore; proceed with provided payload
+      }
+    }
+
     const project = new Project(req.body);
     await project.save();
     res.json(project);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Clock, TrendingUp, Users, FileText, MessageCircle, AlertCircle, CheckCircle, Download } from 'lucide-react';
 import { UseCase, User } from '../types';
+import { api } from '../api';
 
 interface UseCaseDetailProps {
   useCase: UseCase;
@@ -31,7 +32,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/use-case-questions');
+        const response = await fetch(api('/api/use-case-questions'));
         if (response.ok) {
           const allQuestions = await response.json();
           // Merge questions with answers
@@ -94,7 +95,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
         toUpload.push({ name: f.name, data: dataUrl, contentType: f.type });
       }
 
-      const res = await fetch(`http://127.0.0.1:5000/api/use-cases/${uc.id}/supporting-files`, {
+      const res = await fetch(api(`/api/use-cases/${uc.id}/supporting-files`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: toUpload })

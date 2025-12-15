@@ -130,7 +130,7 @@ function App() {
     if (!currentUser?.id) return;
     (async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:5000/api/users/${currentUser.id}/precondition-approval`, {
+        const res = await fetch(api(`/api/users/${currentUser.id}/precondition-approval`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
@@ -243,7 +243,7 @@ function App() {
 
   const handleDeleteProject = async (projectId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/projects/${projectId}`, {
+      const response = await fetch(api(`/api/projects/${projectId}`), {
         method: 'DELETE'
       });
 
@@ -298,7 +298,7 @@ function App() {
 
   const handleDeleteUseCase = async (useCaseId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/use-cases/${useCaseId}`, {
+      const response = await fetch(api(`/api/use-cases/${useCaseId}`), {
         method: 'DELETE'
       });
 

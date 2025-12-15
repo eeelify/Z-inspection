@@ -17,12 +17,9 @@ Bu komut `@google/generative-ai` paketini yükler.
 
 ### 2. API Key Yapılandırması
 
-API key zaten kodda hardcoded olarak ayarlanmış:
-- API Key: `AIzaSyBeKUTBEtMfoUKam4n7TWNDJOOSUoaoTvs`
-
-Alternatif olarak, `.env` dosyasına ekleyebilirsiniz:
+Gemini API key **sadece** `.env` dosyasından okunur. `backend/.env` dosyanıza ekleyin:
 ```
-GEMINI_API_KEY=AIzaSyBeKUTBEtMfoUKam4n7TWNDJOOSUoaoTvs
+GEMINI_API_KEY=BURAYA_API_KEY
 ```
 
 ## 🚀 Kullanım

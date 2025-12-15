@@ -4,6 +4,7 @@ import { User, Project, Message } from '../types';
 import { ChatPanel } from './ChatPanel';
 import { roleColors } from '../utils/constants';
 import { getUserProjects, formatRoleName, formatLastSeen } from '../utils/helpers';
+import { api } from '../api';
 
 interface OtherMembersProps {
   currentUser: User;
@@ -112,7 +113,7 @@ export function OtherMembers({ currentUser, users, projects, onBack }: OtherMemb
     // If still no project, create one via API
     if (!commProject) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/projects', {
+        const response = await fetch(api('/api/projects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -200,9 +201,7 @@ const fetchConversations = async () => {
     }
 
     // Get all messages where current user is involved
-    const response = await fetch(
-      `http://127.0.0.1:5000/api/messages/conversations?userId=${currentUserId}`
-    );
+    const response = await fetch(api(`/api/messages/conversations?userId=${currentUserId}`));
 
     if (response.ok) {
       const data = await response.json();

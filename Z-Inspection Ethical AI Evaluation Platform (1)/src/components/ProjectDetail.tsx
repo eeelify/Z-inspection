@@ -94,7 +94,7 @@ export function ProjectDetail({
     // If still no project, create one via API
     if (!commProject) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/projects', {
+        const response = await fetch(api('/api/projects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -164,7 +164,7 @@ export function ProjectDetail({
   // Tensionları Getir
   const fetchTensions = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tensions/${project.id}?userId=${currentUser.id}`);
+      const response = await fetch(api(`/api/tensions/${project.id}?userId=${currentUser.id}`));
       if (response.ok) {
         const data = await response.json();
         const formattedData = data.map((t: any) => ({
@@ -192,8 +192,8 @@ export function ProjectDetail({
         
         // Paralel olarak use case ve questions'ı çek
         const [useCaseResponse, questionsResponse] = await Promise.all([
-          fetch(`http://localhost:5000/api/use-cases/${useCaseId}`),
-          fetch('http://127.0.0.1:5000/api/use-case-questions')
+          fetch(api(`/api/use-cases/${useCaseId}`)),
+          fetch(api('/api/use-case-questions'))
         ]);
         
         if (useCaseResponse.ok) {
@@ -250,7 +250,7 @@ export function ProjectDetail({
         createdBy: currentUser.id
       };
 
-      const response = await fetch('http://localhost:5000/api/tensions', {
+      const response = await fetch(api('/api/tensions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -272,7 +272,7 @@ export function ProjectDetail({
     const confirmed = window.confirm("Delete this tension? This cannot be undone.");
     if (!confirmed) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/tensions/${tensionId}`, {
+      const response = await fetch(api(`/api/tensions/${tensionId}?userId=${encodeURIComponent(currentUser.id)}`), {
         method: 'DELETE'
       });
       if (response.ok) {
@@ -289,7 +289,7 @@ export function ProjectDetail({
 
   const handleVote = async (tensionId: string, voteType: 'agree' | 'disagree') => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tensions/${tensionId}/vote`, {
+      const response = await fetch(api(`/api/tensions/${tensionId}/vote`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id, voteType }),

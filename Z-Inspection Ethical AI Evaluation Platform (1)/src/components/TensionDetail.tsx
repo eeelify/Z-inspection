@@ -22,13 +22,14 @@ export function TensionDetail({ tension: initialTension, currentUser, users, onB
   const [commentText, setCommentText] = useState('');
   
   const creator = users.find(u => u.id === tension.createdBy || u.id === (tension as any).uploadedBy);
+  const canDelete = currentUser.role === 'admin' || tension.createdBy === currentUser.id;
 
   // Always fetch latest tension (including evidences) when page opens
   useEffect(() => {
     const fetchTension = async () => {
       try {
         const id = tension.id || (tension as any)._id;
-        const response = await fetch(`http://localhost:5000/api/tensions/id/${id}`);
+        const response = await fetch(api(`/api/tensions/id/${id}`));
         if (response.ok) {
           const fresh = await response.json();
           setTension((prev) => ({ ...prev, ...fresh }));
@@ -106,30 +107,35 @@ export function TensionDetail({ tension: initialTension, currentUser, users, onB
                 <ArrowLeft className="h-4 w-4 mr-1" /> Back to Tensions
               </button>
             </div>
-            <button
-              onClick={async () => {
-                const confirmDelete = window.confirm("Delete this tension? This cannot be undone.");
-                if (!confirmDelete) return;
-                try {
-                  const id = tension.id || (tension as any)._id;
-                  const response = await fetch(`http://localhost:5000/api/tensions/${id}`, { method: 'DELETE' });
-                  if (response.ok) {
-                    alert("Tension deleted.");
-                    onBack();
-                  } else {
-                    const err = await response.json();
-                    alert(err.error || "Delete failed.");
+            {canDelete && (
+              <button
+                onClick={async () => {
+                  const confirmDelete = window.confirm("Delete this tension? This cannot be undone.");
+                  if (!confirmDelete) return;
+                  try {
+                    const id = tension.id || (tension as any)._id;
+                    const response = await fetch(
+                      api(`/api/tensions/${id}?userId=${encodeURIComponent(currentUser.id)}`),
+                      { method: 'DELETE' }
+                    );
+                    if (response.ok) {
+                      alert("Tension deleted.");
+                      onBack();
+                    } else {
+                      const err = await response.json();
+                      alert(err.error || "Delete failed.");
+                    }
+                  } catch (error) {
+                    console.error(error);
+                    alert("Cannot delete tension right now.");
                   }
-                } catch (error) {
-                  console.error(error);
-                  alert("Cannot delete tension right now.");
-                }
-              }}
-              className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
-            >
-              <Trash2 className="w-4 h-4 inline mr-1" />
-              Delete
-            </button>
+                }}
+                className="px-3 py-1.5 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4 inline mr-1" />
+                Delete
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, MessageSquare, Minimize2, Maximize2, Trash2 } from 'lucide-react';
 import { Message, User, Project } from '../types';
+import { api } from '../api';
 
 interface ChatPanelProps {
   project: Project;
@@ -51,9 +52,9 @@ export function ChatPanel({
       if (!normalizedProjectId || !currentUserId || !otherUserId) return;
 
       setLoading(true);
-      const response = await fetch(
-        `http://127.0.0.1:5000/api/messages/thread?projectId=${normalizedProjectId}&user1=${currentUserId}&user2=${otherUserId}`
-      );
+      const response = await fetch(api(
+        `/api/messages/thread?projectId=${normalizedProjectId}&user1=${currentUserId}&user2=${otherUserId}`
+      ));
 
       if (response.ok) {
         const data = await response.json();
@@ -81,7 +82,7 @@ export function ChatPanel({
     try {
       if (!normalizedProjectId || !currentUserId || !otherUserId) return;
 
-      await fetch('http://127.0.0.1:5000/api/messages/mark-read', {
+      await fetch(api('/api/messages/mark-read'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,7 +102,7 @@ export function ChatPanel({
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/delete-conversation`, {
+      const response = await fetch(api('/api/messages/delete-conversation'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -138,7 +139,7 @@ export function ChatPanel({
     try {
       setSending(true);
 
-      const response = await fetch('http://127.0.0.1:5000/api/messages', {
+      const response = await fetch(api('/api/messages'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

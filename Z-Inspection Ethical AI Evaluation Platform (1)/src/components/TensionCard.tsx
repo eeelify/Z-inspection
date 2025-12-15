@@ -15,6 +15,8 @@ export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDe
   const agreeCount = tension.consensus?.agree || 0;
   const disagreeCount = tension.consensus?.disagree || 0;
   const totalVotes = agreeCount + disagreeCount;
+
+  const canDelete = currentUser.role === 'admin' || tension.createdBy === currentUser.id;
   
   // Yüzdelik Hesaplama
   const agreePercentage = totalVotes > 0 
@@ -40,7 +42,7 @@ export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDe
             {new Date(tension.createdAt).toLocaleDateString()}
           </span>
         </div>
-        {onDelete && (
+        {onDelete && canDelete && (
           <button
             onClick={(e) => {
               e.stopPropagation();

@@ -5,6 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { ChatPanel } from './ChatPanel';
 import { ProfileModal } from './ProfileModal';
+import { api } from '../api';
 
 interface UseCaseOwnerDashboardProps {
   currentUser: User;
@@ -57,7 +58,7 @@ export function UseCaseOwnerDashboard({
   const fetchMyUseCases = React.useCallback(async () => {
     setLoadingUseCases(true);
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/use-cases?ownerId=${currentUser.id}`);
+      const response = await fetch(api(`/api/use-cases?ownerId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
         const formattedUseCases = data.map((uc: any) => ({ ...uc, id: uc._id }));
@@ -85,7 +86,7 @@ export function UseCaseOwnerDashboard({
   // Fetch unread message count
   const fetchUnreadCount = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/unread-count?userId=${currentUser.id}`);
+      const response = await fetch(api(`/api/messages/unread-count?userId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
         console.log('UseCaseOwner unread count fetched:', data);
@@ -133,7 +134,7 @@ export function UseCaseOwnerDashboard({
     
     if (project && otherUser) {
       try {
-        await fetch('http://127.0.0.1:5000/api/messages/mark-read', {
+        await fetch(api('/api/messages/mark-read'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -165,7 +166,7 @@ export function UseCaseOwnerDashboard({
     // If still no project, create one via API
     if (!adminProject) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/projects', {
+        const response = await fetch(api('/api/projects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -663,7 +664,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         
-        const response = await fetch('http://127.0.0.1:5000/api/use-case-questions', {
+        const response = await fetch(api('/api/use-case-questions'), {
           signal: controller.signal
         });
         clearTimeout(timeoutId);
@@ -983,7 +984,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
                   type="button"
                   onClick={async () => {
                     try {
-                      const response = await fetch('http://127.0.0.1:5000/api/use-case-questions/seed', {
+                      const response = await fetch(api('/api/use-case-questions/seed'), {
                         method: 'POST'
                       });
                       if (response.ok) {

@@ -146,7 +146,7 @@ export function AdminDashboardEnhanced({
   // Fetch all conversations (chats)
   const fetchConversations = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/conversations?userId=${currentUser.id}`);
+      const response = await fetch(api(`/api/messages/conversations?userId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
         setAllConversations(data || []);
@@ -182,7 +182,7 @@ export function AdminDashboardEnhanced({
     // If still no project, create one via API
     if (!commProject) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/projects', {
+        const response = await fetch(api('/api/projects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -243,7 +243,7 @@ export function AdminDashboardEnhanced({
 
   const handleDeleteConversation = async (projectId: string, otherUserId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/delete-conversation`, {
+      const response = await fetch(api('/api/messages/delete-conversation'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -294,7 +294,7 @@ export function AdminDashboardEnhanced({
   // Fetch unread message count
   const fetchUnreadCount = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/unread-count?userId=${currentUser.id}`);
+      const response = await fetch(api(`/api/messages/unread-count?userId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
         console.log('Admin unread count fetched:', data);
@@ -357,7 +357,7 @@ export function AdminDashboardEnhanced({
     if (project && otherUser) {
       // Mark messages as read
       try {
-        await fetch('http://127.0.0.1:5000/api/messages/mark-read', {
+        await fetch(api('/api/messages/mark-read'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -759,7 +759,7 @@ export function AdminDashboardEnhanced({
           }}
           onAssign={async (expertIds, notes) => {
               try {
-               const response = await fetch(`http://127.0.0.1:5000/api/use-cases/${selectedUseCaseForAssignment.id}/assign`, {
+               const response = await fetch(api(`/api/use-cases/${selectedUseCaseForAssignment.id}/assign`), {
                  method: 'PUT',
                  headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify({
@@ -1024,6 +1024,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
   const [targetDate, setTargetDate] = useState('');
   const [selectedUseCaseId, setSelectedUseCaseId] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<string[]>([]);
+  const [autoUseCaseOwnerId, setAutoUseCaseOwnerId] = useState<string>('');
 
   // ⚠️ YENİ STATE'LER: 7 Temel Soru İçin Eklenmiştir
   const [requester, setRequester] = useState('');
@@ -1037,7 +1038,12 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (selectedTeam.length === 0) {
+    const effectiveTeam = Array.from(new Set([
+      ...selectedTeam,
+      ...(autoUseCaseOwnerId ? [autoUseCaseOwnerId] : [])
+    ]));
+
+    if (effectiveTeam.length === 0) {
       alert("Please assign at least one team member (Expert or Owner) to create a project.");
       return;
     }
@@ -1048,7 +1054,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
       shortDescription: description.substring(0, 100),
       fullDescription: description,
       targetDate,
-      assignedUsers: selectedTeam,
+      assignedUsers: effectiveTeam,
       useCase: selectedUseCaseId || undefined,
       inspectionContext: {
         requester,
@@ -1068,6 +1074,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
     setTargetDate('');
     setSelectedUseCaseId('');
     setSelectedTeam([]);
+    setAutoUseCaseOwnerId('');
     setRequester('');
     setInspectionReason('');
     setRelevantFor('');
@@ -1085,7 +1092,9 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
     }
   };
 
-  const experts = users.filter((u: User) => u.role !== 'admin'); // Admin olmayan kullanıcılar (Expert/Owner)
+  // Admin Create Project ekranında use-case-owner listede görünmesin.
+  // UseCase seçilirse owner otomatik atanır (autoUseCaseOwnerId).
+  const experts = users.filter((u: User) => u.role !== 'admin' && u.role !== 'use-case-owner');
 
   return (
     <>
@@ -1125,7 +1134,11 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
                       if (uc) {
                         setTitle(uc.title);
                         setDescription(uc.description);
+                        // Use case owner'ını otomatik ata (listede göstermeden)
+                        setAutoUseCaseOwnerId((uc as any).ownerId || '');
                       }
+                    } else {
+                      setAutoUseCaseOwnerId('');
                     }
                   }}
                   className="w-full px-4 py-2.5 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-blue-900"
@@ -1137,6 +1150,14 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
                     </option>
                   ))}
                 </select>
+                {autoUseCaseOwnerId && (
+                  <div className="mt-2 text-xs text-blue-800">
+                    Use Case owner will be assigned automatically:{" "}
+                    <span className="font-medium">
+                      {users.find((u: User) => u.id === autoUseCaseOwnerId)?.name || 'Unknown'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>

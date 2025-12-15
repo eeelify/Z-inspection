@@ -1,5 +1,9 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;/* ============================================================
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+/* ============================================================
    1. API KEY KONTROLÜ
 ============================================================ */
 

@@ -17,6 +17,7 @@ import { Project, User, UseCase } from "../types";
 import { ChatPanel } from "./ChatPanel";
 import { formatRoleName } from "../utils/helpers";
 import { ProfileModal } from "./ProfileModal";
+import { api } from "../api";
 
 interface UserDashboardProps {
   currentUser: User;
@@ -93,7 +94,7 @@ export function UserDashboard({
   // Fetch unread message count
   const fetchUnreadCount = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/unread-count?userId=${currentUser.id}`);
+      const response = await fetch(api(`/api/messages/unread-count?userId=${currentUser.id}`));
       if (response.ok) {
         const data = await response.json();
         console.log('Unread count fetched:', data);
@@ -110,7 +111,7 @@ export function UserDashboard({
   // Fetch all conversations (chats)
   const fetchConversations = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/messages/conversations?userId=${currentUser.id}`);
+      const response = await fetch(api(`/api/messages/conversations?userId=${currentUser.id}`));
       if (response.ok) {
         const data = await response.json();
         setAllConversations(data || []);
@@ -175,7 +176,7 @@ export function UserDashboard({
     // If still no project, create one via API
     if (!commProject) {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/projects', {
+        const response = await fetch(api('/api/projects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -271,7 +272,7 @@ export function UserDashboard({
     if (project) {
       // Mark messages as read
       try {
-        await fetch('http://127.0.0.1:5000/api/messages/mark-read', {
+        await fetch(api('/api/messages/mark-read'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -334,7 +335,7 @@ export function UserDashboard({
         : (project.useCase as any).url || project.useCase;
 
       // Fetch use case data
-      const response = await fetch(`http://localhost:5000/api/use-cases/${useCaseId}`);
+      const response = await fetch(api(`/api/use-cases/${useCaseId}`));
       if (!response.ok) {
         alert('Use case not found.');
         return;
@@ -346,7 +347,7 @@ export function UserDashboard({
       let questionsWithAnswers: any[] = [];
       if (useCase.answers && useCase.answers.length > 0) {
         try {
-          const questionsResponse = await fetch('http://127.0.0.1:5000/api/use-case-questions');
+          const questionsResponse = await fetch(api('/api/use-case-questions'));
           if (questionsResponse.ok) {
             const allQuestions = await questionsResponse.json();
             questionsWithAnswers = allQuestions.map((q: any) => {

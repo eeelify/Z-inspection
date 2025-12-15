@@ -4,7 +4,7 @@
 
 **Bağlantı Bilgileri:**
 - MongoDB Atlas kullanılıyor (Cloud)
-- Connection String: `mongodb+srv://admin_merve:Sifre123@cluster0.tg8voq1.mongodb.net/zinspection`
+- Connection String: `MONGO_URI` (**backend/.env** içinden okunur)
 - Database: `zinspection`
 - Connection pooling: 10 socket bağlantısı
 

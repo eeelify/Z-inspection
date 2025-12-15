@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Mail, User as UserIcon, FileText, CheckCircle, Eye } from 'lucide-react';
 import { User, UseCase } from '../types';
+import { api } from '../api';
 
 interface UseCaseOwnerDetailProps {
   owner: User; // user with role: use-case-owner
@@ -21,7 +22,7 @@ export function UseCaseOwnerDetail({ owner, currentUser, onBack, onViewUseCase }
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`http://localhost:5000/api/use-cases?ownerId=${encodeURIComponent(owner.id)}`);
+        const res = await fetch(api(`/api/use-cases?ownerId=${encodeURIComponent(owner.id)}`));
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data?.error || 'Failed to load use cases');
