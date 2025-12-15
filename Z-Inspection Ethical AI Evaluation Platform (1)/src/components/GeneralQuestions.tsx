@@ -26,12 +26,20 @@ interface GeneralQuestion {
 // Principle Turkish translations
 const principleTranslations: Record<string, string> = {
   'TRANSPARENCY': 'Şeffaflık',
+  'TRANSPARENCY & EXPLAINABILITY': 'Şeffaflık ve Açıklanabilirlik',
   'HUMAN AGENCY & OVERSIGHT': 'İnsan Özerkliği ve Gözetimi',
+  'HUMAN OVERSIGHT & CONTROL': 'İnsan Gözetimi ve Kontrolü',
   'TECHNICAL ROBUSTNESS & SAFETY': 'Teknik Sağlamlık ve Güvenlik',
   'PRIVACY & DATA GOVERNANCE': 'Gizlilik ve Veri Yönetişimi',
+  'PRIVACY & DATA PROTECTION': 'Gizlilik ve Veri Koruma',
   'DIVERSITY, NON-DISCRIMINATION & FAIRNESS': 'Çeşitlilik, Ayrımcılık Yapmama ve Adalet',
   'SOCIETAL & INTERPERSONAL WELL-BEING': 'Toplumsal ve Çevresel İyi Oluş',
-  'ACCOUNTABILITY': 'Hesap Verebilirlik'
+  'ACCOUNTABILITY': 'Hesap Verebilirlik',
+  'ACCOUNTABILITY & RESPONSIBILITY': 'Hesap Verebilirlik ve Sorumluluk',
+  'LAWFULNESS & COMPLIANCE': 'Hukukilik ve Uyumluluk',
+  'RISK MANAGEMENT & HARM PREVENTION': 'Risk Yönetimi ve Zarar Önleme',
+  'PURPOSE LIMITATION & DATA MINIMIZATION': 'Amaç Sınırlaması ve Veri Minimizasyonu',
+  'USER RIGHTS & AUTONOMY': 'Kullanıcı Hakları ve Özerklik'
 };
 
 export function GeneralQuestions({ project, currentUser, onBack, onComplete }: GeneralQuestionsProps) {
@@ -76,26 +84,81 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   useEffect(() => {
     const loadQuestions = async () => {
       try {
-        // Get questions from backend based on role
-        const role = currentUser.role || 'any';
-        const response = await fetch(
-          api(`/api/evaluations/questions?questionnaireKey=general-v1&role=${role}`)
-        );
+        setLoading(true);
         
-        if (response.ok) {
-          const questions = await response.json();
-          const convertedQuestions = questions.map(convertQuestion).sort((a: GeneralQuestion, b: GeneralQuestion) => {
-            // Sort by order if available, otherwise by code
-            const aOrder = questions.find((q: any) => (q._id?.toString() || q.code) === a.id)?.order || 0;
-            const bOrder = questions.find((q: any) => (q._id?.toString() || q.code) === b.id)?.order || 0;
+        // Determine questionnaire key based on role
+        const role = currentUser.role || 'any';
+        let questionnaireKey = 'general-v1'; // Default for all roles
+        
+        // Role-specific questionnaires
+        if (role === 'ethical-expert') {
+          questionnaireKey = 'ethical-expert-v1';
+        } else if (role === 'medical-expert') {
+          questionnaireKey = 'medical-expert-v1';
+        } else if (role === 'technical-expert') {
+          questionnaireKey = 'technical-expert-v1';
+        } else if (role === 'legal-expert') {
+          questionnaireKey = 'legal-expert-v1';
+        }
+        
+        // Fetch both role-specific and general questions in parallel for better performance
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        
+        const [roleResponse, generalResponse] = await Promise.all([
+          fetch(api(`/api/evaluations/questions?questionnaireKey=${questionnaireKey}&role=${role}`), {
+            signal: controller.signal
+          }),
+          fetch(api(`/api/evaluations/questions?questionnaireKey=general-v1&role=any`), {
+            signal: controller.signal
+          })
+        ]);
+        
+        clearTimeout(timeoutId);
+        
+        let allQuestions: any[] = [];
+        
+        // FIRST: Add general questions (order 1-12)
+        if (generalResponse.ok) {
+          const generalQuestions = await generalResponse.json();
+          allQuestions = [...generalQuestions];
+        }
+        
+        // THEN: Add role-specific questions (order 13+), avoiding duplicates by code
+        if (roleResponse.ok) {
+          const roleQuestions = await roleResponse.json();
+          const existingCodes = new Set(allQuestions.map((q: any) => q.code));
+          roleQuestions.forEach((q: any) => {
+            if (!existingCodes.has(q.code)) {
+              allQuestions.push(q);
+            }
+          });
+        }
+        
+        // Convert and sort questions
+        if (allQuestions.length > 0) {
+          const convertedQuestions = allQuestions.map(convertQuestion).sort((a: GeneralQuestion, b: GeneralQuestion) => {
+            // Sort by order if available
+            const aOrder = allQuestions.find((q: any) => (q._id?.toString() || q.code) === (a.code || a.id))?.order || 0;
+            const bOrder = allQuestions.find((q: any) => (q._id?.toString() || q.code) === (b.code || b.id))?.order || 0;
             return aOrder - bOrder;
           });
           setGeneralQuestions(convertedQuestions);
+          setLoading(false);
         } else {
-          console.error('Failed to load questions');
+          console.error('No questions found');
+          setLoading(false);
         }
-      } catch (error) {
-        console.error('Error loading questions:', error);
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.error('Request timeout - server is slow or not responding');
+          alert('Sorular yüklenirken zaman aşımı oluştu. Lütfen sayfayı yenileyin.');
+        } else {
+          console.error('Error loading questions:', error);
+          alert('Sorular yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.');
+        }
+        setLoading(false);
       }
     };
 
@@ -164,6 +227,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
     setRisks((prev) => ({ ...prev, [questionId]: risk }));
   };
 
+  // Get question key (prefer code over id for consistency with backend)
+  const getQuestionKey = (q: GeneralQuestion): string => {
+    return q.code || q.id;
+  };
+
   const saveAnswers = async () => {
     setSaving(true);
     try {
@@ -182,12 +250,16 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           principles[q.principle] = { answers: {}, risks: {} };
         }
         // Use code as key for consistency with backend
-        const questionKey = q.code || q.id;
-        if (answers[q.id] || answers[questionKey]) {
-          principles[q.principle].answers[questionKey] = answers[q.id] || answers[questionKey];
+        const questionKey = getQuestionKey(q);
+        // Check both id and code in answers/risks (for backward compatibility)
+        const answerValue = answers[q.id] || answers[questionKey] || answers[q.code || ''];
+        const riskValue = risks[q.id] !== undefined ? risks[q.id] : (risks[questionKey] !== undefined ? risks[questionKey] : risks[q.code || '']);
+        
+        if (answerValue) {
+          principles[q.principle].answers[questionKey] = answerValue;
         }
-        if (risks[q.id] !== undefined || risks[questionKey] !== undefined) {
-          principles[q.principle].risks[questionKey] = risks[q.id] !== undefined ? risks[q.id] : risks[questionKey];
+        if (riskValue !== undefined) {
+          principles[q.principle].risks[questionKey] = riskValue;
         }
       });
 
@@ -222,14 +294,18 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   };
 
   const handleNext = async () => {
+    const questionKey = getQuestionKey(currentQuestion);
+    const answerValue = answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''];
+    const riskValue = risks[currentQuestion.id] !== undefined ? risks[currentQuestion.id] : (risks[questionKey] !== undefined ? risks[questionKey] : risks[currentQuestion.code || '']);
+    
     // Validate required question
-    if (currentQuestion.required && !answers[currentQuestion.id]) {
+    if (currentQuestion.required && !answerValue) {
       alert('Please answer this required question before proceeding.');
       return;
     }
 
     // Validate risk score is selected (required for all questions, must be 0-4)
-    if (risks[currentQuestion.id] === undefined || risks[currentQuestion.id] === null) {
+    if (riskValue === undefined || riskValue === null) {
       alert('Please select a risk score (0-4) for this question before proceeding.');
       return;
     }
@@ -257,7 +333,10 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   };
 
   const getCompletionPercentage = () => {
-    const answered = generalQuestions.filter(q => answers[q.id]).length;
+    const answered = generalQuestions.filter(q => {
+      const questionKey = getQuestionKey(q);
+      return answers[q.id] || answers[questionKey] || answers[q.code || ''];
+    }).length;
     return Math.round((answered / generalQuestions.length) * 100);
   };
 
@@ -359,10 +438,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             {currentQuestion.type === 'multiple-choice' && (
               <div className="space-y-3 max-w-2xl">
                 {currentQuestion.options?.map((option, idx) => {
+                  const questionKey = getQuestionKey(currentQuestion);
                   const optionValue = typeof option === 'string' ? option : option;
                   const optionLabel = typeof option === 'string' ? option : option;
-                  const isSelected = answers[currentQuestion.id] === optionValue || 
-                                    answers[currentQuestion.id] === optionLabel;
+                  const answerValue = answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''];
+                  const isSelected = answerValue === optionValue || answerValue === optionLabel;
                   return (
                     <label
                       key={idx}
@@ -383,10 +463,17 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                       </div>
                       <input
                         type="radio"
-                        name={currentQuestion.id}
+                        name={getQuestionKey(currentQuestion)}
                         value={optionValue}
                         checked={isSelected}
-                        onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                        onChange={(e) => {
+                          const questionKey = getQuestionKey(currentQuestion);
+                          handleAnswerChange(questionKey, e.target.value);
+                          // Also update by id for backward compatibility
+                          if (currentQuestion.id !== questionKey) {
+                            handleAnswerChange(currentQuestion.id, e.target.value);
+                          }
+                        }}
                         className="hidden"
                       />
                       <span
@@ -405,8 +492,18 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             {currentQuestion.type === 'text' && (
               <div className="relative max-w-3xl">
                 <textarea
-                  value={answers[currentQuestion.id] || ''}
-                  onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                  value={(() => {
+                    const questionKey = getQuestionKey(currentQuestion);
+                    return answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''] || '';
+                  })()}
+                  onChange={(e) => {
+                    const questionKey = getQuestionKey(currentQuestion);
+                    handleAnswerChange(questionKey, e.target.value);
+                    // Also update by id for backward compatibility
+                    if (currentQuestion.id !== questionKey) {
+                      handleAnswerChange(currentQuestion.id, e.target.value);
+                    }
+                  }}
                   rows={8}
                   className="w-full px-5 py-4 text-lg text-gray-800 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none placeholder-gray-400 bg-white"
                   placeholder="Type your answer here..."
@@ -430,7 +527,9 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                   { value: 1, label: 'Poor', labelTr: 'Zayıf', desc: 'Significant misunderstanding, low confidence', color: 'orange' },
                   { value: 0, label: 'Unacceptable', labelTr: 'Kabul Edilemez', desc: 'No awareness, serious risk', color: 'red' }
                 ] as const).map(({ value, label, labelTr, desc, color }) => {
-                  const isSelected = risks[currentQuestion.id] === value;
+                  const questionKey = getQuestionKey(currentQuestion);
+                  const riskValue = risks[currentQuestion.id] !== undefined ? risks[currentQuestion.id] : (risks[questionKey] !== undefined ? risks[questionKey] : risks[currentQuestion.code || '']);
+                  const isSelected = riskValue === value;
                   const colorClasses = {
                     green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300',
                     blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300',
@@ -452,10 +551,17 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                     >
                       <input
                         type="radio"
-                        name={`risk-${currentQuestion.id}`}
+                        name={`risk-${getQuestionKey(currentQuestion)}`}
                         value={value}
                         checked={isSelected}
-                        onChange={() => handleRiskChange(currentQuestion.id, value as 0 | 1 | 2 | 3 | 4)}
+                        onChange={() => {
+                          const questionKey = getQuestionKey(currentQuestion);
+                          handleRiskChange(questionKey, value as 0 | 1 | 2 | 3 | 4);
+                          // Also update by id for backward compatibility
+                          if (currentQuestion.id !== questionKey) {
+                            handleRiskChange(currentQuestion.id, value as 0 | 1 | 2 | 3 | 4);
+                          }
+                        }}
                         className="hidden"
                       />
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>

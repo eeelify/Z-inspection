@@ -18,6 +18,10 @@ const ProjectAssignment = require('../models/projectAssignment');
 const Question = require('../models/question');
 const Questionnaire = require('../models/questionnaire');
 
+// Cache for questions (similar to use-case-questions)
+const questionsCache = new Map(); // Map<questionnaireKey-role, {data, time}>
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Create or update assignment
  * POST /api/evaluations/assignments
@@ -82,19 +86,86 @@ router.get('/responses', async (req, res) => {
 router.get('/questions', async (req, res) => {
   try {
     const { questionnaireKey, role } = req.query;
+    const cacheKey = `${questionnaireKey}-${role || 'any'}`;
+    
+    // Check cache first
+    const now = Date.now();
+    const cached = questionsCache.get(cacheKey);
+    if (cached && (now - cached.time) < CACHE_DURATION) {
+      return res.json(cached.data);
+    }
+    
     const query = { questionnaireKey };
     
     // Filter by role if specified
     // appliesToRoles is an array, so we need to check if it contains 'any' or the specific role
     if (role && role !== 'any') {
-      query.$or = [
-        { appliesToRoles: 'any' },
-        { appliesToRoles: role }  // MongoDB will match if role is in the array
-      ];
+      // For role-specific questionnaires, only get questions for that role
+      // For general-v1, only get questions that apply to 'any' role
+      if (questionnaireKey === 'general-v1') {
+        // General questions should only have 'any' in appliesToRoles
+        query.appliesToRoles = 'any';
+      } else {
+        // Role-specific questionnaires: get questions for that specific role
+        query.appliesToRoles = role;
+      }
+    } else {
+      // If role is 'any', only get questions that apply to 'any' role
+      query.appliesToRoles = 'any';
     }
     
-    const questions = await Question.find(query).sort({ order: 1 });
+    // Use lean() for better performance (returns plain objects, not Mongoose documents)
+    // Select only needed fields to reduce data transfer
+    const questions = await Question.find(query)
+      .select('code principle text answerType options scoring required order')
+      .sort({ order: 1 })
+      .lean()
+      .maxTimeMS(5000); // 5 second timeout for query
+    
+    // Cache the result
+    questionsCache.set(cacheKey, { data: questions, time: now });
+    
+    // Clean old cache entries (keep cache size manageable)
+    if (questionsCache.size > 50) {
+      const entriesToDelete = [];
+      for (const [key, value] of questionsCache.entries()) {
+        if ((now - value.time) > CACHE_DURATION) {
+          entriesToDelete.push(key);
+        }
+      }
+      entriesToDelete.forEach(key => questionsCache.delete(key));
+    }
+    
     res.json(questions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Clear questions cache (for admin use when questions are updated)
+ * POST /api/evaluations/questions/clear-cache
+ */
+router.post('/questions/clear-cache', (req, res) => {
+  try {
+    const { questionnaireKey } = req.body;
+    
+    if (questionnaireKey) {
+      // Clear specific questionnaire cache
+      const keysToDelete = [];
+      for (const key of questionsCache.keys()) {
+        if (key.startsWith(`${questionnaireKey}-`)) {
+          keysToDelete.push(key);
+        }
+      }
+      keysToDelete.forEach(key => questionsCache.delete(key));
+      res.json({ message: `Cleared cache for ${questionnaireKey}`, cleared: keysToDelete.length });
+    } else {
+      // Clear all cache
+      const size = questionsCache.size;
+      questionsCache.clear();
+      res.json({ message: 'Cleared all questions cache', cleared: size });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

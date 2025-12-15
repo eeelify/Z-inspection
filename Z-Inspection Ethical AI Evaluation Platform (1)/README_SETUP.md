@@ -23,7 +23,10 @@ node backend/scripts/seedGeneralQuestions.js
 # 2. Etik expert sorularını ekle
 node backend/scripts/seedEthicalExpertQuestions.js
 
-# 3. (Opsiyonel) Role-specific soruları ekle
+# 3. Medical expert sorularını ekle
+node backend/scripts/seedMedicalExpertQuestions.js
+
+# 4. (Opsiyonel) Role-specific soruları ekle
 node backend/scripts/seedRoleQuestions.js
 ```
 

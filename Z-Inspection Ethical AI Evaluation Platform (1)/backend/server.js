@@ -684,16 +684,20 @@ app.post('/api/evaluations', async (req, res) => {
         
         // Determine questionnaire key based on role
         let questionnaireKey = 'general-v1'; // Default
-        if (role === 'technical-expert') questionnaireKey = 'technical-v1';
-        else if (role === 'ethical-expert') questionnaireKey = 'ethical-v1';
-        else if (role === 'medical-expert') questionnaireKey = 'medical-v1';
-        else if (role === 'legal-expert') questionnaireKey = 'legal-v1';
+        if (role === 'technical-expert') questionnaireKey = 'technical-expert-v1';
+        else if (role === 'ethical-expert') questionnaireKey = 'ethical-expert-v1';
+        else if (role === 'medical-expert') questionnaireKey = 'medical-expert-v1';
+        else if (role === 'legal-expert') questionnaireKey = 'legal-expert-v1';
         
         // Create or get assignment
         let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
         if (!assignment) {
           const { createAssignment } = require('./services/evaluationService');
-          assignment = await createAssignment(projectIdObj, userIdObj, role, [questionnaireKey, 'general-v1']);
+          // Assign both general and role-specific questionnaires
+          const questionnaires = role !== 'any' && questionnaireKey !== 'general-v1' 
+            ? ['general-v1', questionnaireKey]
+            : ['general-v1'];
+          assignment = await createAssignment(projectIdObj, userIdObj, role, questionnaires);
         }
         
         // Get questionnaire
@@ -828,19 +832,59 @@ app.post('/api/general-questions', async (req, res) => {
     
     // Organize answers and risks by principle if provided
     let principlesData = {};
+    let flatAnswers = answers || {};
+    let flatRisks = risks || {};
+    
+    // If principles are provided, extract flat answers and risks from principles
     if (principles) {
       principlesData = { principles };
-    } else if (answers && risks) {
+      // Also create flat structure for backward compatibility and response saving
+      Object.keys(principles).forEach(principle => {
+        if (principles[principle].answers) {
+          Object.assign(flatAnswers, principles[principle].answers);
+        }
+        if (principles[principle].risks) {
+          Object.assign(flatRisks, principles[principle].risks);
+        }
+      });
+    }
+    
+    if (!principles && answers && risks) {
       // Legacy: organize flat answers/risks by principle
-      const principleMap = {
-        'T1': 'TRANSPARENCY', 'T2': 'TRANSPARENCY',
-        'H1': 'HUMAN AGENCY & OVERSIGHT', 'H2': 'HUMAN AGENCY & OVERSIGHT',
-        'S1': 'TECHNICAL ROBUSTNESS & SAFETY',
-        'P1': 'PRIVACY & DATA GOVERNANCE', 'P2': 'PRIVACY & DATA GOVERNANCE',
-        'F1': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
+      // Get question codes from MongoDB to map them to principles dynamically
+      const Question = require('./models/question');
+      const allQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code principle').lean();
+      
+      // Build principle map from database
+      const principleMap = {};
+      allQuestions.forEach(q => {
+        principleMap[q.code] = q.principle;
+      });
+      
+      // Also include legacy hardcoded mappings for backward compatibility
+      const legacyMap = {
+        'T1': 'TRANSPARENCY', 'T2': 'TRANSPARENCY', 'T9': 'TRANSPARENCY', 'T10': 'TRANSPARENCY', 'T11': 'TRANSPARENCY',
+        'H1': 'HUMAN AGENCY & OVERSIGHT', 'H2': 'HUMAN AGENCY & OVERSIGHT', 'H6': 'HUMAN AGENCY & OVERSIGHT', 
+        'H10': 'HUMAN AGENCY & OVERSIGHT', 'H11': 'HUMAN AGENCY & OVERSIGHT', 'H12': 'HUMAN AGENCY & OVERSIGHT',
+        'H13': 'HUMAN AGENCY & OVERSIGHT', 'H14': 'HUMAN AGENCY & OVERSIGHT', 'H15': 'HUMAN AGENCY & OVERSIGHT',
+        'H16': 'HUMAN AGENCY & OVERSIGHT', 'H17': 'HUMAN AGENCY & OVERSIGHT',
+        'S1': 'TECHNICAL ROBUSTNESS & SAFETY', 'S2': 'TECHNICAL ROBUSTNESS & SAFETY', 'S3': 'TECHNICAL ROBUSTNESS & SAFETY',
+        'S4': 'TECHNICAL ROBUSTNESS & SAFETY', 'S5': 'TECHNICAL ROBUSTNESS & SAFETY', 'S6': 'TECHNICAL ROBUSTNESS & SAFETY',
+        'S7': 'TECHNICAL ROBUSTNESS & SAFETY', 'S8': 'TECHNICAL ROBUSTNESS & SAFETY', 'S9': 'TECHNICAL ROBUSTNESS & SAFETY',
+        'P1': 'PRIVACY & DATA GOVERNANCE', 'P2': 'PRIVACY & DATA GOVERNANCE', 'P4': 'PRIVACY & DATA GOVERNANCE',
+        'P5': 'PRIVACY & DATA GOVERNANCE', 'P6': 'PRIVACY & DATA GOVERNANCE', 'P7': 'PRIVACY & DATA GOVERNANCE',
+        'F1': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS', 'F2': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
+        'F3': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS', 'F4': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
+        'F5': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
         'W1': 'SOCIETAL & INTERPERSONAL WELL-BEING', 'W2': 'SOCIETAL & INTERPERSONAL WELL-BEING',
-        'A1': 'ACCOUNTABILITY', 'A2': 'ACCOUNTABILITY'
+        'W7': 'SOCIETAL & INTERPERSONAL WELL-BEING', 'W8': 'SOCIETAL & INTERPERSONAL WELL-BEING',
+        'W9': 'SOCIETAL & INTERPERSONAL WELL-BEING',
+        'A1': 'ACCOUNTABILITY', 'A2': 'ACCOUNTABILITY', 'A5': 'ACCOUNTABILITY', 'A11': 'ACCOUNTABILITY',
+        'A12': 'ACCOUNTABILITY', 'A13': 'ACCOUNTABILITY', 'A14': 'ACCOUNTABILITY', 'A15': 'ACCOUNTABILITY'
       };
+      
+      // Merge database map with legacy map (database takes precedence)
+      Object.assign(principleMap, legacyMap);
       
       principlesData = {
         principles: {
@@ -854,16 +898,40 @@ app.post('/api/general-questions', async (req, res) => {
         }
       };
       
-      // Organize by principle
+      // Organize by principle - handle both question codes and question IDs
       Object.keys(answers).forEach(qId => {
-        const principle = principleMap[qId];
+        // Try to find principle by code first, then by looking up the question
+        let principle = principleMap[qId];
+        
+        // If not found in map, try to find question by ID or code
+        if (!principle) {
+          const question = allQuestions.find(q => q.code === qId || q._id.toString() === qId);
+          if (question) {
+            principle = question.principle;
+            principleMap[qId] = principle; // Cache it
+          }
+        }
+        
         if (principle && principlesData.principles[principle]) {
           principlesData.principles[principle].answers[qId] = answers[qId];
+        } else {
+          // If principle not found, log warning but still save to flat structure
+          console.warn(`⚠️ Principle not found for question code: ${qId}, saving to flat structure`);
         }
       });
       
       Object.keys(risks).forEach(qId => {
-        const principle = principleMap[qId];
+        let principle = principleMap[qId];
+        
+        // If not found in map, try to find question by ID or code
+        if (!principle) {
+          const question = allQuestions.find(q => q.code === qId || q._id.toString() === qId);
+          if (question) {
+            principle = question.principle;
+            principleMap[qId] = principle; // Cache it
+          }
+        }
+        
         if (principle && principlesData.principles[principle]) {
           principlesData.principles[principle].risks[qId] = risks[qId];
         }
@@ -883,6 +951,233 @@ app.post('/api/general-questions', async (req, res) => {
       },
       { new: true, upsert: true, runValidators: true }
     );
+    
+    // Also save to responses collection (new system)
+    try {
+      const Response = require('./models/response');
+      const ProjectAssignment = require('./models/projectAssignment');
+      const Question = require('./models/question');
+      const Questionnaire = require('./models/questionnaire');
+      
+      // Get or create assignment
+      let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+      if (!assignment) {
+        const { createAssignment } = require('./services/evaluationService');
+        const role = userRole || 'unknown';
+        let questionnaireKey = 'general-v1';
+        if (role === 'ethical-expert') questionnaireKey = 'ethical-expert-v1';
+        else if (role === 'medical-expert') questionnaireKey = 'medical-expert-v1';
+        else if (role === 'technical-expert') questionnaireKey = 'technical-expert-v1';
+        else if (role === 'legal-expert') questionnaireKey = 'legal-expert-v1';
+        
+        const questionnaires = role !== 'any' && questionnaireKey !== 'general-v1' 
+          ? ['general-v1', questionnaireKey]
+          : ['general-v1'];
+        assignment = await createAssignment(projectIdObj, userIdObj, role, questionnaires);
+      }
+      
+      // Separate answers by questionnaire
+      const generalAnswersMap = {};
+      const roleSpecificAnswersMap = {};
+      const roleSpecificRisksMap = {};
+      const generalRisksMap = {};
+      
+      // Determine role-specific questionnaire key
+      const role = userRole || 'unknown';
+      let roleQuestionnaireKey = 'general-v1';
+      if (role === 'ethical-expert') roleQuestionnaireKey = 'ethical-expert-v1';
+      else if (role === 'medical-expert') roleQuestionnaireKey = 'medical-expert-v1';
+      else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
+      else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
+      
+      // Get all questions to determine which questionnaire they belong to
+      const allGeneralQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code').lean();
+      const generalCodes = new Set(allGeneralQuestions.map(q => q.code));
+      
+      const allRoleQuestions = roleQuestionnaireKey !== 'general-v1' 
+        ? await Question.find({ questionnaireKey: roleQuestionnaireKey }).select('code').lean()
+        : [];
+      const roleCodes = new Set(allRoleQuestions.map(q => q.code));
+      
+      // Separate answers and risks by questionnaire
+      if (flatAnswers) {
+        Object.keys(flatAnswers).forEach(qId => {
+          if (generalCodes.has(qId)) {
+            generalAnswersMap[qId] = flatAnswers[qId];
+          } else if (roleCodes.has(qId)) {
+            roleSpecificAnswersMap[qId] = flatAnswers[qId];
+          }
+        });
+      }
+      
+      if (flatRisks) {
+        Object.keys(flatRisks).forEach(qId => {
+          if (generalCodes.has(qId)) {
+            generalRisksMap[qId] = flatRisks[qId];
+          } else if (roleCodes.has(qId)) {
+            roleSpecificRisksMap[qId] = flatRisks[qId];
+          }
+        });
+      }
+      
+      // Prepare response saving tasks (parallel execution)
+      const saveTasks = [];
+      
+      // Prepare general-v1 response
+      if (Object.keys(generalAnswersMap).length > 0 || Object.keys(generalRisksMap).length > 0) {
+        saveTasks.push(async () => {
+          const generalQuestionnaire = await Questionnaire.findOne({ key: 'general-v1', isActive: true });
+          if (generalQuestionnaire) {
+            // Fetch all general questions at once (performance optimization)
+            const generalQuestions = await Question.find({ questionnaireKey: 'general-v1' })
+              .select('_id code answerType options')
+              .lean();
+            const generalQuestionMap = new Map(generalQuestions.map(q => [q.code, q]));
+            
+            const generalResponseAnswers = [];
+            
+            for (const [qId, answerValue] of Object.entries(generalAnswersMap)) {
+              const question = generalQuestionMap.get(qId);
+              if (question) {
+                let score = 0;
+                let answerFormat = {};
+                
+                if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
+                  const option = question.options?.find(o => o.key === answerValue);
+                  score = option?.score || 0;
+                  answerFormat = { choiceKey: answerValue };
+                } else if (question.answerType === 'open_text') {
+                  score = generalRisksMap[qId] !== undefined ? generalRisksMap[qId] : 0;
+                  answerFormat = { text: answerValue };
+                }
+                
+                generalResponseAnswers.push({
+                  questionId: question._id,
+                  questionCode: question.code,
+                  answer: answerFormat,
+                  score: score,
+                  notes: null,
+                  evidence: []
+                });
+              }
+            }
+            
+            if (generalResponseAnswers.length > 0) {
+              await Response.findOneAndUpdate(
+                { projectId: projectIdObj, userId: userIdObj, questionnaireKey: 'general-v1' },
+                {
+                  projectId: projectIdObj,
+                  assignmentId: assignment._id,
+                  userId: userIdObj,
+                  role: role,
+                  questionnaireKey: 'general-v1',
+                  questionnaireVersion: generalQuestionnaire.version,
+                  answers: generalResponseAnswers,
+                  status: 'submitted',
+                  submittedAt: new Date(),
+                  updatedAt: new Date()
+                },
+                { new: true, upsert: true }
+              );
+              console.log(`✅ Saved ${generalResponseAnswers.length} general answers to responses collection`);
+              
+              // Compute scores async (non-blocking)
+              setImmediate(async () => {
+                try {
+                  const { computeScores } = require('./services/evaluationService');
+                  await computeScores(projectIdObj, userIdObj, 'general-v1');
+                  console.log(`✅ Computed scores for general-v1`);
+                } catch (scoreError) {
+                  console.error(`⚠️ Error computing scores for general-v1:`, scoreError.message);
+                }
+              });
+            }
+          }
+        });
+      }
+      
+      // Prepare role-specific response
+      if (roleQuestionnaireKey !== 'general-v1' && (Object.keys(roleSpecificAnswersMap).length > 0 || Object.keys(roleSpecificRisksMap).length > 0)) {
+        saveTasks.push(async () => {
+          const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
+          if (roleQuestionnaire) {
+            // Fetch all role-specific questions at once (performance optimization)
+            const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
+              .select('_id code answerType options')
+              .lean();
+            const roleQuestionMap = new Map(roleQuestions.map(q => [q.code, q]));
+            
+            const roleResponseAnswers = [];
+            
+            for (const [qId, answerValue] of Object.entries(roleSpecificAnswersMap)) {
+              const question = roleQuestionMap.get(qId);
+              if (question) {
+                let score = 0;
+                let answerFormat = {};
+                
+                if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
+                  const option = question.options?.find(o => o.key === answerValue);
+                  score = option?.score || 0;
+                  answerFormat = { choiceKey: answerValue };
+                } else if (question.answerType === 'open_text') {
+                  score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
+                  answerFormat = { text: answerValue };
+                }
+                
+                roleResponseAnswers.push({
+                  questionId: question._id,
+                  questionCode: question.code,
+                  answer: answerFormat,
+                  score: score,
+                  notes: null,
+                  evidence: []
+                });
+              }
+            }
+            
+            if (roleResponseAnswers.length > 0) {
+              await Response.findOneAndUpdate(
+                { projectId: projectIdObj, userId: userIdObj, questionnaireKey: roleQuestionnaireKey },
+                {
+                  projectId: projectIdObj,
+                  assignmentId: assignment._id,
+                  userId: userIdObj,
+                  role: role,
+                  questionnaireKey: roleQuestionnaireKey,
+                  questionnaireVersion: roleQuestionnaire.version,
+                  answers: roleResponseAnswers,
+                  status: 'submitted',
+                  submittedAt: new Date(),
+                  updatedAt: new Date()
+                },
+                { new: true, upsert: true }
+              );
+              console.log(`✅ Saved ${roleResponseAnswers.length} ${roleQuestionnaireKey} answers to responses collection`);
+              
+              // Compute scores async (non-blocking)
+              setImmediate(async () => {
+                try {
+                  const { computeScores } = require('./services/evaluationService');
+                  await computeScores(projectIdObj, userIdObj, roleQuestionnaireKey);
+                  console.log(`✅ Computed scores for ${roleQuestionnaireKey}`);
+                } catch (scoreError) {
+                  console.error(`⚠️ Error computing scores for ${roleQuestionnaireKey}:`, scoreError.message);
+                }
+              });
+            }
+          }
+        });
+      }
+      
+      // Execute all save tasks in parallel
+      if (saveTasks.length > 0) {
+        await Promise.all(saveTasks.map(task => task()));
+      }
+    } catch (responseError) {
+      // Log error but don't fail the request - old system still works
+      console.error('⚠️ Error saving to responses collection (non-critical):', responseError.message);
+    }
+    
     res.json(generalAnswers);
   } catch (err) {
     console.error('Error saving general questions:', err);

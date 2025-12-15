@@ -193,19 +193,19 @@ async function seedEthicalExpertQuestions() {
   try {
     console.log('Starting ethical expert questions seeding...');
 
-    // Use general-v1 questionnaire (same as general questions)
-    let questionnaire = await Questionnaire.findOne({ key: 'general-v1' });
+    // Use ethical-v1 questionnaire
+    let questionnaire = await Questionnaire.findOne({ key: 'ethical-v1' });
     if (!questionnaire) {
       questionnaire = await Questionnaire.create({
-        key: 'general-v1',
-        title: 'General Questions v1',
+        key: 'ethical-v1',
+        title: 'Ethical Expert Questions v1',
         language: 'en-tr',
         version: 1,
         isActive: true
       });
-      console.log('✅ Created questionnaire: general-v1');
+      console.log('✅ Created questionnaire: ethical-v1');
     } else {
-      console.log('ℹ️ Questionnaire general-v1 already exists');
+      console.log('ℹ️ Questionnaire ethical-v1 already exists');
     }
 
     // Create questions
@@ -215,13 +215,13 @@ async function seedEthicalExpertQuestions() {
     
     for (const qData of ethicalExpertQuestions) {
       const existing = await Question.findOne({ 
-        questionnaireKey: 'general-v1', 
+        questionnaireKey: 'ethical-v1', 
         code: qData.code 
       });
       
       if (!existing) {
         await Question.create({
-          questionnaireKey: 'general-v1',
+          questionnaireKey: 'ethical-v1',
           ...qData,
           scoring: {
             scale: '0-4',
@@ -233,7 +233,7 @@ async function seedEthicalExpertQuestions() {
       } else {
         // Update existing question if it exists
         await Question.findOneAndUpdate(
-          { questionnaireKey: 'general-v1', code: qData.code },
+          { questionnaireKey: 'ethical-v1', code: qData.code },
           {
             ...qData,
             scoring: {
@@ -250,6 +250,34 @@ async function seedEthicalExpertQuestions() {
 
     console.log('\n✅ Ethical expert questions seeding complete!');
     console.log(`Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`);
+    
+    // Clear cache for ethical-v1 questions
+    console.log('\n🔄 Clearing questions cache...');
+    try {
+      const http = require('http');
+      const options = {
+        hostname: '127.0.0.1',
+        port: 5000,
+        path: '/api/evaluations/questions/clear-cache',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      };
+      
+      const req = http.request(options, (res) => {
+        if (res.statusCode === 200) {
+          console.log('✅ Cache cleared successfully');
+        }
+      });
+      req.on('error', () => {
+        // Server might not be running, that's okay
+        console.log('ℹ️ Could not clear cache (server might not be running)');
+      });
+      req.write(JSON.stringify({ questionnaireKey: 'ethical-v1' }));
+      req.end();
+    } catch (err) {
+      // Ignore cache clearing errors
+    }
+    
     process.exit(0);
   } catch (error) {
     console.error('❌ Seeding failed:', error);
@@ -258,4 +286,5 @@ async function seedEthicalExpertQuestions() {
 }
 
 seedEthicalExpertQuestions();
+
 
