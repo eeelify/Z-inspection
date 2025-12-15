@@ -12,6 +12,8 @@ interface GeneralQuestionsProps {
 
 interface GeneralQuestion {
   id: string;
+  _id?: string;
+  code: string;
   principle: string; // Ethical principle name
   principleTr: string; // Turkish translation
   questionEn: string;
@@ -21,134 +23,16 @@ interface GeneralQuestion {
   required?: boolean;
 }
 
-const generalQuestions: GeneralQuestion[] = [
-  // TRANSPARENCY (Şeffaflık)
-  {
-    id: 'T1',
-    principle: 'TRANSPARENCY',
-    principleTr: 'Şeffaflık',
-    questionEn: 'Is it clear to you what the AI system can and cannot do?',
-    questionTr: 'AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?',
-    type: 'multiple-choice',
-    options: ['Very clear', 'Mostly clear', 'Somewhat unclear', 'Completely unclear'],
-    required: true
-  },
-  {
-    id: 'T2',
-    principle: 'TRANSPARENCY',
-    principleTr: 'Şeffaflık',
-    questionEn: 'Do you understand that the system may sometimes be wrong or uncertain?',
-    questionTr: 'Sistemin bazen hatalı veya belirsiz olabileceğini anlıyor musunuz?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Partially', 'No'],
-    required: true
-  },
-  // HUMAN AGENCY & OVERSIGHT (İnsan Kontrolü)
-  {
-    id: 'H1',
-    principle: 'HUMAN AGENCY & OVERSIGHT',
-    principleTr: 'İnsan Kontrolü',
-    questionEn: 'Do you feel that you remain in control when using the AI system?',
-    questionTr: 'AI sistemini kullanırken kontrolün sizde olduğunu hissediyor musunuz?',
-    type: 'multiple-choice',
-    options: ['Fully', 'Mostly', 'Slightly', 'Not at all'],
-    required: true
-  },
-  {
-    id: 'H2',
-    principle: 'HUMAN AGENCY & OVERSIGHT',
-    principleTr: 'İnsan Kontrolü',
-    questionEn: 'Would you feel comfortable disagreeing with the system\'s output?',
-    questionTr: 'Sistemin çıktısına katılmamayı rahatça hisseder misiniz?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Sometimes', 'Rarely', 'No'],
-    required: true
-  },
-  // TECHNICAL ROBUSTNESS & SAFETY (Algılanan Güvenlik)
-  {
-    id: 'S1',
-    principle: 'TECHNICAL ROBUSTNESS & SAFETY',
-    principleTr: 'Algılanan Güvenlik',
-    questionEn: 'Do you think incorrect outputs from this system could cause real harm if not noticed?',
-    questionTr: 'Fark edilmezse bu sistemin hatalı çıktıları gerçek zarara yol açabilir mi?',
-    type: 'multiple-choice',
-    options: ['Very likely', 'Possible', 'Unlikely', 'Not at all'],
-    required: true
-  },
-  // PRIVACY & DATA GOVERNANCE (Gizlilik ve Veri Koruma)
-  {
-    id: 'P1',
-    principle: 'PRIVACY & DATA GOVERNANCE',
-    principleTr: 'Gizlilik ve Veri Koruma',
-    questionEn: 'Do you feel confident that your personal or sensitive data is handled responsibly?',
-    questionTr: 'Kişisel veya hassas verilerinizin sorumlu şekilde işlendiğine güveniyor musunuz?',
-    type: 'multiple-choice',
-    options: ['Very confident', 'Somewhat confident', 'Not very confident', 'Not at all'],
-    required: true
-  },
-  {
-    id: 'P2',
-    principle: 'PRIVACY & DATA GOVERNANCE',
-    principleTr: 'Gizlilik ve Veri Koruma',
-    questionEn: 'Is it clear to you what data about you is used by the system?',
-    questionTr: 'Sistem tarafından sizinle ilgili hangi verilerin kullanıldığı açık mı?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Partially', 'No'],
-    required: true
-  },
-  // DIVERSITY, NON-DISCRIMINATION & FAIRNESS (Eşitlik ve Adalet)
-  {
-    id: 'F1',
-    principle: 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
-    principleTr: 'Eşitlik ve Adalet',
-    questionEn: 'Do you believe the system would treat different people fairly?',
-    questionTr: 'Sistemin farklı kişilere adil davranacağını düşünüyor musunuz?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Not sure', 'Probably not', 'Definitely not'],
-    required: true
-  },
-  // SOCIETAL & INTERPERSONAL WELL-BEING (Toplumsal Etki)
-  {
-    id: 'W1',
-    principle: 'SOCIETAL & INTERPERSONAL WELL-BEING',
-    principleTr: 'Toplumsal Etki',
-    questionEn: 'Do you think the use of this AI system could affect trust between people (e.g. patient–doctor, employee–employer)?',
-    questionTr: 'Bu AI sisteminin insanlar arasındaki güveni etkileyebileceğini düşünüyor musunuz?',
-    type: 'text',
-    required: true
-  },
-  {
-    id: 'W2',
-    principle: 'SOCIETAL & INTERPERSONAL WELL-BEING',
-    principleTr: 'Toplumsal Etki',
-    questionEn: 'Should users or affected individuals be informed when this AI system is used?',
-    questionTr: 'Bu AI sistemi kullanıldığında kullanıcıların veya etkilenen kişilerin bilgilendirilmesi gerekir mi?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Depends', 'No'],
-    required: true
-  },
-  // ACCOUNTABILITY (Sorumluluk)
-  {
-    id: 'A1',
-    principle: 'ACCOUNTABILITY',
-    principleTr: 'Sorumluluk',
-    questionEn: 'Do you know who to contact or what to do if the system causes a problem or harm?',
-    questionTr: 'Sistem bir sorun veya zarar oluşturursa kime başvuracağınızı veya ne yapacağınızı biliyor musunuz?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Somewhat', 'No'],
-    required: true
-  },
-  {
-    id: 'A2',
-    principle: 'ACCOUNTABILITY',
-    principleTr: 'Sorumluluk',
-    questionEn: 'Do you think there are sufficient safeguards to prevent misuse of the system?',
-    questionTr: 'Sistemin yanlış veya amaç dışı kullanımını önlemek için yeterli önlemler olduğunu düşünüyor musunuz?',
-    type: 'multiple-choice',
-    options: ['Yes', 'Partially', 'No', 'Not sure'],
-    required: true
-  }
-];
+// Principle Turkish translations
+const principleTranslations: Record<string, string> = {
+  'TRANSPARENCY': 'Şeffaflık',
+  'HUMAN AGENCY & OVERSIGHT': 'İnsan Özerkliği ve Gözetimi',
+  'TECHNICAL ROBUSTNESS & SAFETY': 'Teknik Sağlamlık ve Güvenlik',
+  'PRIVACY & DATA GOVERNANCE': 'Gizlilik ve Veri Yönetişimi',
+  'DIVERSITY, NON-DISCRIMINATION & FAIRNESS': 'Çeşitlilik, Ayrımcılık Yapmama ve Adalet',
+  'SOCIETAL & INTERPERSONAL WELL-BEING': 'Toplumsal ve Çevresel İyi Oluş',
+  'ACCOUNTABILITY': 'Hesap Verebilirlik'
+};
 
 export function GeneralQuestions({ project, currentUser, onBack, onComplete }: GeneralQuestionsProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -156,13 +40,72 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   const [risks, setRisks] = useState<Record<string, 0 | 1 | 2 | 3 | 4>>({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [generalQuestions, setGeneralQuestions] = useState<GeneralQuestion[]>([]);
 
-  const currentQuestion = generalQuestions[currentQuestionIndex];
-  const isLastQuestion = currentQuestionIndex === generalQuestions.length - 1;
-  const isFirstQuestion = currentQuestionIndex === 0;
+  // Convert backend question format to frontend format
+  const convertQuestion = (q: any): GeneralQuestion => {
+    const questionId = q._id?.toString() || q.code;
+    let options: string[] | undefined = undefined;
+    
+    if (q.answerType === 'single_choice' && q.options && Array.isArray(q.options)) {
+      options = q.options.map((opt: any) => {
+        // Backend format: { key, label: { en, tr }, score }
+        if (typeof opt === 'string') {
+          return opt;
+        }
+        // Prefer English label, fallback to Turkish, then key
+        return opt.label?.en || opt.label?.tr || opt.label || opt.key || String(opt);
+      });
+    }
+
+    return {
+      id: questionId,
+      _id: q._id?.toString(),
+      code: q.code,
+      principle: q.principle,
+      principleTr: principleTranslations[q.principle] || q.principle,
+      questionEn: q.text?.en || q.text,
+      questionTr: q.text?.tr || q.text,
+      type: q.answerType === 'open_text' ? 'text' : 'multiple-choice',
+      options: options,
+      required: q.required !== false
+    };
+  };
+
+  // Load questions from MongoDB
+  useEffect(() => {
+    const loadQuestions = async () => {
+      try {
+        // Get questions from backend based on role
+        const role = currentUser.role || 'any';
+        const response = await fetch(
+          api(`/api/evaluations/questions?questionnaireKey=general-v1&role=${role}`)
+        );
+        
+        if (response.ok) {
+          const questions = await response.json();
+          const convertedQuestions = questions.map(convertQuestion).sort((a: GeneralQuestion, b: GeneralQuestion) => {
+            // Sort by order if available, otherwise by code
+            const aOrder = questions.find((q: any) => (q._id?.toString() || q.code) === a.id)?.order || 0;
+            const bOrder = questions.find((q: any) => (q._id?.toString() || q.code) === b.id)?.order || 0;
+            return aOrder - bOrder;
+          });
+          setGeneralQuestions(convertedQuestions);
+        } else {
+          console.error('Failed to load questions');
+        }
+      } catch (error) {
+        console.error('Error loading questions:', error);
+      }
+    };
+
+    loadQuestions();
+  }, [currentUser.role]);
 
   // Load existing answers
   useEffect(() => {
+    if (generalQuestions.length === 0) return;
+
     const loadAnswers = async () => {
       try {
         const response = await fetch(
@@ -173,13 +116,18 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           // Load from principles structure if available, otherwise from flat structure
           if (data.principles) {
             const loadedAnswers: Record<string, string> = {};
-            const loadedRisks: Record<string, number> = {};
+            const loadedRisks: Record<string, 0 | 1 | 2 | 3 | 4> = {};
             Object.keys(data.principles).forEach(principle => {
               if (data.principles[principle].answers) {
                 Object.assign(loadedAnswers, data.principles[principle].answers);
               }
               if (data.principles[principle].risks) {
-                Object.assign(loadedRisks, data.principles[principle].risks);
+                Object.keys(data.principles[principle].risks).forEach(key => {
+                  const riskValue = data.principles[principle].risks[key];
+                  if (riskValue >= 0 && riskValue <= 4) {
+                    loadedRisks[key] = riskValue as 0 | 1 | 2 | 3 | 4;
+                  }
+                });
               }
             });
             setAnswers(loadedAnswers);
@@ -202,7 +150,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
     };
 
     loadAnswers();
-  }, [project.id, currentUser.id]);
+  }, [project.id, currentUser.id, generalQuestions.length]);
+
+  const currentQuestion = generalQuestions[currentQuestionIndex];
+  const isLastQuestion = currentQuestionIndex === generalQuestions.length - 1;
+  const isFirstQuestion = currentQuestionIndex === 0;
 
   const handleAnswerChange = (questionId: string, answer: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }));
@@ -229,11 +181,13 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         if (!principles[q.principle]) {
           principles[q.principle] = { answers: {}, risks: {} };
         }
-        if (answers[q.id]) {
-          principles[q.principle].answers[q.id] = answers[q.id];
+        // Use code as key for consistency with backend
+        const questionKey = q.code || q.id;
+        if (answers[q.id] || answers[questionKey]) {
+          principles[q.principle].answers[questionKey] = answers[q.id] || answers[questionKey];
         }
-        if (risks[q.id] !== undefined) {
-          principles[q.principle].risks[q.id] = risks[q.id];
+        if (risks[q.id] !== undefined || risks[questionKey] !== undefined) {
+          principles[q.principle].risks[questionKey] = risks[q.id] !== undefined ? risks[q.id] : risks[questionKey];
         }
       });
 
@@ -307,12 +261,29 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
     return Math.round((answered / generalQuestions.length) * 100);
   };
 
-  if (loading) {
+  if (loading || generalQuestions.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center">
           <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
           <p className="text-gray-500">Loading general questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (generalQuestions.length === 0 && !loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center">
+          <AlertTriangle className="w-10 h-10 text-yellow-600 mb-4" />
+          <p className="text-gray-600">No questions found for your role.</p>
+          <button
+            onClick={onBack}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Go Back
+          </button>
         </div>
       </div>
     );
@@ -387,11 +358,14 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           <div className="p-8 flex-1 bg-gray-50/30">
             {currentQuestion.type === 'multiple-choice' && (
               <div className="space-y-3 max-w-2xl">
-                {currentQuestion.options?.map((option) => {
-                  const isSelected = answers[currentQuestion.id] === option;
+                {currentQuestion.options?.map((option, idx) => {
+                  const optionValue = typeof option === 'string' ? option : option;
+                  const optionLabel = typeof option === 'string' ? option : option;
+                  const isSelected = answers[currentQuestion.id] === optionValue || 
+                                    answers[currentQuestion.id] === optionLabel;
                   return (
                     <label
-                      key={option}
+                      key={idx}
                       className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50/50 shadow-sm'
@@ -410,7 +384,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                       <input
                         type="radio"
                         name={currentQuestion.id}
-                        value={option}
+                        value={optionValue}
                         checked={isSelected}
                         onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
                         className="hidden"
@@ -420,7 +394,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                           isSelected ? 'text-blue-900' : 'text-gray-700'
                         }`}
                       >
-                        {option}
+                        {optionLabel}
                       </span>
                     </label>
                   );

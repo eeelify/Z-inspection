@@ -85,10 +85,11 @@ router.get('/questions', async (req, res) => {
     const query = { questionnaireKey };
     
     // Filter by role if specified
+    // appliesToRoles is an array, so we need to check if it contains 'any' or the specific role
     if (role && role !== 'any') {
       query.$or = [
         { appliesToRoles: 'any' },
-        { appliesToRoles: role }
+        { appliesToRoles: role }  // MongoDB will match if role is in the array
       ];
     }
     

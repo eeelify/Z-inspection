@@ -20,7 +20,10 @@ Yeni collection'ları oluşturmak ve soruları eklemek için:
 # 1. Genel soruları ekle (7 etik ilke)
 node backend/scripts/seedGeneralQuestions.js
 
-# 2. (Opsiyonel) Role-specific soruları ekle
+# 2. Etik expert sorularını ekle
+node backend/scripts/seedEthicalExpertQuestions.js
+
+# 3. (Opsiyonel) Role-specific soruları ekle
 node backend/scripts/seedRoleQuestions.js
 ```
 
