@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Search, Users, Globe, Mail, MessageSquare, Clock } from 'lucide-react';
+import { ArrowLeft, Users, Mail, MessageSquare, Clock } from 'lucide-react';
 import { User, Project, Message } from '../types';
 import { ChatPanel } from './ChatPanel';
 import { roleColors } from '../utils/constants';
-import { getUserProjects, formatRoleName, formatLastSeen } from '../utils/helpers';
+import { getUserProjects, formatRoleName } from '../utils/helpers';
 import { api } from '../api';
 
 interface OtherMembersProps {
@@ -276,6 +276,7 @@ const fetchConversations = async () => {
     const otherUser = users.find(u => u.id === conversation.otherUserId);
     const project = projects.find(p => p.id === conversation.projectId);
     if (otherUser && project) {
+      // Always set project/user (keeps ChatPanel mounted)
       setChatOtherUser(otherUser);
       setChatProject(project);
       setSelectedConversation(conversation);
@@ -296,9 +297,9 @@ const fetchConversations = async () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50">
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
         <div className="bg-white shadow-sm border-b flex-shrink-0">
           <div className="px-6 py-4">
@@ -361,51 +362,10 @@ const fetchConversations = async () => {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white border-b px-6 py-4 flex-shrink-0">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="ethical-expert">Ethical Expert</option>
-            <option value="medical-expert">Medical Expert</option>
-            <option value="use-case-owner">Use Case Owner</option>
-            <option value="education-expert">Education Expert</option>
-            <option value="technical-expert">Technical Expert</option>
-            <option value="legal-expert">Legal Expert</option>
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Status</option>
-            <option value="online">Online</option>
-            <option value="offline">Offline</option>
-          </select>
-        </div>
-      </div>
-
         {/* Content */}
-        <div className={`flex-1 ${activeTab === 'chats' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <div className="flex-1 min-h-0 flex flex-col">
           {activeTab === 'members' ? (
-            <div className="px-6 py-6">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredUsers.map((user) => {
             const userColor =
@@ -413,9 +373,6 @@ const fetchConversations = async () => {
 
             // Backend tarafında projeler id üzerinden atanıyorsa helper'ı kullan
             const userProjects = getUserProjects(user.id, projects);
-
-            const isOnline = (user as any).isOnline as boolean | undefined;
-            const lastSeen = (user as any).lastSeen;
 
             return (
               <div
@@ -430,12 +387,6 @@ const fetchConversations = async () => {
                     >
                       {user.name.charAt(0).toUpperCase()}
                     </div>
-                    <div
-                      className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
-                        isOnline ? 'bg-green-500' : 'bg-gray-400'
-                      }`}
-                      title={isOnline ? 'Online' : 'Offline'}
-                    />
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -457,18 +408,6 @@ const fetchConversations = async () => {
                       >
                         {formatRoleName(user.role)}
                       </span>
-                      <div className="flex items-center text-xs text-gray-500">
-                        <Globe className="h-3 w-3 mr-1" />
-                        {isOnline ? (
-                          <span className="text-green-600">Online</span>
-                        ) : lastSeen ? (
-                          <span>
-                            Last seen {formatLastSeen(lastSeen)}
-                          </span>
-                        ) : (
-                          <span>Last seen unknown</span>
-                        )}
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -531,10 +470,11 @@ const fetchConversations = async () => {
         </div>
       ) : (
         /* Chats - WhatsApp style layout */
-        <div className="flex flex-col h-full">
-          <div className="flex flex-1 min-h-0 h-full border-t border-gray-200">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex flex-1 min-h-0 border-t border-gray-200">
             {/* Conversation list */}
-            <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto h-full">
+            <div className="w-80 border-r border-gray-200 bg-white flex flex-col min-h-0">
+              <div className="flex-1 min-h-0 overflow-y-auto">
               {conversationList.length === 0 ? (
                 <div className="text-center py-12">
                   <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />
@@ -594,12 +534,21 @@ const fetchConversations = async () => {
                   })}
                 </div>
               )}
+              </div>
             </div>
 
             {/* Chat area */}
             <div className="flex-1 bg-white flex flex-col min-h-0">
-              {chatPanelOpen && chatOtherUser && chatProject ? (
-                <div className="flex-1 min-h-0">
+              {/* Empty state - shown when no chat selected */}
+              {!chatPanelOpen || !chatOtherUser || !chatProject ? (
+                <div className="flex-1 flex items-center justify-center text-gray-500">
+                  Select a conversation to start chatting.
+                </div>
+              ) : null}
+              
+              {/* ChatPanel - Always mounted when project/user exist, shown inline when activeTab === 'chats' */}
+              {chatProject && chatOtherUser ? (
+                <div className={`flex-1 min-h-0 ${chatPanelOpen && activeTab === 'chats' ? '' : 'hidden'}`}>
                   <ChatPanel
                     project={chatProject}
                     currentUser={currentUser}
@@ -608,6 +557,7 @@ const fetchConversations = async () => {
                     defaultFullscreen={false}
                     onClose={() => {
                       setChatPanelOpen(false);
+                      // Keep project/user so ChatPanel stays mounted
                       fetchConversations();
                     }}
                     onMessageSent={() => {
@@ -616,15 +566,12 @@ const fetchConversations = async () => {
                     }}
                     onDeleteConversation={() => {
                       setChatPanelOpen(false);
+                      // Keep project/user so ChatPanel stays mounted
                       fetchConversations();
                     }}
                   />
                 </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-gray-500">
-                  Select a conversation to start chatting.
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -632,13 +579,14 @@ const fetchConversations = async () => {
         </div>
       </div>
 
-      {/* Chat Panel - Fullscreen overlay */}
-      {activeTab !== 'chats' && chatPanelOpen && chatOtherUser && chatProject && (
-        <div className="fixed inset-0 z-50 bg-white flex flex-col">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
+      {/* Chat Panel - Fullscreen overlay - Same instance, shown when activeTab !== 'chats' */}
+      {chatProject && chatOtherUser ? (
+        <div className={`fixed inset-0 z-50 bg-white flex flex-col ${chatPanelOpen && activeTab !== 'chats' ? '' : 'hidden'}`}>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white shrink-0">
             <button
               onClick={() => {
                 setChatPanelOpen(false);
+                // Keep project/user so ChatPanel stays mounted
                 fetchConversations();
               }}
               className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
@@ -657,6 +605,7 @@ const fetchConversations = async () => {
               defaultFullscreen={true}
               onClose={() => {
                 setChatPanelOpen(false);
+                // Keep project/user so ChatPanel stays mounted
                 fetchConversations();
               }}
               onMessageSent={() => {
@@ -665,12 +614,13 @@ const fetchConversations = async () => {
               }}
               onDeleteConversation={() => {
                 setChatPanelOpen(false);
+                // Keep project/user so ChatPanel stays mounted
                 fetchConversations();
               }}
             />
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

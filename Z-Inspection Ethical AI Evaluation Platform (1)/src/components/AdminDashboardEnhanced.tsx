@@ -130,7 +130,7 @@ export function AdminDashboardEnhanced({
   onLogout,
   onUpdateUser
 }: AdminDashboardEnhancedProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAssignExpertsModal, setShowAssignExpertsModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -258,8 +258,7 @@ export function AdminDashboardEnhanced({
         // Close chat panel if this conversation is open
         if (chatProject?.id === projectId && chatOtherUser?.id === otherUserId) {
           setChatPanelOpen(false);
-          setChatOtherUser(null);
-          setChatProject(null);
+          // Keep project/user so ChatPanel stays mounted
         }
         // Refresh conversations list
         fetchConversations();
@@ -492,9 +491,9 @@ export function AdminDashboardEnhanced({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50">
+      <div className="flex-1 min-h-0 flex flex-col bg-gray-50">
         {/* Top Bar with Notifications */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-4">
             <h2 className="text-xl font-semibold text-gray-900">
               {activeTab === 'dashboard' && 'Dashboard'}
@@ -585,7 +584,129 @@ export function AdminDashboardEnhanced({
           </div>
         </div>
         
-        {activeTab === 'dashboard' && (
+        {/* Chats Tab - Always mounted for stable height */}
+        <div className={`flex-1 min-h-0 flex flex-col ${activeTab === 'chats' ? '' : 'hidden'}`}>
+          <div className="flex-1 min-h-0 flex">
+            {/* Conversations List */}
+            <div className={`${chatPanelOpen ? 'w-1/3' : 'w-full'} border-r border-gray-200 bg-white flex flex-col min-h-0`}>
+              <div className="p-6 flex-1 overflow-y-auto min-h-0">
+                {allConversations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg text-gray-900 mb-2">No conversations yet</h3>
+                    <p className="text-gray-600">
+                      Start a conversation with a team member to see it here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {allConversations.map((conv) => {
+                      const otherUser = users.find(u => u.id === conv.otherUserId);
+                      const project = projects.find(p => p.id === conv.projectId);
+                      if (!otherUser || !project) return null;
+
+                      const hasUnread = conv.unreadCount > 0;
+                      const isSelected = chatOtherUser?.id === otherUser.id && chatProject?.id === project.id;
+
+                      return (
+                        <div
+                          key={`${conv.projectId}-${conv.otherUserId}`}
+                          className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-all relative group ${
+                            hasUnread ? 'border-blue-500 border-l-4' : 'border-gray-200'
+                          } ${isSelected ? 'bg-blue-50 border-blue-300' : ''}`}
+                        >
+                          <div onClick={() => handleOpenChat(conv)}>
+                            <div className="flex items-start space-x-4">
+                              <div className="relative flex-shrink-0">
+                                <div
+                                  className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-medium"
+                                  style={{ backgroundColor: '#1F2937' }}
+                                >
+                                  {otherUser.name.charAt(0).toUpperCase()}
+                                </div>
+                                {hasUnread && (
+                                  <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                                    {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center space-x-2">
+                                    <h3 className={`text-base font-medium ${hasUnread ? 'text-gray-900' : 'text-gray-700'}`}>
+                                      {otherUser.name}
+                                    </h3>
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                      {otherUser.role}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center text-xs text-gray-500">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {formatTime(conv.lastMessageTime)}
+                                  </div>
+                                </div>
+                                <p className="text-sm text-gray-600 mb-1 truncate">
+                                  {project.title}
+                                </p>
+                                <p className={`text-sm ${hasUnread ? 'text-gray-900 font-medium' : 'text-gray-600'} line-clamp-2`}>
+                                  {conv.lastMessage}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Delete button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Delete conversation with ${otherUser.name}?`)) {
+                                handleDeleteConversation(conv.projectId, conv.otherUserId);
+                              }
+                            }}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 text-red-600 hover:bg-red-50 rounded transition-opacity"
+                            title="Delete conversation"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Chat Panel - Always mounted when project/user exist, shown when chatPanelOpen */}
+            {chatProject && chatOtherUser ? (
+              <div className={`flex-1 min-h-0 flex flex-col bg-white ${chatPanelOpen ? '' : 'hidden'}`}>
+                <ChatPanel
+                  project={chatProject}
+                  currentUser={currentUser}
+                  otherUser={chatOtherUser}
+                  inline={true}
+                  onClose={() => {
+                    setChatPanelOpen(false);
+                    // Keep project/user so ChatPanel stays mounted
+                  }}
+                  onMessageSent={() => {
+                    window.dispatchEvent(new Event('message-sent'));
+                    fetchUnreadCount();
+                    fetchConversations();
+                  }}
+                  onDeleteConversation={() => {
+                    setChatPanelOpen(false);
+                    // Keep project/user so ChatPanel stays mounted
+                    fetchUnreadCount();
+                    fetchConversations();
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Other Tabs */}
+        <div className={`flex-1 min-h-0 overflow-y-auto ${activeTab === 'chats' ? 'hidden' : ''}`}>
+          {activeTab === 'dashboard' && (
             <DashboardTab
               projects={filteredProjects}
               searchQuery={searchQuery}
@@ -623,129 +744,7 @@ export function AdminDashboardEnhanced({
               currentUser={currentUser}
             />
           )}
-
-        {activeTab === 'chats' && (
-          <div className="flex-1 flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 73px)' }}>
-            <div className="flex-1 flex overflow-hidden min-h-0">
-              {/* Conversations List */}
-              <div className={`${chatPanelOpen ? 'w-1/3' : 'w-full'} border-r border-gray-200 overflow-y-auto bg-white flex flex-col`}>
-                <div className="p-6 flex-1 overflow-y-auto">
-                  {allConversations.length === 0 ? (
-                    <div className="text-center py-12">
-                      <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg text-gray-900 mb-2">No conversations yet</h3>
-                      <p className="text-gray-600">
-                        Start a conversation with a team member to see it here.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {allConversations.map((conv) => {
-                        const otherUser = users.find(u => u.id === conv.otherUserId);
-                        const project = projects.find(p => p.id === conv.projectId);
-                        if (!otherUser || !project) return null;
-
-                        const hasUnread = conv.unreadCount > 0;
-                        const isSelected = chatOtherUser?.id === otherUser.id && chatProject?.id === project.id;
-
-                        return (
-                          <div
-                            key={`${conv.projectId}-${conv.otherUserId}`}
-                            className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-all relative group ${
-                              hasUnread ? 'border-blue-500 border-l-4' : 'border-gray-200'
-                            } ${isSelected ? 'bg-blue-50 border-blue-300' : ''}`}
-                          >
-                            <div onClick={() => handleOpenChat(conv)}>
-                              <div className="flex items-start space-x-4">
-                                <div className="relative flex-shrink-0">
-                                  <div
-                                    className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-medium"
-                                    style={{ backgroundColor: '#1F2937' }}
-                                  >
-                                    {otherUser.name.charAt(0).toUpperCase()}
-                                  </div>
-                                  {hasUnread && (
-                                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                                      {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <div className="flex items-center space-x-2">
-                                      <h3 className={`text-base font-medium ${hasUnread ? 'text-gray-900' : 'text-gray-700'}`}>
-                                        {otherUser.name}
-                                      </h3>
-                                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                        {otherUser.role}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center text-xs text-gray-500">
-                                      <Clock className="h-3 w-3 mr-1" />
-                                      {formatTime(conv.lastMessageTime)}
-                                    </div>
-                                  </div>
-                                  <p className="text-sm text-gray-600 mb-1 truncate">
-                                    {project.title}
-                                  </p>
-                                  <p className={`text-sm ${hasUnread ? 'text-gray-900 font-medium' : 'text-gray-600'} line-clamp-2`}>
-                                    {conv.lastMessage}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                            {/* Delete button */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (window.confirm(`Delete conversation with ${otherUser.name}?`)) {
-                                  handleDeleteConversation(conv.projectId, conv.otherUserId);
-                                }
-                              }}
-                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 text-red-600 hover:bg-red-50 rounded transition-opacity"
-                              title="Delete conversation"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Chat Panel - Inline when conversation selected */}
-              {chatPanelOpen && chatOtherUser && chatProject && (
-                <div className="flex-1 flex flex-col overflow-hidden bg-white min-w-0">
-                  <ChatPanel
-                    project={chatProject}
-                    currentUser={currentUser}
-                    otherUser={chatOtherUser}
-                    inline={true}
-                    onClose={() => {
-                      setChatPanelOpen(false);
-                      setChatOtherUser(null);
-                      setChatProject(null);
-                    }}
-                    onMessageSent={() => {
-                      window.dispatchEvent(new Event('message-sent'));
-                      fetchUnreadCount();
-                      fetchConversations();
-                    }}
-                    onDeleteConversation={() => {
-                      setChatPanelOpen(false);
-                      setChatOtherUser(null);
-                      setChatProject(null);
-                      fetchUnreadCount();
-                      fetchConversations();
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Assign Experts Modal */}
@@ -781,23 +780,24 @@ export function AdminDashboardEnhanced({
         />
       )}
       
-      {/* CHAT PANEL */}
-      {chatPanelOpen && chatOtherUser && chatProject && (
-        <ChatPanel
-          project={chatProject}
-          currentUser={currentUser}
-          otherUser={chatOtherUser}
-          onClose={() => {
-            setChatPanelOpen(false);
-            setChatOtherUser(null);
-            setChatProject(null);
-          }}
-          onMessageSent={() => {
-            window.dispatchEvent(new Event('message-sent'));
-            fetchUnreadCount();
-          }}
-        />
-      )}
+      {/* CHAT PANEL - Always mounted when project/user exist, shown when chatPanelOpen and not in chats tab */}
+      {chatProject && chatOtherUser ? (
+        <div className={chatPanelOpen && activeTab !== 'chats' ? '' : 'hidden'}>
+          <ChatPanel
+            project={chatProject}
+            currentUser={currentUser}
+            otherUser={chatOtherUser}
+            onClose={() => {
+              setChatPanelOpen(false);
+              // Keep project/user so ChatPanel stays mounted
+            }}
+            onMessageSent={() => {
+              window.dispatchEvent(new Event('message-sent'));
+              fetchUnreadCount();
+            }}
+          />
+        </div>
+      ) : null}
 
       {/* PROFILE MODAL */}
       {showProfile && (

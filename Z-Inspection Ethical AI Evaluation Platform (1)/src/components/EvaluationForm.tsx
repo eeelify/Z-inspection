@@ -168,9 +168,94 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     fetchEvaluation();
     fetchUseCase();
     fetchSetUpRisks();
-    // Her stage değişiminde soru indexini sıfırla
-    setCurrentQuestionIndex(0);
   }, [currentStage, project.id, currentUser.id, project.useCase, showReviewScreen]);
+
+  // Cevaplar ve sorular yüklendikten sonra cevaplanmamış ilk soruyu bul
+  useEffect(() => {
+    if (loading || currentQuestions.length === 0) {
+      return;
+    }
+    
+    // Eğer hiç cevap yoksa ilk sorudan başla
+    if (Object.keys(answers).length === 0) {
+      setCurrentQuestionIndex(0);
+      return;
+    }
+    
+    // Debug: Soru ID'lerini ve cevapları kontrol et
+    console.log('Current Questions:', currentQuestions.map(q => ({ id: q.id, code: q.code, _id: q._id })));
+    console.log('Answers keys:', Object.keys(answers));
+    console.log('Question Priorities keys:', Object.keys(questionPriorities));
+    
+    // Cevaplanmamış ilk soruyu bul
+    let firstUnansweredIndex = -1;
+    for (let i = 0; i < currentQuestions.length; i++) {
+      const question = currentQuestions[i];
+      // Tüm olası ID formatlarını kontrol et
+      const possibleIds = [
+        question.id,
+        question.code,
+        question._id,
+        (question as any)._id?.toString(),
+        String(question.id),
+        String(question.code),
+        String(question._id)
+      ].filter(Boolean);
+      
+      let hasAnswer = false;
+      let hasPriority = false;
+      
+      // Her olası ID formatını kontrol et
+      for (const id of possibleIds) {
+        const answerKey = String(id);
+        // Answers objesindeki tüm key'leri kontrol et (case-insensitive)
+        const matchingKey = Object.keys(answers).find(key => 
+          String(key).toLowerCase() === answerKey.toLowerCase() ||
+          String(key) === answerKey
+        );
+        
+        if (matchingKey && answers[matchingKey] !== undefined && answers[matchingKey] !== null && answers[matchingKey] !== '') {
+          hasAnswer = true;
+        }
+        
+        const priorityKey = Object.keys(questionPriorities).find(key => 
+          String(key).toLowerCase() === answerKey.toLowerCase() ||
+          String(key) === answerKey
+        );
+        
+        if (priorityKey && questionPriorities[priorityKey] !== undefined) {
+          hasPriority = true;
+        }
+      }
+      
+      console.log(`Question ${i} (${question.id || question.code}): hasAnswer=${hasAnswer}, hasPriority=${hasPriority}`);
+      
+      // Set-up stage'inde sadece answer yeterli, assess'te hem answer hem priority gerekli
+      if (currentStage === 'set-up') {
+        if (!hasAnswer) {
+          firstUnansweredIndex = i;
+          console.log(`Found first unanswered question at index ${i}`);
+          break;
+        }
+      } else {
+        if (!hasAnswer || !hasPriority) {
+          firstUnansweredIndex = i;
+          console.log(`Found first unanswered question at index ${i}`);
+          break;
+        }
+      }
+    }
+    
+    // Eğer cevaplanmamış soru bulunamadıysa (tüm sorular cevaplanmış) son soruya git
+    if (firstUnansweredIndex === -1) {
+      firstUnansweredIndex = currentQuestions.length > 0 ? currentQuestions.length - 1 : 0;
+      console.log('All questions answered, going to last question');
+    }
+    
+    console.log(`Setting currentQuestionIndex to ${firstUnansweredIndex}`);
+    setCurrentQuestionIndex(firstUnansweredIndex);
+  }, [loading, answers, questionPriorities, currentQuestions, currentStage]);
+
 
   // Review screen açıldığında tensionları yükle
   useEffect(() => {

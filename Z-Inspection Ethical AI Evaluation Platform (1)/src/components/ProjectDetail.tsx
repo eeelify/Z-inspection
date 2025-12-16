@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Calendar, Users as UsersIcon, Target, BarChart3, Plus,
   FileText, Shield, MessageSquare, User as UserIconLucide, GitBranch, Download
@@ -59,6 +59,7 @@ export function ProjectDetail({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [userProgress, setUserProgress] = useState<number>(project.progress || 0);
   const [generating, setGenerating] = useState(false);
+  const previousProgressRef = useRef<number>(project.progress || 0);
 
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
@@ -226,11 +227,46 @@ export function ProjectDetail({
   // Kullanıcıya özel ilerleme
   useEffect(() => {
     const loadUserProgress = async () => {
+      const previousProgress = previousProgressRef.current;
       const computed = await fetchUserProgress(project, currentUser);
       setUserProgress(computed);
+      previousProgressRef.current = computed;
+      
+      // If progress just reached 100%, notify admin (notification only, no chat message)
+      if (computed === 100 && previousProgress < 100 && currentUser.role !== 'admin') {
+        try {
+          const adminUser = users.find(u => u.role === 'admin');
+          if (adminUser) {
+            const adminId = adminUser.id || (adminUser as any)._id;
+            const currentUserId = currentUser.id || (currentUser as any)._id;
+            const projectId = project.id || (project as any)._id;
+            
+            // Send a silent notification message (will show in bell but not in chat)
+            // Using a special prefix to identify notification-only messages
+            const notificationText = `[NOTIFICATION] Evaluation completed for project "${project.title}" by ${currentUser.name}`;
+            
+            await fetch(api('/api/messages'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId,
+                fromUserId: currentUserId,
+                toUserId: adminId,
+                text: notificationText,
+                isNotification: true, // Flag to indicate this is a notification, not a regular message
+              }),
+            });
+            
+            // Trigger notification update event
+            window.dispatchEvent(new Event('message-sent'));
+          }
+        } catch (error) {
+          console.error('Error notifying admin:', error);
+        }
+      }
     };
     loadUserProgress();
-  }, [project, currentUser]);
+  }, [project, currentUser, users]);
 
   const handleSaveTension = async (data: any) => {
     try {
@@ -569,8 +605,34 @@ export function ProjectDetail({
 
           <div className="p-6">
             {activeTab === 'evaluation' && (
-              <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                Select 'Start Evaluation' to begin.
+              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                {userProgress === 0 ? (
+                  <div className="text-gray-500">
+                    Select 'Start Evaluation' to begin.
+                  </div>
+                ) : userProgress < 100 ? (
+                  <div>
+                    <div className="text-gray-700 mb-2 font-medium">
+                      Continue your evaluation
+                    </div>
+                    <div className="text-sm text-gray-500 mb-4">
+                      Progress: {Math.round(userProgress)}%
+                    </div>
+                    <button
+                      onClick={onStartEvaluation}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                      Continue Evaluation
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-green-600">
+                    <div className="font-medium mb-2">✓ Evaluation Completed</div>
+                    <div className="text-sm text-gray-500">
+                      All questions have been answered. Admin has been notified.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

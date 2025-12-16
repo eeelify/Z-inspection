@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Send, Pin, MessageSquare, Hash, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Pin, MessageSquare, Hash, Loader2, Trash2 } from 'lucide-react';
 import { User, Project, Message } from '../types';
 import { roleColors } from '../utils/constants';
 import { formatTime, getProjectById } from '../utils/helpers';
@@ -38,6 +38,7 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
 
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors];
 
@@ -99,7 +100,8 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
       const payload = {
         userId,
         text: newMessage,
-        projectId: projectId || undefined
+        projectId: projectId || undefined,
+        replyTo: replyingTo || undefined
       };
 
       console.log('Sending message with payload:', payload);
@@ -131,6 +133,7 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
         };
         setMessages([newMessageObj, ...messages]);
         setNewMessage('');
+        setReplyingTo(null);
       } else {
         const errorText = await response.text();
         console.error('Error response:', errorText);
@@ -172,12 +175,54 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
             ? { ...msg, isPinned: updated.isPinned }
             : msg
         ));
+        // Update discussionsData too
+        setDiscussionsData(discussionsData.map(d =>
+          d._id === messageId
+            ? { ...d, isPinned: updated.isPinned }
+            : d
+        ));
       } else {
         alert('Failed to update pin status');
       }
     } catch (error) {
       console.error('Error toggling pin:', error);
       alert('Failed to update pin status');
+    }
+  };
+
+  const handleDelete = async (messageId: string) => {
+    const discussion = discussionsData.find(d => d._id === messageId);
+    if (!discussion) return;
+
+    const currentUserId = currentUser.id || (currentUser as any)._id;
+    const discussionUserId = discussion.userId._id || discussion.userId;
+    const isOwner = currentUserId === discussionUserId;
+    const isAdmin = currentUser.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      alert('You can only delete your own messages or be an admin to delete messages.');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to delete this message?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(api(`/api/shared-discussions/${messageId}`), {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setMessages(messages.filter(msg => msg.id !== messageId));
+        setDiscussionsData(discussionsData.filter(d => d._id !== messageId));
+      } else {
+        const errorText = await response.text();
+        alert(`Failed to delete message: ${errorText}`);
+      }
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      alert('Failed to delete message');
     }
   };
 
@@ -291,10 +336,49 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
                         </div>
                       )}
 
+                      {/* Show reply to message if exists */}
+                      {discussion?.replyTo && (() => {
+                        const replyToObj = discussion.replyTo;
+                        const replyToText = typeof replyToObj === 'object' && replyToObj !== null && 'text' in replyToObj
+                          ? (replyToObj as any).text
+                          : null;
+                        const replyToUserId = typeof replyToObj === 'object' && replyToObj !== null && 'userId' in replyToObj
+                          ? (replyToObj as any).userId
+                          : null;
+                        const replyToUserName = typeof replyToUserId === 'object' && replyToUserId !== null && 'name' in replyToUserId
+                          ? replyToUserId.name
+                          : null;
+                        
+                        if (!replyToText) return null;
+                        
+                        return (
+                          <div className="bg-gray-50 border-l-2 border-blue-500 pl-3 py-2 mb-2 rounded text-xs text-gray-600">
+                            <div className="font-medium text-gray-700">
+                              Replying to {replyToUserName ? `${replyToUserName}:` : 'message:'}
+                            </div>
+                            <div className="text-gray-600 mt-1">
+                              {replyToText.substring(0, 100)}{replyToText.length > 100 ? '...' : ''}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <p className="text-gray-800 text-sm leading-relaxed">{message.text}</p>
 
                       <div className="flex items-center space-x-3 mt-2">
-                        <button className="text-xs text-gray-500 hover:text-gray-700">Reply</button>
+                        <button 
+                          onClick={() => {
+                            setReplyingTo(message.id);
+                            // Scroll to input
+                            setTimeout(() => {
+                              const textarea = document.querySelector('textarea');
+                              textarea?.focus();
+                            }, 100);
+                          }}
+                          className="text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          Reply
+                        </button>
                         {currentUser.role === 'admin' && (
                           <button
                             onClick={() => togglePin(message.id)}
@@ -302,6 +386,15 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
                           >
                             <Pin className="h-3 w-3 mr-1" />
                             {message.isPinned ? 'Unpin' : 'Pin'}
+                          </button>
+                        )}
+                        {(currentUser.role === 'admin' || (user && (currentUser.id || (currentUser as any)._id) === (user.id || (user as any)._id))) && (
+                          <button
+                            onClick={() => handleDelete(message.id)}
+                            className="text-xs text-red-500 hover:text-red-700 flex items-center"
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Delete
                           </button>
                         )}
                       </div>
@@ -327,10 +420,30 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
           <div className="max-w-4xl mx-auto">
             <form onSubmit={handleSendMessage} className="flex space-x-4">
               <div className="flex-1">
+                {replyingTo && (() => {
+                  const replyToMessage = discussionsData.find(d => d._id === replyingTo);
+                  const replyToUser = replyToMessage ? getUserFromMessage(replyingTo) : null;
+                  return (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2 flex items-center justify-between">
+                      <div className="text-xs text-gray-700">
+                        <span className="font-medium">Replying to {replyToUser?.name || 'message'}:</span>
+                        <span className="ml-2 text-gray-600">
+                          {replyToMessage?.text.substring(0, 50)}{replyToMessage && replyToMessage.text.length > 50 ? '...' : ''}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setReplyingTo(null)}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  );
+                })()}
                 <textarea
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={`Share your thoughts${selectedProject !== 'all' ? ` about ${getProjectById(selectedProject, projects)?.title}` : ''}...`}
+                  placeholder={replyingTo ? 'Write your reply...' : `Share your thoughts${selectedProject !== 'all' ? ` about ${getProjectById(selectedProject, projects)?.title}` : ''}...`}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   onKeyDown={(e) => {
@@ -338,10 +451,13 @@ export function SharedArea({ currentUser, projects, users, onBack }: SharedAreaP
                       e.preventDefault();
                       handleSendMessage(e);
                     }
+                    if (e.key === 'Escape' && replyingTo) {
+                      setReplyingTo(null);
+                    }
                   }}
                 />
                 <div className="text-xs text-gray-500 mt-1">
-                  Use @username to mention someone • Press Enter to send, Shift+Enter for new line
+                  {replyingTo ? 'Press Enter to send reply, Esc to cancel' : 'Use @username to mention someone • Press Enter to send, Shift+Enter for new line'}
                 </div>
               </div>
               

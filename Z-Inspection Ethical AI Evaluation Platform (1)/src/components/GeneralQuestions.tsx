@@ -400,14 +400,12 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 <p className="text-xs text-gray-500 font-medium">Progress</p>
                 <p className="text-sm font-bold text-gray-900">{getCompletionPercentage()}%</p>
               </div>
-              <div className="w-32 bg-gray-200 rounded-full h-3 overflow-hidden border border-gray-300 shadow-inner">
+              <div className="w-48 bg-gray-200 rounded-full h-5 overflow-hidden border border-gray-300">
                 <div
-                  className="h-full rounded-full transition-all duration-500 ease-out"
+                  className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-green-500 to-green-600"
                   style={{ 
                     width: `${getCompletionPercentage()}%`, 
-                    minWidth: getCompletionPercentage() > 0 ? '2px' : '0',
-                    backgroundColor: '#10b981',
-                    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
+                    minWidth: getCompletionPercentage() > 0 ? '8px' : '0',
                   }}
                 />
               </div>
