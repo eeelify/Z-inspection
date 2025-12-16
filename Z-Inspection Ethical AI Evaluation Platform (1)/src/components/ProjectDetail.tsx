@@ -60,6 +60,10 @@ export function ProjectDetail({
   const [userProgress, setUserProgress] = useState<number>(project.progress || 0);
   const [generating, setGenerating] = useState(false);
   const previousProgressRef = useRef<number>(project.progress || 0);
+  const [memberProgresses, setMemberProgresses] = useState<Record<string, number>>({});
+
+  // Calculate assignedUserDetails early to avoid "before initialization" error
+  const assignedUserDetails = users.filter((user) => project.assignedUsers.includes(user.id));
 
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
@@ -224,6 +228,32 @@ export function ProjectDetail({
     fetchUseCase();
   }, [project.id, currentUser.id, project.useCase]);
 
+  // Tüm assigned members için progress yükle
+  useEffect(() => {
+    const loadAllMemberProgresses = async () => {
+      const progresses: Record<string, number> = {};
+      await Promise.all(
+        assignedUserDetails.map(async (user) => {
+          try {
+            const progress = await fetchUserProgress(project, user);
+            progresses[user.id] = progress;
+          } catch (error) {
+            console.error(`Error fetching progress for user ${user.id}:`, error);
+            progresses[user.id] = 0;
+          }
+        })
+      );
+      setMemberProgresses(progresses);
+    };
+
+    if (assignedUserDetails.length > 0) {
+      loadAllMemberProgresses();
+      // Progress'i periyodik olarak güncelle (her 5 saniyede bir)
+      const interval = setInterval(loadAllMemberProgresses, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [project, assignedUserDetails]);
+
   // Kullanıcıya özel ilerleme
   useEffect(() => {
     const loadUserProgress = async () => {
@@ -341,7 +371,7 @@ export function ProjectDetail({
     }
   };
 
-  const assignedUserDetails = users.filter((user) => project.assignedUsers.includes(user.id));
+  // assignedUserDetails is already defined earlier in the component (line ~66)
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors] || '#1F2937';
   const isAssigned = project.assignedUsers.includes(currentUser.id);
   const progressDisplay = Math.max(0, Math.min(100, userProgress));
@@ -558,16 +588,37 @@ export function ProjectDetail({
                   const canContact = u.id !== currentUser.id && 
                     !(currentUser.role === 'use-case-owner' && u.role !== 'admin');
                   
+                  const memberProgress = memberProgresses[u.id] ?? 0;
+                  const memberProgressDisplay = Math.max(0, Math.min(100, memberProgress));
+                  
                   return (
-                    <div key={u.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3">{u.name?.charAt(0) || 'U'}</div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{u.name}</div>
-                          <div className="text-xs text-gray-500">{u.role}</div>
+                    <div key={u.id} className="flex items-center justify-between p-3 rounded hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                      <div className="flex items-center flex-1">
+                        <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3 text-sm font-medium">
+                          {u.name?.charAt(0) || 'U'}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{u.name}</div>
+                              <div className="text-xs text-gray-500">{u.role}</div>
+                            </div>
+                            <div className="text-right ml-4">
+                              <div className="text-xs font-medium text-gray-700">{memberProgressDisplay}%</div>
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-200 h-1.5 rounded-full mt-2">
+                            <div
+                              className="h-1.5 rounded-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                              style={{
+                                width: `${memberProgressDisplay}%`,
+                                minWidth: memberProgressDisplay > 0 ? '4px' : '0',
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div>
+                      <div className="ml-3">
                         {canContact && (
                           <button
                             onClick={() => {

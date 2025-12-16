@@ -408,54 +408,252 @@ function App() {
           />
         ) : null;
       case "general-questions":
-        return selectedProject ? (
+        if (!selectedProject) {
+          console.warn('⚠️ No project selected in general-questions view, showing dashboard');
+          return currentUser?.role === "use-case-owner" ? (
+            <UseCaseOwnerDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+            />
+          ) : currentUser?.role === "admin" ? (
+            <AdminDashboardEnhanced
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          ) : (
+            <UserDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onViewUseCase={handleViewUseCase}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          );
+        }
+        return (
           <GeneralQuestions
             project={selectedProject}
             currentUser={currentUser}
-            onBack={() => setCurrentView("project-detail")}
-            onComplete={() => {
-              // After completing general questions, go to add question screen
-              setCurrentView("add-general-question");
+            onBack={() => {
+              try {
+                // Always go to dashboard first, then navigate to project-detail if project exists
+                if (selectedProject) {
+                  // Preserve selectedProject and go to project detail
+                  setCurrentView("project-detail");
+                } else {
+                  // No project selected, go to dashboard
+                  setCurrentView("dashboard");
+                }
+              } catch (error) {
+                console.error('Error in general-questions onBack:', error);
+                // On error, always go to dashboard
+                setCurrentView("dashboard");
+              }
             }}
-          />
-        ) : null;
-      case "add-general-question":
-        return selectedProject ? (
-          <AddGeneralQuestion
-            project={selectedProject}
-            currentUser={currentUser}
-            onBack={() => setCurrentView("general-questions")}
             onComplete={() => {
-              // After adding questions (or skipping), go to project detail with tensions tab open
-              if (selectedProject) {
-                setSelectedProject({ ...selectedProject, openTensionsTab: true } as any);
-                setCurrentView("project-detail");
+              try {
+                const projectToUse = selectedProject;
+                if (projectToUse) {
+                  setCurrentView("add-general-question");
+                } else {
+                  setCurrentView("dashboard");
+                }
+              } catch (error) {
+                console.error('Error in general-questions onComplete:', error);
+                setCurrentView("dashboard");
               }
             }}
           />
-        ) : null;
+        );
+      case "add-general-question":
+        if (!selectedProject) {
+          console.warn('⚠️ No project selected in add-general-question view, showing dashboard');
+          return currentUser?.role === "use-case-owner" ? (
+            <UseCaseOwnerDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+            />
+          ) : currentUser?.role === "admin" ? (
+            <AdminDashboardEnhanced
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          ) : (
+            <UserDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onViewUseCase={handleViewUseCase}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          );
+        }
+        return (
+          <AddGeneralQuestion
+            project={selectedProject}
+            currentUser={currentUser}
+            onBack={() => {
+              try {
+                const projectToUse = selectedProject;
+                if (projectToUse) {
+                  setCurrentView("general-questions");
+                } else {
+                  setCurrentView("dashboard");
+                }
+              } catch (error) {
+                console.error('Error in add-general-question onBack:', error);
+                setCurrentView("dashboard");
+              }
+            }}
+            onComplete={() => {
+              try {
+                const projectToUse = selectedProject;
+                if (projectToUse) {
+                  setSelectedProject({ ...projectToUse, openTensionsTab: true } as any);
+                  setCurrentView("project-detail");
+                } else {
+                  setCurrentView("dashboard");
+                }
+              } catch (error) {
+                console.error('Error in add-general-question onComplete:', error);
+                setCurrentView("dashboard");
+              }
+            }}
+          />
+        );
       case "evaluation":
-        return selectedProject ? (
+        if (!selectedProject) {
+          // If no project selected, return dashboard instead of null
+          console.warn('⚠️ No project selected in evaluation view, showing dashboard');
+          return currentUser?.role === "use-case-owner" ? (
+            <UseCaseOwnerDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+            />
+          ) : currentUser?.role === "admin" ? (
+            <AdminDashboardEnhanced
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          ) : (
+            <UserDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onViewUseCase={handleViewUseCase}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          );
+        }
+        return (
           <EvaluationForm
             project={selectedProject}
             currentUser={currentUser}
             onBack={() => {
-              // If user came from general questions, go back to general questions
-              // Otherwise go back to project detail
-              if (currentUser && currentUser.role !== 'use-case-owner' && currentUser.role !== 'admin') {
-                setCurrentView("general-questions");
-              } else {
-                setCurrentView("project-detail");
+              try {
+                // Preserve selectedProject when going back
+                const projectToUse = selectedProject;
+                if (!projectToUse) {
+                  console.warn('⚠️ selectedProject is null in onBack, going to dashboard');
+                  setCurrentView("dashboard");
+                  return;
+                }
+                // If user came from general questions, go back to general questions
+                // Otherwise go back to project detail
+                if (currentUser && currentUser.role !== 'use-case-owner' && currentUser.role !== 'admin') {
+                  setCurrentView("general-questions");
+                } else {
+                  setCurrentView("project-detail");
+                }
+              } catch (error) {
+                console.error('Error in evaluation onBack:', error);
+                setCurrentView("dashboard");
               }
             }}
             onSubmit={() => {
-              // Assessment finished: mark progress and return to project detail
-              setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, progress: 100 } : p));
-              setSelectedProject(prev => prev ? { ...prev, progress: 100 } : prev);
-              setCurrentView("project-detail");
+              try {
+                // Assessment finished: mark progress and return to project detail
+                const projectToUse = selectedProject;
+                if (projectToUse) {
+                  setProjects(prev => prev.map(p => p.id === projectToUse.id ? { ...p, progress: 100 } : p));
+                  setSelectedProject(prev => prev ? { ...prev, progress: 100 } : prev);
+                  setCurrentView("project-detail");
+                } else {
+                  setCurrentView("dashboard");
+                }
+              } catch (error) {
+                console.error('Error in evaluation onSubmit:', error);
+                setCurrentView("dashboard");
+              }
             }}
           />
-        ) : null;
+        );
       case "shared-area":
         return (
           <SharedArea
@@ -533,9 +731,72 @@ function App() {
     }
   };
 
+  const content = renderContent();
+  
+  // If content is null, show dashboard as fallback to prevent white screen
+  if (content === null) {
+    // If we're not on dashboard and content is null, show dashboard
+    if (currentView !== "dashboard") {
+      // Return dashboard content directly
+      return (
+        <div className="min-h-screen bg-gray-50">
+          {currentUser?.role === "use-case-owner" ? (
+            <UseCaseOwnerDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+            />
+          ) : currentUser?.role === "admin" ? (
+            <AdminDashboardEnhanced
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              useCases={useCases}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onCreateProject={handleCreateProject}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          ) : (
+            <UserDashboard
+              currentUser={currentUser}
+              projects={projects}
+              users={users}
+              onViewProject={handleViewProject}
+              onStartEvaluation={handleStartEvaluation}
+              onDeleteProject={handleDeleteProject}
+              onNavigate={setCurrentView}
+              onViewUseCase={handleViewUseCase}
+              onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+            />
+          )}
+        </div>
+      );
+    }
+    // If already on dashboard but still null, show loading
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {renderContent()}
+      {content}
     </div>
   );
 }

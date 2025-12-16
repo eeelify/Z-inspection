@@ -754,7 +754,10 @@ app.post('/api/evaluations', async (req, res) => {
     );
 
     // Also try to save to new responses collection (non-blocking)
-    if (answers && Object.keys(answers).length > 0 && stage === 'assess') {
+    console.log(`📥 /api/evaluations called: stage=${stage}, answers keys=${answers ? Object.keys(answers).length : 0}, answers=${JSON.stringify(answers ? Object.keys(answers).slice(0, 5) : [])}`);
+    // Save answers regardless of stage - they might be from assess or set-up
+    if (answers && Object.keys(answers).length > 0) {
+      console.log(`✅ Answers exist (${Object.keys(answers).length} keys), proceeding to save...`);
       try {
         const Response = require('./models/response');
         const ProjectAssignment = require('./models/projectAssignment');
@@ -812,46 +815,57 @@ app.post('/api/evaluations', async (req, res) => {
         const roleSpecificAnswersMap = {};
         
         console.log(`📝 Processing ${Object.keys(answers).length} answers for project ${projectId}, user ${userId}, role ${role}`);
-        console.log(`📝 Answer keys: ${Object.keys(answers).slice(0, 10).join(', ')}${Object.keys(answers).length > 10 ? '...' : ''}`);
+        console.log(`📝 Answer keys (first 10): ${Object.keys(answers).slice(0, 10).join(', ')}${Object.keys(answers).length > 10 ? '...' : ''}`);
         console.log(`📝 General codes count: ${generalCodes.size}, Role codes count: ${roleCodes.size}`);
+        console.log(`📝 Sample general codes: ${Array.from(generalCodes).slice(0, 5).join(', ')}`);
+        console.log(`📝 Sample role codes: ${Array.from(roleCodes).slice(0, 5).join(', ')}`);
         
         for (const [questionKey, answerValue] of Object.entries(answers)) {
+          console.log(`🔍 Processing answer key: "${questionKey}", value: ${typeof answerValue === 'string' ? answerValue.substring(0, 30) : answerValue}`);
+          
           // Try to find question using the map first (faster)
           let question = generalQuestionMap.get(questionKey) || roleQuestionMap.get(questionKey);
           
-          // If not found in map, try database lookup
+          // If not found in map, try database lookup with multiple formats
           if (!question) {
-            question = await Question.findOne({ 
-              $or: [
-                { _id: questionKey },
-                { code: questionKey }
-              ]
-            }).lean();
+            // Try as ObjectId first
+            let query = { $or: [] };
+            if (isValidObjectId(questionKey)) {
+              query.$or.push({ _id: new mongoose.Types.ObjectId(questionKey) });
+            }
+            query.$or.push({ _id: questionKey });
+            query.$or.push({ code: questionKey });
+            
+            question = await Question.findOne(query).lean();
           }
           
           if (question) {
             const questionCode = question.code; // Use code as the canonical identifier
-            console.log(`✅ Found question ${questionKey} -> code: ${questionCode}, questionnaire: ${question.questionnaireKey}`);
+            console.log(`✅ Found question "${questionKey}" -> code: "${questionCode}", questionnaire: "${question.questionnaireKey}"`);
             
             if (question.questionnaireKey === 'general-v1') {
               // Use questionCode as key for consistency
               generalAnswersMap[questionCode] = answerValue;
+              console.log(`✅ Added to generalAnswersMap: "${questionCode}" = ${typeof answerValue === 'string' ? answerValue.substring(0, 30) : answerValue}`);
             } else if (question.questionnaireKey === roleQuestionnaireKey) {
               // Use questionCode as key for consistency
               roleSpecificAnswersMap[questionCode] = answerValue;
+              console.log(`✅ Added to roleSpecificAnswersMap: "${questionCode}" = ${typeof answerValue === 'string' ? answerValue.substring(0, 30) : answerValue}`);
             } else {
-              console.warn(`⚠️ Question ${questionKey} (code: ${questionCode}) belongs to ${question.questionnaireKey}, not expected questionnaire`);
+              console.warn(`⚠️ Question "${questionKey}" (code: "${questionCode}") belongs to "${question.questionnaireKey}", not expected questionnaire (general-v1 or ${roleQuestionnaireKey})`);
             }
           } else {
             // Fallback: check if it matches codes directly
             if (generalCodes.has(questionKey)) {
-              console.log(`📌 Question ${questionKey} matched general codes, adding to generalAnswersMap`);
+              console.log(`📌 Question "${questionKey}" matched general codes directly, adding to generalAnswersMap`);
               generalAnswersMap[questionKey] = answerValue;
             } else if (roleCodes.has(questionKey)) {
-              console.log(`📌 Question ${questionKey} matched role codes, adding to roleSpecificAnswersMap`);
+              console.log(`📌 Question "${questionKey}" matched role codes directly, adding to roleSpecificAnswersMap`);
               roleSpecificAnswersMap[questionKey] = answerValue;
             } else {
-              console.warn(`⚠️ Question ${questionKey} not found in DB and doesn't match any questionnaire codes`);
+              console.warn(`⚠️ Question "${questionKey}" not found in DB and doesn't match any questionnaire codes`);
+              console.warn(`⚠️ Available general codes (first 10): ${Array.from(generalCodes).slice(0, 10).join(', ')}`);
+              console.warn(`⚠️ Available role codes (first 10): ${Array.from(roleCodes).slice(0, 10).join(', ')}`);
             }
           }
         }
@@ -865,13 +879,16 @@ app.post('/api/evaluations', async (req, res) => {
         // Save general-v1 responses
         if (Object.keys(generalAnswersMap).length > 0 || Object.keys(answers).length > 0) {
           saveTasks.push(async () => {
-            const generalQuestionnaire = await Questionnaire.findOne({ key: 'general-v1', isActive: true });
-            if (!generalQuestionnaire) {
-              console.warn('⚠️ general-v1 questionnaire not found');
-              return;
-            }
-            
-            await ensureAllQuestionsPresent(projectIdObj, userIdObj, 'general-v1');
+            try {
+              const generalQuestionnaire = await Questionnaire.findOne({ key: 'general-v1', isActive: true });
+              if (!generalQuestionnaire) {
+                console.warn('⚠️ general-v1 questionnaire not found');
+                return;
+              }
+              
+              console.log(`🔄 Ensuring all questions present for general-v1...`);
+              await ensureAllQuestionsPresent(projectIdObj, userIdObj, 'general-v1');
+              console.log(`✅ All questions ensured for general-v1`);
             
             const generalResponseAnswers = [];
             const generalQuestions = await Question.find({ questionnaireKey: 'general-v1' })
@@ -903,14 +920,31 @@ app.post('/api/evaluations', async (req, res) => {
               console.log(`💾 Saving general answer: questionCode=${questionCode}, answerValue=${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
               
               // Get risk score from riskScores if available, otherwise use priority
+              // Try multiple key formats: questionCode, questionKey, question._id, question.id
               let score = 2; // Default
-              if (riskScores && (riskScores[questionId] === 0 || riskScores[questionId] === 1 || riskScores[questionId] === 2 || riskScores[questionId] === 3 || riskScores[questionId] === 4)) {
-                score = riskScores[questionId];
-              } else if (questionPriorities && questionPriorities[questionId]) {
-                const priority = questionPriorities[questionId];
-                if (priority === 'low') score = 3;
-                else if (priority === 'medium') score = 2;
-                else if (priority === 'high') score = 1;
+              if (riskScores) {
+                const riskScore = riskScores[questionCode] ?? 
+                                  riskScores[questionKey] ?? 
+                                  riskScores[question._id?.toString()] ?? 
+                                  riskScores[String(question._id)] ?? 
+                                  undefined;
+                if (riskScore !== undefined && (riskScore === 0 || riskScore === 1 || riskScore === 2 || riskScore === 3 || riskScore === 4)) {
+                  score = riskScore;
+                  console.log(`📊 Using risk score ${score} for question ${questionCode} from riskScores`);
+                }
+              }
+              if (score === 2 && questionPriorities) {
+                const priority = questionPriorities[questionCode] ?? 
+                                 questionPriorities[questionKey] ?? 
+                                 questionPriorities[question._id?.toString()] ?? 
+                                 questionPriorities[String(question._id)] ?? 
+                                 undefined;
+                if (priority) {
+                  if (priority === 'low') score = 3;
+                  else if (priority === 'medium') score = 2;
+                  else if (priority === 'high') score = 1;
+                  console.log(`📊 Using priority ${priority} (score ${score}) for question ${questionCode}`);
+                }
               }
               
               // Format answer
@@ -978,6 +1012,13 @@ app.post('/api/evaluations', async (req, res) => {
                 });
                 console.log(`✅ Created general-v1 response with ${generalResponseAnswers.length} answered questions`);
               }
+            } else {
+              console.warn(`⚠️ No general answers to save (generalResponseAnswers.length = ${generalResponseAnswers.length})`);
+            }
+            } catch (error) {
+              console.error(`❌ Error saving general-v1 responses:`, error);
+              console.error(`❌ Error stack:`, error.stack);
+              throw error; // Re-throw to be caught by outer try-catch
             }
           });
         }
@@ -985,20 +1026,23 @@ app.post('/api/evaluations', async (req, res) => {
         // Save role-specific responses
         if (roleQuestionnaireKey !== 'general-v1' && Object.keys(roleSpecificAnswersMap).length > 0) {
           saveTasks.push(async () => {
-            const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
-            if (!roleQuestionnaire) {
-              // Create if doesn't exist
-              await Questionnaire.create({
-                key: roleQuestionnaireKey,
-                title: `${role} Questions v1`,
-                language: 'en-tr',
-                version: 1,
-                isActive: true
-              });
-              console.log(`✅ Created questionnaire: ${roleQuestionnaireKey}`);
-            }
-            
-            await ensureAllQuestionsPresent(projectIdObj, userIdObj, roleQuestionnaireKey);
+            try {
+              const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
+              if (!roleQuestionnaire) {
+                // Create if doesn't exist
+                await Questionnaire.create({
+                  key: roleQuestionnaireKey,
+                  title: `${role} Questions v1`,
+                  language: 'en-tr',
+                  version: 1,
+                  isActive: true
+                });
+                console.log(`✅ Created questionnaire: ${roleQuestionnaireKey}`);
+              }
+              
+              console.log(`🔄 Ensuring all questions present for ${roleQuestionnaireKey}...`);
+              await ensureAllQuestionsPresent(projectIdObj, userIdObj, roleQuestionnaireKey);
+              console.log(`✅ All questions ensured for ${roleQuestionnaireKey}`);
             
             const roleResponseAnswers = [];
             const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
@@ -1029,14 +1073,31 @@ app.post('/api/evaluations', async (req, res) => {
               console.log(`💾 Saving role-specific answer: questionCode=${questionCode}, answerValue=${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
               
               // Get risk score from riskScores if available, otherwise use priority
+              // Try multiple key formats: questionCode, questionKey, question._id, question.id
               let score = 2; // Default
-              if (riskScores && (riskScores[questionId] === 0 || riskScores[questionId] === 1 || riskScores[questionId] === 2 || riskScores[questionId] === 3 || riskScores[questionId] === 4)) {
-                score = riskScores[questionId];
-              } else if (questionPriorities && questionPriorities[questionId]) {
-                const priority = questionPriorities[questionId];
-                if (priority === 'low') score = 3;
-                else if (priority === 'medium') score = 2;
-                else if (priority === 'high') score = 1;
+              if (riskScores) {
+                const riskScore = riskScores[questionCode] ?? 
+                                  riskScores[questionKey] ?? 
+                                  riskScores[question._id?.toString()] ?? 
+                                  riskScores[String(question._id)] ?? 
+                                  undefined;
+                if (riskScore !== undefined && (riskScore === 0 || riskScore === 1 || riskScore === 2 || riskScore === 3 || riskScore === 4)) {
+                  score = riskScore;
+                  console.log(`📊 Using risk score ${score} for question ${questionCode} from riskScores`);
+                }
+              }
+              if (score === 2 && questionPriorities) {
+                const priority = questionPriorities[questionCode] ?? 
+                                 questionPriorities[questionKey] ?? 
+                                 questionPriorities[question._id?.toString()] ?? 
+                                 questionPriorities[String(question._id)] ?? 
+                                 undefined;
+                if (priority) {
+                  if (priority === 'low') score = 3;
+                  else if (priority === 'medium') score = 2;
+                  else if (priority === 'high') score = 1;
+                  console.log(`📊 Using priority ${priority} (score ${score}) for question ${questionCode}`);
+                }
               }
               
               // Format answer
@@ -1105,13 +1166,30 @@ app.post('/api/evaluations', async (req, res) => {
                 });
                 console.log(`✅ Created ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
               }
+            } else {
+              console.warn(`⚠️ No role-specific answers to save (roleResponseAnswers.length = ${roleResponseAnswers.length})`);
+            }
+            } catch (error) {
+              console.error(`❌ Error saving ${roleQuestionnaireKey} responses:`, error);
+              console.error(`❌ Error stack:`, error.stack);
+              throw error; // Re-throw to be caught by outer try-catch
             }
           });
         }
         
         // Execute all save tasks in parallel
         if (saveTasks.length > 0) {
-          await Promise.all(saveTasks.map(task => task()));
+          console.log(`🚀 Executing ${saveTasks.length} save tasks...`);
+          try {
+            await Promise.all(saveTasks.map(task => task()));
+            console.log(`✅ All save tasks completed successfully`);
+          } catch (saveError) {
+            console.error(`❌ Error in save tasks:`, saveError);
+            console.error(`❌ Save error stack:`, saveError.stack);
+            throw saveError;
+          }
+        } else {
+          console.warn(`⚠️ No save tasks to execute! generalAnswersMap: ${Object.keys(generalAnswersMap).length}, roleSpecificAnswersMap: ${Object.keys(roleSpecificAnswersMap).length}, answers: ${Object.keys(answers).length}`);
         }
         
         // Validate submissions if completed
@@ -1128,7 +1206,9 @@ app.post('/api/evaluations', async (req, res) => {
         }
       } catch (newSystemError) {
         // Log error but don't fail the request - old system still works
-        console.error('⚠️ Error saving to new responses collection (non-critical):', newSystemError.message);
+        console.error('❌ CRITICAL: Error saving to new responses collection:', newSystemError);
+        console.error('❌ Error stack:', newSystemError.stack);
+        // Still log but make it more visible
       }
     }
     
@@ -1295,6 +1375,7 @@ app.post('/api/general-questions', async (req, res) => {
       const ProjectAssignment = require('./models/projectAssignment');
       const Question = require('./models/question');
       const Questionnaire = require('./models/questionnaire');
+      const { ensureAllQuestionsPresent } = require('./services/evaluationService');
       
       // Get or create assignment
       let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
@@ -1400,7 +1481,7 @@ app.post('/api/general-questions', async (req, res) => {
             }
             
             // Ensure all questions are present (merge with existing or create new)
-            const { ensureAllQuestionsPresent } = require('./services/evaluationService');
+            // ensureAllQuestionsPresent is already required at the top of the try block (line 1378)
             await ensureAllQuestionsPresent(projectIdObj, userIdObj, 'general-v1');
             
             // Now update with answered questions
@@ -1463,44 +1544,48 @@ app.post('/api/general-questions', async (req, res) => {
       // Prepare role-specific response
       if (roleQuestionnaireKey !== 'general-v1' && (Object.keys(roleSpecificAnswersMap).length > 0 || Object.keys(roleSpecificRisksMap).length > 0)) {
         saveTasks.push(async () => {
-          const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
-          if (roleQuestionnaire) {
-            // Fetch all role-specific questions at once (performance optimization)
-            const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
-              .select('_id code answerType options')
-              .lean();
-            const roleQuestionMap = new Map(roleQuestions.map(q => [q.code, q]));
-            
-            const roleResponseAnswers = [];
-            
-            for (const [qId, answerValue] of Object.entries(roleSpecificAnswersMap)) {
-              const question = roleQuestionMap.get(qId);
-              if (question) {
-                let score = 0;
-                let answerFormat = {};
-                
-                if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
-                  const option = question.options?.find(o => o.key === answerValue);
-                  score = option?.score || 0;
-                  answerFormat = { choiceKey: answerValue };
-                } else if (question.answerType === 'open_text') {
-                  score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
-                  answerFormat = { text: answerValue };
+          try {
+            // ensureAllQuestionsPresent is already required at the top of the try block (line 1378)
+            const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
+            if (roleQuestionnaire) {
+              // Fetch all role-specific questions at once (performance optimization)
+              const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
+                .select('_id code answerType options')
+                .lean();
+              const roleQuestionMap = new Map(roleQuestions.map(q => [q.code, q]));
+              
+              const roleResponseAnswers = [];
+              
+              for (const [qId, answerValue] of Object.entries(roleSpecificAnswersMap)) {
+                const question = roleQuestionMap.get(qId);
+                if (question) {
+                  let score = 0;
+                  let answerFormat = {};
+                  
+                  if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
+                    const option = question.options?.find(o => o.key === answerValue);
+                    score = option?.score || 0;
+                    answerFormat = { choiceKey: answerValue };
+                  } else if (question.answerType === 'open_text') {
+                    score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
+                    answerFormat = { text: answerValue };
+                  }
+                  
+                  roleResponseAnswers.push({
+                    questionId: question._id,
+                    questionCode: question.code,
+                    answer: answerFormat,
+                    score: score,
+                    notes: null,
+                    evidence: []
+                  });
                 }
-                
-                roleResponseAnswers.push({
-                  questionId: question._id,
-                  questionCode: question.code,
-                  answer: answerFormat,
-                  score: score,
-                  notes: null,
-                  evidence: []
-                });
               }
-            }
-            
-            // Ensure all questions are present (merge with existing or create new)
-            await ensureAllQuestionsPresent(projectIdObj, userIdObj, roleQuestionnaireKey);
+              
+              // Ensure all questions are present (merge with existing or create new)
+              console.log(`🔄 Ensuring all questions present for ${roleQuestionnaireKey}...`);
+              await ensureAllQuestionsPresent(projectIdObj, userIdObj, roleQuestionnaireKey);
+              console.log(`✅ All questions ensured for ${roleQuestionnaireKey}`);
             
             // Now update with answered questions
             const existingRoleResponse = await Response.findOne({
@@ -1555,6 +1640,13 @@ app.post('/api/general-questions', async (req, res) => {
                 console.error(`⚠️ Error computing scores for ${roleQuestionnaireKey}:`, scoreError.message);
               }
             });
+          } else {
+            console.warn(`⚠️ Role questionnaire ${roleQuestionnaireKey} not found`);
+          }
+          } catch (error) {
+            console.error(`⚠️ Error saving role-specific response for ${roleQuestionnaireKey}:`, error.message);
+            console.error(`⚠️ Error stack:`, error.stack);
+            // Don't throw - allow other saves to continue
           }
         });
       }
@@ -1622,7 +1714,7 @@ app.get('/api/general-questions/project/:projectId', async (req, res) => {
   }
 });
 
-// Get user progress based on responses collection
+// Get user progress based on responses collection (updated to use same logic as /projects/:projectId/progress)
 app.get('/api/user-progress', async (req, res) => {
   try {
     const { projectId, userId } = req.query;
@@ -1633,65 +1725,216 @@ app.get('/api/user-progress', async (req, res) => {
     const Response = require('./models/response');
     const Question = require('./models/question');
     const ProjectAssignment = require('./models/projectAssignment');
+    // User model is already defined at the top of the file
     
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    console.log(`🔍 Progress request: projectId=${projectId}, userId=${userId}`);
 
     // Get user's assignment to determine questionnaires
     const assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
     if (!assignment) {
-      return res.json({ progress: 0, answered: 0, total: 0 });
+      console.warn(`⚠️ No assignment found for projectId=${projectId}, userId=${userId}`);
+      return res.json({ progress: 0, answered: 0, total: 0, error: 'No assignment found' });
     }
 
-    // Get all questionnaires for this user
-    const questionnaires = assignment.questionnaires || ['general-v1'];
+    console.log(`📋 Assignment found: role=${assignment.role}, questionnaires=${JSON.stringify(assignment.questionnaires || [])}`);
+
+    // Get assigned questionnaire keys from assignment (use what's actually assigned)
+    // Also ensure general-v1 is included if not already present
+    let assignedQuestionnaireKeys = assignment.questionnaires || [];
     
-    // Get total question count for all questionnaires
+    // If no questionnaires assigned, try to determine from role
+    if (assignedQuestionnaireKeys.length === 0) {
+      const user = await User.findById(userIdObj);
+      const role = user?.role || 'unknown';
+      
+      // Map role to questionnaire key (support both formats: ethical-v1 and ethical-expert-v1)
+      // Try both formats to match what's actually in the database
+      let roleQuestionnaireKey = null;
+      if (role === 'ethical-expert') {
+        // Try both formats
+        const ethicalV1 = await Question.findOne({ questionnaireKey: 'ethical-v1' });
+        const ethicalExpertV1 = await Question.findOne({ questionnaireKey: 'ethical-expert-v1' });
+        roleQuestionnaireKey = ethicalV1 ? 'ethical-v1' : (ethicalExpertV1 ? 'ethical-expert-v1' : 'ethical-v1');
+      } else if (role === 'medical-expert') {
+        const medicalV1 = await Question.findOne({ questionnaireKey: 'medical-v1' });
+        const medicalExpertV1 = await Question.findOne({ questionnaireKey: 'medical-expert-v1' });
+        roleQuestionnaireKey = medicalV1 ? 'medical-v1' : (medicalExpertV1 ? 'medical-expert-v1' : 'medical-v1');
+      } else if (role === 'technical-expert') {
+        const technicalV1 = await Question.findOne({ questionnaireKey: 'technical-v1' });
+        const technicalExpertV1 = await Question.findOne({ questionnaireKey: 'technical-expert-v1' });
+        roleQuestionnaireKey = technicalV1 ? 'technical-v1' : (technicalExpertV1 ? 'technical-expert-v1' : 'technical-v1');
+      } else if (role === 'legal-expert') {
+        const legalV1 = await Question.findOne({ questionnaireKey: 'legal-v1' });
+        const legalExpertV1 = await Question.findOne({ questionnaireKey: 'legal-expert-v1' });
+        roleQuestionnaireKey = legalV1 ? 'legal-v1' : (legalExpertV1 ? 'legal-expert-v1' : 'legal-v1');
+      }
+      
+      if (roleQuestionnaireKey) {
+        assignedQuestionnaireKeys = ['general-v1', roleQuestionnaireKey];
+      } else {
+        assignedQuestionnaireKeys = ['general-v1'];
+      }
+    } else {
+      // Ensure general-v1 is always included
+      if (!assignedQuestionnaireKeys.includes('general-v1')) {
+        assignedQuestionnaireKeys = ['general-v1', ...assignedQuestionnaireKeys];
+      }
+      
+      // Also check if role-specific questionnaire exists in database and add if missing
+      const user = await User.findById(userIdObj);
+      const role = user?.role || 'unknown';
+      
+      // Check if role-specific questionnaire is in the list, if not try to add it
+      const hasRoleQuestionnaire = assignedQuestionnaireKeys.some(key => 
+        (role === 'ethical-expert' && (key === 'ethical-v1' || key === 'ethical-expert-v1')) ||
+        (role === 'medical-expert' && (key === 'medical-v1' || key === 'medical-expert-v1')) ||
+        (role === 'technical-expert' && (key === 'technical-v1' || key === 'technical-expert-v1')) ||
+        (role === 'legal-expert' && (key === 'legal-v1' || key === 'legal-expert-v1'))
+      );
+      
+      if (!hasRoleQuestionnaire && role !== 'use-case-owner' && role !== 'admin') {
+        // Try to find which format exists in database
+        let roleQuestionnaireKey = null;
+        if (role === 'ethical-expert') {
+          const ethicalV1 = await Question.findOne({ questionnaireKey: 'ethical-v1' });
+          const ethicalExpertV1 = await Question.findOne({ questionnaireKey: 'ethical-expert-v1' });
+          roleQuestionnaireKey = ethicalV1 ? 'ethical-v1' : (ethicalExpertV1 ? 'ethical-expert-v1' : null);
+        } else if (role === 'medical-expert') {
+          const medicalV1 = await Question.findOne({ questionnaireKey: 'medical-v1' });
+          const medicalExpertV1 = await Question.findOne({ questionnaireKey: 'medical-expert-v1' });
+          roleQuestionnaireKey = medicalV1 ? 'medical-v1' : (medicalExpertV1 ? 'medical-expert-v1' : null);
+        } else if (role === 'technical-expert') {
+          const technicalV1 = await Question.findOne({ questionnaireKey: 'technical-v1' });
+          const technicalExpertV1 = await Question.findOne({ questionnaireKey: 'technical-expert-v1' });
+          roleQuestionnaireKey = technicalV1 ? 'technical-v1' : (technicalExpertV1 ? 'technical-expert-v1' : null);
+        } else if (role === 'legal-expert') {
+          const legalV1 = await Question.findOne({ questionnaireKey: 'legal-v1' });
+          const legalExpertV1 = await Question.findOne({ questionnaireKey: 'legal-expert-v1' });
+          roleQuestionnaireKey = legalV1 ? 'legal-v1' : (legalExpertV1 ? 'legal-expert-v1' : null);
+        }
+        
+        if (roleQuestionnaireKey && !assignedQuestionnaireKeys.includes(roleQuestionnaireKey)) {
+          assignedQuestionnaireKeys.push(roleQuestionnaireKey);
+        }
+      }
+    }
+    
+    console.log(`📋 Assigned questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
+    
+    // Count total assigned questions
     const totalQuestions = await Question.countDocuments({
-      questionnaireKey: { $in: questionnaires }
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
     });
     
-    console.log(`📊 Progress check: User ${userId}, Project ${projectId}, Questionnaires: ${questionnaires.join(', ')}, Total questions: ${totalQuestions}`);
+    if (totalQuestions === 0) {
+      return res.json({ progress: 0, answered: 0, total: 0 });
+    }
+    
+    console.log(`📊 Total assigned questions: ${totalQuestions}`);
 
-    // Get responses for all questionnaires
+    // Get responses for all assigned questionnaires
     const responses = await Response.find({
       projectId: projectIdObj,
       userId: userIdObj,
-      questionnaireKey: { $in: questionnaires }
-    }).select('answers').lean();
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('answers questionnaireKey').lean();
 
-    // Count answered questions (answer.answer !== null and has content)
+    console.log(`📦 Found ${responses.length} response documents`);
+    
+    // Count answered questions using the same logic as /projects/:projectId/progress
+    // A question is answered if:
+    // - choice: answer.choiceKey exists
+    // - text: answer.text exists and trimmed length > 0
+    // - numeric: answer.numeric is not null
+    // - multiChoice: answer.multiChoiceKeys exists and has length > 0
+    // IMPORTANT: score=0 is valid and should be treated as answered
     const answeredQuestionCodes = new Set();
-    responses.forEach(response => {
+    
+    console.log(`🔍 Analyzing ${responses.length} response documents for answered questions...`);
+    
+    responses.forEach((response, responseIndex) => {
+      console.log(`📋 Response ${responseIndex + 1}: questionnaireKey=${response.questionnaireKey}, answers.length=${response.answers?.length || 0}`);
+      
       if (response.answers && Array.isArray(response.answers)) {
-        response.answers.forEach(answer => {
-          if (answer.questionCode && answer.answer !== null && answer.answer !== undefined) {
-            // Check if answer has actual content
-            const hasContent = 
-              (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined) ||
-              (answer.answer.text !== null && answer.answer.text !== undefined && answer.answer.text.trim() !== '') ||
-              (answer.answer.numeric !== null && answer.answer.numeric !== undefined) ||
-              (answer.answer.multiChoiceKeys && Array.isArray(answer.answer.multiChoiceKeys) && answer.answer.multiChoiceKeys.length > 0);
-            
-            if (hasContent) {
-              answeredQuestionCodes.add(answer.questionCode);
-              console.log(`✅ Progress: Found answered question ${answer.questionCode} in ${response.questionnaireKey}`);
+        response.answers.forEach((answer, answerIndex) => {
+          if (!answer.questionCode) {
+            console.log(`⚠️ Answer entry ${answerIndex} missing questionCode:`, JSON.stringify(answer));
+            return; // Skip entries without questionCode
+          }
+          
+          // Check if already counted (avoid duplicates)
+          if (answeredQuestionCodes.has(answer.questionCode)) {
+            console.log(`⚠️ Duplicate questionCode detected: ${answer.questionCode}, skipping`);
+            return;
+          }
+          
+          // Debug: log the answer structure
+          console.log(`🔍 Checking answer for ${answer.questionCode}:`, {
+            hasAnswer: !!answer.answer,
+            answerType: typeof answer.answer,
+            answerValue: answer.answer,
+            score: answer.score,
+            fullAnswer: JSON.stringify(answer).substring(0, 200)
+          });
+          
+          // Check if answer has content
+          // Handle case where answer.answer might be null, undefined, or an empty object
+          // Also handle case where answer might be stored directly (not nested in answer.answer)
+          let hasAnswer = false;
+          
+          // First check if answer.answer exists and has content
+          if (answer.answer) {
+            // Check for choiceKey
+            if (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined && answer.answer.choiceKey !== '') {
+              hasAnswer = true;
+              console.log(`  ✅ Found choiceKey: ${answer.answer.choiceKey}`);
+            }
+            // Check for text
+            else if (answer.answer.text !== null && answer.answer.text !== undefined && String(answer.answer.text).trim().length > 0) {
+              hasAnswer = true;
+              console.log(`  ✅ Found text: ${String(answer.answer.text).substring(0, 50)}...`);
+            }
+            // Check for numeric
+            else if (answer.answer.numeric !== null && answer.answer.numeric !== undefined) {
+              hasAnswer = true;
+              console.log(`  ✅ Found numeric: ${answer.answer.numeric}`);
+            }
+            // Check for multiChoiceKeys
+            else if (answer.answer.multiChoiceKeys && Array.isArray(answer.answer.multiChoiceKeys) && answer.answer.multiChoiceKeys.length > 0) {
+              hasAnswer = true;
+              console.log(`  ✅ Found multiChoiceKeys: ${answer.answer.multiChoiceKeys.join(', ')}`);
             } else {
-              console.log(`⚠️ Progress: Question ${answer.questionCode} has answer object but no content`);
+              console.log(`  ❌ No valid answer content found in answer.answer:`, JSON.stringify(answer.answer));
             }
+          } 
+          // Fallback: check if answer fields exist directly on answer object (for backward compatibility)
+          else if (answer.choiceKey || (answer.text && String(answer.text).trim().length > 0) || answer.numeric !== undefined || (answer.multiChoiceKeys && Array.isArray(answer.multiChoiceKeys) && answer.multiChoiceKeys.length > 0)) {
+            hasAnswer = true;
+            console.log(`  ✅ Found answer in direct fields (backward compatibility)`);
+          }
+          else {
+            console.log(`  ❌ answer.answer is null/undefined and no direct answer fields found for ${answer.questionCode}`);
+          }
+          
+          if (hasAnswer) {
+            answeredQuestionCodes.add(answer.questionCode);
+            console.log(`✅ Counted answered question: ${answer.questionCode} (score: ${answer.score})`);
           } else {
-            if (answer.questionCode) {
-              console.log(`⚠️ Progress: Question ${answer.questionCode} has no answer (null/undefined)`);
-            }
+            console.log(`⚠️ Question ${answer.questionCode} not counted as answered`);
           }
         });
+      } else {
+        console.log(`⚠️ Response ${responseIndex + 1} has no answers array`);
       }
     });
     
-    console.log(`📊 Progress calculation: ${answeredQuestionCodes.size} answered out of ${totalQuestions} total questions for project ${projectId}, user ${userId}`);
-
     const answeredCount = answeredQuestionCodes.size;
     const progress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+    
+    console.log(`📊 Progress calculation: ${answeredCount}/${totalQuestions} = ${progress}%`);
     
     // Data integrity check: log warning if assigned questions != saved answers
     const savedQuestionCodes = new Set();
@@ -1707,12 +1950,20 @@ app.get('/api/user-progress', async (req, res) => {
     
     if (savedQuestionCodes.size !== totalQuestions) {
       console.warn(`⚠️ DATA INTEGRITY WARNING: Assigned questions (${totalQuestions}) != saved answers (${savedQuestionCodes.size}) for project ${projectId}, user ${userId}`);
+      console.warn(`⚠️ Assigned questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
+      console.warn(`⚠️ Found responses for: ${responses.map(r => r.questionnaireKey).join(', ')}`);
     }
+
+    // Log detailed progress info for debugging
+    console.log(`📊 Final progress result: ${progress}% (${answeredCount} answered out of ${totalQuestions} total questions)`);
+    console.log(`📊 Answered question codes: ${Array.from(answeredQuestionCodes).slice(0, 10).join(', ')}${answeredQuestionCodes.size > 10 ? '...' : ''}`);
 
     res.json({
       progress: Math.max(0, Math.min(100, progress)),
       answered: answeredCount,
-      total: totalQuestions
+      total: totalQuestions,
+      questionnaires: assignedQuestionnaireKeys,
+      responseCount: responses.length
     });
   } catch (err) {
     console.error('Error calculating user progress:', err);
@@ -1747,6 +1998,375 @@ app.post('/api/responses/initialize', async (req, res) => {
     });
   } catch (err) {
     console.error('Error initializing responses:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Data integrity check endpoint
+app.get('/projects/:projectId/integrity', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { userId } = req.query;
+    
+    if (!projectId || !userId) {
+      return res.status(400).json({ error: 'projectId and userId are required' });
+    }
+
+    const Response = require('./models/response');
+    const Question = require('./models/question');
+    const ProjectAssignment = require('./models/projectAssignment');
+    const { initializeResponses } = require('./services/evaluationService');
+    
+    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    console.log(`🔍 Integrity check: projectId=${projectId}, userId=${userId}`);
+    
+    // Step 1: Get project assignment
+    const assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+    if (!assignment) {
+      return res.status(404).json({ 
+        error: 'Assignment not found',
+        totalAssigned: 0,
+        totalSavedAnswerEntries: 0,
+        missingQuestionnaireKeys: [],
+        missingQuestionCodes: [],
+        isConsistent: false
+      });
+    }
+    
+    // Step 2: Get assigned questionnaire keys
+    const assignedQuestionnaireKeys = assignment.questionnaires || [];
+    if (assignedQuestionnaireKeys.length === 0) {
+      console.warn(`⚠️ No questionnaires assigned for project ${projectId}, user ${userId}`);
+      return res.json({
+        totalAssigned: 0,
+        totalSavedAnswerEntries: 0,
+        missingQuestionnaireKeys: [],
+        missingQuestionCodes: [],
+        isConsistent: true
+      });
+    }
+    
+    console.log(`📋 Assigned questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
+    
+    // Step 3: Count total assigned questions
+    const assignedQuestions = await Question.find({
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('code questionnaireKey').lean();
+    
+    const totalAssigned = assignedQuestions.length;
+    console.log(`📊 Total assigned questions: ${totalAssigned}`);
+    
+    // Step 4: Get all saved responses
+    const responses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj,
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('questionnaireKey answers').lean();
+    
+    console.log(`📦 Found ${responses.length} response documents`);
+    
+    // Step 5: Count total saved answer entries
+    let totalSavedAnswerEntries = 0;
+    const savedQuestionCodesByQuestionnaire = {};
+    const foundQuestionnaireKeys = new Set();
+    
+    responses.forEach(response => {
+      foundQuestionnaireKeys.add(response.questionnaireKey);
+      if (response.answers && Array.isArray(response.answers)) {
+        totalSavedAnswerEntries += response.answers.length;
+        if (!savedQuestionCodesByQuestionnaire[response.questionnaireKey]) {
+          savedQuestionCodesByQuestionnaire[response.questionnaireKey] = new Set();
+        }
+        response.answers.forEach(answer => {
+          if (answer.questionCode) {
+            savedQuestionCodesByQuestionnaire[response.questionnaireKey].add(answer.questionCode);
+          }
+        });
+      }
+    });
+    
+    console.log(`💾 Total saved answer entries: ${totalSavedAnswerEntries}`);
+    
+    // Step 6: Find missing questionnaire keys
+    const missingQuestionnaireKeys = assignedQuestionnaireKeys.filter(
+      key => !foundQuestionnaireKeys.has(key)
+    );
+    
+    // Step 7: Find missing question codes per questionnaire
+    const missingQuestionCodes = [];
+    const assignedQuestionsByQuestionnaire = {};
+    
+    assignedQuestions.forEach(q => {
+      if (!assignedQuestionsByQuestionnaire[q.questionnaireKey]) {
+        assignedQuestionsByQuestionnaire[q.questionnaireKey] = new Set();
+      }
+      assignedQuestionsByQuestionnaire[q.questionnaireKey].add(q.code);
+    });
+    
+    assignedQuestionnaireKeys.forEach(questionnaireKey => {
+      const assignedCodes = assignedQuestionsByQuestionnaire[questionnaireKey] || new Set();
+      const savedCodes = savedQuestionCodesByQuestionnaire[questionnaireKey] || new Set();
+      
+      assignedCodes.forEach(code => {
+        if (!savedCodes.has(code)) {
+          missingQuestionCodes.push({
+            questionnaireKey,
+            questionCode: code
+          });
+        }
+      });
+    });
+    
+    // Step 8: Validate consistency
+    const isConsistent = 
+      missingQuestionnaireKeys.length === 0 && 
+      missingQuestionCodes.length === 0 &&
+      totalSavedAnswerEntries >= totalAssigned; // >= because there might be extra entries
+    
+    // Step 9: Log errors if mismatch
+    if (!isConsistent) {
+      console.error(`❌ DATA INTEGRITY ERROR for project ${projectId}, user ${userId}:`);
+      if (missingQuestionnaireKeys.length > 0) {
+        console.error(`   Missing questionnaire keys: ${missingQuestionnaireKeys.join(', ')}`);
+      }
+      if (missingQuestionCodes.length > 0) {
+        console.error(`   Missing question codes: ${missingQuestionCodes.length} total`);
+        missingQuestionCodes.slice(0, 10).forEach(m => {
+          console.error(`     - ${m.questionnaireKey}:${m.questionCode}`);
+        });
+        if (missingQuestionCodes.length > 10) {
+          console.error(`     ... and ${missingQuestionCodes.length - 10} more`);
+        }
+      }
+      if (totalSavedAnswerEntries < totalAssigned) {
+        console.error(`   Answer count mismatch: ${totalSavedAnswerEntries} saved vs ${totalAssigned} assigned`);
+      }
+      
+      // Optional auto-repair
+      const autoRepair = req.query.autoRepair === 'true';
+      if (autoRepair) {
+        console.log(`🔧 Auto-repair enabled, initializing missing responses...`);
+        try {
+          await initializeResponses(projectIdObj, userIdObj, assignment.role, assignedQuestionnaireKeys);
+          console.log(`✅ Auto-repair completed`);
+        } catch (repairError) {
+          console.error(`❌ Auto-repair failed: ${repairError.message}`);
+        }
+      }
+    } else {
+      console.log(`✅ Data integrity check passed for project ${projectId}, user ${userId}`);
+    }
+    
+    res.json({
+      totalAssigned,
+      totalSavedAnswerEntries,
+      missingQuestionnaireKeys,
+      missingQuestionCodes: missingQuestionCodes.map(m => `${m.questionnaireKey}:${m.questionCode}`),
+      isConsistent
+    });
+  } catch (err) {
+    console.error('Error in integrity check:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Debug endpoint to check answer structure
+app.get('/projects/:projectId/debug-answers', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { userId } = req.query;
+    
+    if (!projectId || !userId) {
+      return res.status(400).json({ error: 'projectId and userId are required' });
+    }
+
+    const Response = require('./models/response');
+    
+    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    const responses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj
+    }).select('questionnaireKey answers').lean();
+    
+    const debugInfo = responses.map(response => ({
+      questionnaireKey: response.questionnaireKey,
+      totalAnswers: response.answers?.length || 0,
+      answers: response.answers?.slice(0, 5).map(answer => ({
+        questionCode: answer.questionCode,
+        answerStructure: answer.answer,
+        answerType: typeof answer.answer,
+        hasChoiceKey: answer.answer?.choiceKey !== undefined,
+        hasText: answer.answer?.text !== undefined,
+        hasNumeric: answer.answer?.numeric !== undefined,
+        hasMultiChoice: answer.answer?.multiChoiceKeys !== undefined,
+        score: answer.score
+      })) || []
+    }));
+    
+    res.json({ responses: debugInfo });
+  } catch (err) {
+    console.error('Error in debug endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Progress endpoint (based on assigned questions and answered count)
+app.get('/projects/:projectId/progress', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { userId } = req.query;
+    
+    if (!projectId || !userId) {
+      return res.status(400).json({ error: 'projectId and userId are required' });
+    }
+
+    const Response = require('./models/response');
+    const Question = require('./models/question');
+    const ProjectAssignment = require('./models/projectAssignment');
+    
+    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    console.log(`📊 Progress request: projectId=${projectId}, userId=${userId}`);
+    
+    // Step 1: Get project assignment
+    const assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+    if (!assignment) {
+      return res.json({ 
+        totalAssigned: 0, 
+        answeredCount: 0, 
+        progressPercent: 0 
+      });
+    }
+    
+    // Step 2: Get assigned questionnaire keys
+    const assignedQuestionnaireKeys = assignment.questionnaires || [];
+    if (assignedQuestionnaireKeys.length === 0) {
+      return res.json({ 
+        totalAssigned: 0, 
+        answeredCount: 0, 
+        progressPercent: 0 
+      });
+    }
+    
+    // Step 3: Count total assigned questions
+    const totalAssigned = await Question.countDocuments({
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    });
+    
+    if (totalAssigned === 0) {
+      return res.json({ 
+        totalAssigned: 0, 
+        answeredCount: 0, 
+        progressPercent: 0 
+      });
+    }
+    
+    // Step 4: Get all responses
+    const responses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj,
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('answers').lean();
+    
+    // Step 5: Count answered questions
+    // A question is answered if:
+    // - choice: answer.choiceKey exists
+    // - text: answer.text exists and trimmed length > 0
+    // - numeric: answer.numeric is not null
+    // - multiChoice: answer.multiChoiceKeys exists and has length > 0
+    // IMPORTANT: score=0 is valid and should be treated as answered
+    let answeredCount = 0;
+    const answeredQuestionCodes = new Set();
+    
+    console.log(`🔍 Analyzing ${responses.length} response documents for answered questions...`);
+    
+    responses.forEach((response, responseIndex) => {
+      console.log(`📋 Response ${responseIndex + 1}: questionnaireKey=${response.questionnaireKey}, answers.length=${response.answers?.length || 0}`);
+      
+      if (response.answers && Array.isArray(response.answers)) {
+        response.answers.forEach((answer, answerIndex) => {
+          if (!answer.questionCode) {
+            console.log(`⚠️ Answer entry ${answerIndex} missing questionCode:`, JSON.stringify(answer));
+            return; // Skip entries without questionCode
+          }
+          
+          // Check if already counted (avoid duplicates)
+          if (answeredQuestionCodes.has(answer.questionCode)) {
+            console.log(`⚠️ Duplicate questionCode detected: ${answer.questionCode}, skipping`);
+            return;
+          }
+          
+          // Debug: log the answer structure
+          console.log(`🔍 Checking answer for ${answer.questionCode}:`, {
+            hasAnswer: !!answer.answer,
+            answerType: typeof answer.answer,
+            answerValue: answer.answer,
+            score: answer.score
+          });
+          
+          // Check if answer has content
+          // Handle case where answer.answer might be null, undefined, or an empty object
+          let hasAnswer = false;
+          
+          if (answer.answer) {
+            // Check for choiceKey
+            if (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined && answer.answer.choiceKey !== '') {
+              hasAnswer = true;
+              console.log(`  ✅ Found choiceKey: ${answer.answer.choiceKey}`);
+            }
+            // Check for text
+            else if (answer.answer.text !== null && answer.answer.text !== undefined && String(answer.answer.text).trim().length > 0) {
+              hasAnswer = true;
+              console.log(`  ✅ Found text: ${String(answer.answer.text).substring(0, 50)}...`);
+            }
+            // Check for numeric
+            else if (answer.answer.numeric !== null && answer.answer.numeric !== undefined) {
+              hasAnswer = true;
+              console.log(`  ✅ Found numeric: ${answer.answer.numeric}`);
+            }
+            // Check for multiChoiceKeys
+            else if (answer.answer.multiChoiceKeys && Array.isArray(answer.answer.multiChoiceKeys) && answer.answer.multiChoiceKeys.length > 0) {
+              hasAnswer = true;
+              console.log(`  ✅ Found multiChoiceKeys: ${answer.answer.multiChoiceKeys.join(', ')}`);
+            } else {
+              console.log(`  ❌ No valid answer content found in answer.answer:`, JSON.stringify(answer.answer));
+            }
+          } else {
+            console.log(`  ❌ answer.answer is null/undefined for ${answer.questionCode}`);
+          }
+          
+          if (hasAnswer) {
+            answeredQuestionCodes.add(answer.questionCode);
+            answeredCount++;
+            console.log(`✅ Counted answered question: ${answer.questionCode} (score: ${answer.score})`);
+          } else {
+            console.log(`⚠️ Question ${answer.questionCode} not counted as answered`);
+          }
+        });
+      } else {
+        console.log(`⚠️ Response ${responseIndex + 1} has no answers array`);
+      }
+    });
+    
+    // Step 6: Calculate progress
+    const progressPercent = totalAssigned > 0 
+      ? Math.round((answeredCount / totalAssigned) * 100) 
+      : 0;
+    
+    console.log(`📊 Progress: ${answeredCount}/${totalAssigned} = ${progressPercent}%`);
+    
+    res.json({
+      totalAssigned,
+      answeredCount,
+      progressPercent: Math.max(0, Math.min(100, progressPercent))
+    });
+  } catch (err) {
+    console.error('Error calculating progress:', err);
     res.status(500).json({ error: err.message });
   }
 });

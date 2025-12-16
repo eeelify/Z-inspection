@@ -12,21 +12,33 @@ export async function fetchUserProgress(project: Project, currentUser: User): Pr
     const userId = currentUser.id || (currentUser as any)._id;
 
     if (!projectId || !userId) {
+      console.warn('⚠️ fetchUserProgress: Missing projectId or userId', { projectId, userId });
       return 0;
     }
 
+    console.log(`📊 Fetching progress for project ${projectId}, user ${userId}`);
+    
     // Yeni API endpoint'ini kullan
     const response = await fetch(api(`/api/user-progress?projectId=${projectId}&userId=${userId}`));
     
     if (!response.ok) {
-      console.error('Failed to fetch user progress:', response.statusText);
+      const errorText = await response.text();
+      console.error('❌ Failed to fetch user progress:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      });
       return 0;
     }
 
     const data = await response.json();
-    return data.progress || 0;
+    const progress = data.progress || 0;
+    
+    console.log(`✅ Progress fetched: ${progress}% (answered: ${data.answered || 0}/${data.total || 0})`);
+    
+    return progress;
   } catch (err) {
-    console.error('User progress calc error', err);
+    console.error('❌ User progress calc error', err);
     return 0;
   }
 }

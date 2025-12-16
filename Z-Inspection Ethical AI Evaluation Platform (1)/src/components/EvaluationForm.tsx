@@ -59,6 +59,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const [editingTensionId, setEditingTensionId] = useState<string | null>(null);
   const [votingTensionId, setVotingTensionId] = useState<string | null>(null);
   const [userProgress, setUserProgress] = useState<number>(0); // Backend'den gelen progress
+  const [hasFetchedProgress, setHasFetchedProgress] = useState<boolean>(false); // Backend'den progress fetch edildi mi?
   
   // Tension form state
   const [principle1, setPrinciple1] = useState<EthicalPrinciple | undefined>();
@@ -285,19 +286,33 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
   // Backend'den progress çek
   useEffect(() => {
+    let mounted = true;
+    
     const fetchProgress = async () => {
       try {
         const progress = await fetchUserProgress(project, currentUser);
-        setUserProgress(progress);
+        if (mounted) {
+          setUserProgress(progress);
+          setHasFetchedProgress(true); // İlk fetch tamamlandı
+        }
       } catch (error) {
         console.error('Error fetching user progress:', error);
+        if (mounted) {
+          setHasFetchedProgress(true); // Hata olsa bile fetch denendi olarak işaretle
+        }
       }
     };
     
+    // Initial fetch
     fetchProgress();
+    
     // Cevaplar değiştiğinde veya kaydetme işlemi sonrasında progress'i güncelle
     const interval = setInterval(fetchProgress, 2000); // Her 2 saniyede bir güncelle
-    return () => clearInterval(interval);
+    
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, [project, currentUser, answers, saving]);
 
   const activeQuestion = currentQuestions[currentQuestionIndex];
@@ -739,8 +754,47 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   };
 
   const getCompletionPercentage = () => {
-    // Backend'den gelen progress'i kullan (tüm soruları kapsar: general + role-specific)
-    return userProgress;
+    // Calculate local progress for immediate feedback
+    // This provides instant visual feedback while user is answering
+    const roleQuestions = getQuestionsByRole(roleKey);
+    const allRoleQuestions = [...roleQuestions, ...customQuestions]; // Tüm stage'lerdeki sorular
+    
+    let localProgress = 0;
+    if (allRoleQuestions.length > 0) {
+      // Count answered questions across ALL stages (set-up, assess, resolve)
+      let answeredCount = 0;
+      allRoleQuestions.forEach(question => {
+        const questionId = question.id;
+        const hasAnswer = answers[questionId] !== undefined && answers[questionId] !== null && answers[questionId] !== '';
+        
+        // For assess stage, also check if priority/risk score is set
+        if (question.stage === 'assess') {
+          const hasPriority = questionPriorities[questionId] !== undefined;
+          const hasRiskScore = riskScores[questionId] !== undefined;
+          if (hasAnswer && (hasPriority || hasRiskScore)) {
+            answeredCount++;
+          }
+        } else {
+          // For set-up and resolve stages, only answer is required
+          if (hasAnswer) {
+            answeredCount++;
+          }
+        }
+      });
+      
+      localProgress = Math.round((answeredCount / allRoleQuestions.length) * 100);
+    }
+    
+    // If backend progress hasn't been fetched yet, use local progress for immediate feedback
+    // This prevents showing 0% while waiting for the first backend response (up to 2 seconds delay)
+    if (!hasFetchedProgress) {
+      return localProgress;
+    }
+    
+    // Once backend progress is available, use the maximum of backend and local progress
+    // Backend progress is more accurate as it covers all questions (general + role-specific)
+    // Local progress provides immediate feedback for the current session
+    return Math.max(userProgress, localProgress);
   };
 
   const stages: { key: StageKey; label: string; icon: string }[] = [
@@ -775,7 +829,23 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-sm font-medium">
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  try {
+                    if (onBack && typeof onBack === 'function') {
+                      onBack();
+                    } else {
+                      console.warn('onBack is not a function or is undefined');
+                    }
+                  } catch (error) {
+                    console.error('Error in onBack:', error);
+                    // Error is logged, parent component should handle navigation
+                  }
+                }} 
+                className="flex items-center text-gray-600 hover:text-gray-900 transition-colors bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-sm font-medium"
+              >
                 <ArrowLeft className="h-4 w-4 mr-1" /> Back
               </button>
               <div>

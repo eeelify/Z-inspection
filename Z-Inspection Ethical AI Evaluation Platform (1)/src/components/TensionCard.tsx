@@ -19,8 +19,9 @@ export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDe
   const canDelete = currentUser.role === 'admin' || tension.createdBy === currentUser.id;
   
   // Yüzdelik Hesaplama
+  // Eğer tüm oylar agree ise, kesinlikle %100 olmalı (yuvarlama hatasını önlemek için)
   const agreePercentage = totalVotes > 0 
-    ? Math.round((agreeCount / totalVotes) * 100) 
+    ? (agreeCount === totalVotes ? 100 : Math.round((agreeCount / totalVotes) * 100))
     : 0;
 
   // Evidence sayısını hesapla (Initial evidence dahil)
@@ -71,10 +72,17 @@ export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDe
       {/* Consensus Bar */}
       <div className="flex items-center space-x-2 mb-4">
         <span className="text-xs text-gray-500 font-medium">Consensus:</span>
-        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
           <div 
-            className="h-full bg-green-500 transition-all duration-500 ease-out"
-            style={{ width: `${agreePercentage}%` }}
+            className={`h-full transition-all duration-500 ease-out ${
+              agreePercentage === 100 
+                ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                : 'bg-green-500'
+            }`}
+            style={{ 
+              width: agreePercentage === 100 ? '100%' : `${agreePercentage}%`,
+              minWidth: agreePercentage > 0 && agreePercentage < 100 ? '2px' : '0'
+            }}
           />
         </div>
         <span className="text-xs text-gray-500 w-24 text-right">

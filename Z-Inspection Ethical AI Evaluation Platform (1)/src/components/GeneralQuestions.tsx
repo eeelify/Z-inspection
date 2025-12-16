@@ -445,7 +445,13 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           <AlertTriangle className="w-10 h-10 text-yellow-600 mb-4" />
           <p className="text-gray-600">No questions found for your role.</p>
           <button
-            onClick={onBack}
+            onClick={() => {
+              try {
+                onBack();
+              } catch (error) {
+                console.error('Error in onBack:', error);
+              }
+            }}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Go Back
@@ -463,16 +469,29 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button 
-                onClick={onBack} 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  try {
+                    if (onBack && typeof onBack === 'function') {
+                      onBack();
+                    } else {
+                      console.warn('onBack is not a function or is undefined');
+                    }
+                  } catch (error) {
+                    console.error('Error in onBack:', error);
+                    // Error is logged, parent component should handle navigation
+                  }
+                }} 
                 className="flex items-center text-gray-600 hover:text-gray-900 transition-colors bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-sm font-medium"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" /> Back
               </button>
               <div>
                 <h1 className="text-xl text-gray-900 font-bold tracking-tight">
-                  General Questions
+                  Questions
                 </h1>
-                <p className="text-sm text-gray-600">Project: {project.title}</p>
+                <p className="text-sm text-gray-600">{project.title}</p>
               </div>
             </div>
             

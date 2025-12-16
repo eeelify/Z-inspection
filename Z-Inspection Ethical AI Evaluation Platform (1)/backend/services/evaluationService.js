@@ -89,7 +89,7 @@ async function initializeResponses(projectId, userId, role, questionnaires) {
             questionId: question._id,
             questionCode: question.code,
             answer: null, // Unanswered
-            score: null,
+            score: 2, // Default score for unanswered questions (required field)
             notes: null,
             evidence: []
           }));
@@ -104,7 +104,7 @@ async function initializeResponses(projectId, userId, role, questionnaires) {
           questionId: question._id,
           questionCode: question.code,
           answer: null, // Unanswered
-          score: null,
+          score: 2, // Default score for unanswered questions (required field)
           notes: null,
           evidence: []
         }));
@@ -493,7 +493,7 @@ async function ensureAllQuestionsPresent(projectId, userId, questionnaireKey) {
         questionId: question._id,
         questionCode: question.code,
         answer: null,
-        score: null,
+        score: 2, // Default score for unanswered questions (required field)
         notes: null,
         evidence: []
       }));
@@ -522,7 +522,7 @@ async function ensureAllQuestionsPresent(projectId, userId, questionnaireKey) {
         questionId: question._id,
         questionCode: question.code,
         answer: null,
-        score: null,
+        score: 2, // Default score for unanswered questions (required field)
         notes: null,
         evidence: []
       }));
