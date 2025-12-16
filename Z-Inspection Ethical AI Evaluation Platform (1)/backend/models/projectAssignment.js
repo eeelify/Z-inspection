@@ -31,6 +31,8 @@ const ProjectAssignmentSchema = new mongoose.Schema({
   },
   dueAt: Date,
   completedAt: Date,
+  // --- Evolution completion (after all tensions are voted) ---
+  evolutionCompletedAt: Date,
   notes: String
 }, {
   timestamps: true

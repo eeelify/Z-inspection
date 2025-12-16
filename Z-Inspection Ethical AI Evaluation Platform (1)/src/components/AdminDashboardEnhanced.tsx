@@ -379,8 +379,17 @@ export function AdminDashboardEnhanced({
       } catch (error) {
         console.error('Error marking messages as read:', error);
       }
-      
-      // Open chat panel
+
+      // Notification-only items should NOT open Chats.
+      const lastMessageText = String(conversation.lastMessage || '');
+      const isNotificationOnly =
+        Boolean(conversation.isNotification) || lastMessageText.startsWith('[NOTIFICATION]');
+      if (isNotificationOnly) {
+        setShowNotifications(false);
+        return;
+      }
+
+      // Open chat panel for normal messages
       setChatProject(project);
       setChatOtherUser(otherUser);
       setChatPanelOpen(true);
@@ -574,7 +583,9 @@ export function AdminDashboardEnhanced({
                                   {conv.projectTitle}
                                 </div>
                                 <div className="text-xs text-gray-500 line-clamp-2">
-                                  {conv.lastMessage}
+                                  {String(conv.lastMessage || '').startsWith('[NOTIFICATION]')
+                                    ? String(conv.lastMessage).replace(/^\[NOTIFICATION\]\s*/, '')
+                                    : conv.lastMessage}
                                 </div>
                               </div>
                               {conv.count > 1 && (

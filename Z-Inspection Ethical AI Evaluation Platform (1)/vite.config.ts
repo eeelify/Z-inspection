@@ -56,5 +56,13 @@
     server: {
       port: 3000,
       open: true,
+      proxy: {
+        // Forward API calls to local backend in dev
+        '/api': {
+          target: 'http://localhost:5000',
+          changeOrigin: true,
+          secure: false,
+        },
+      },
     },
   });

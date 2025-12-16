@@ -1,26 +1,43 @@
 /// <reference types="vite/client" />
 
-// Merkezi API URL tanımı (sadece .env üzerinden).
-// Proje kökündeki (package.json ile aynı klasördeki) `.env` içine örn:
-const RAW_API_URL = import.meta.env.VITE_API_URL?.trim();
+/**
+ * API URL resolution strategy:
+ * - DEV: use relative paths (Vite proxy handles forwarding to backend).
+ * - PROD: prefer VITE_API_URL, fallback to same-origin.
+ */
 
-if (!RAW_API_URL) {
-  throw new Error(
-    '❌ VITE_API_URL bulunamadı. Proje kökündeki frontend `.env` dosyanıza `VITE_API_URL` ekleyin.'
-  );
-}
+const normalizePath = (path: string) => (path.startsWith('/') ? path : `/${path}`);
 
-const normalized = RAW_API_URL.replace(/\/+$/, '');
-if (!/^https?:\/\//i.test(normalized)) {
-  throw new Error(
-    `❌ VITE_API_URL geçersiz: "${RAW_API_URL}". "http://..." veya "https://..." ile başlamalı.`
-  );
-}
+const rawApiUrl = import.meta.env.VITE_API_URL?.trim();
 
-export const API_BASE_URL = normalized;
+const normalizeBaseUrl = (base: string) => base.replace(/\/+$/, '');
+
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
+
+export const API_BASE_URL = (() => {
+  // If VITE_API_URL is provided, always use it (dev or prod).
+  // This makes local dev deterministic and avoids relying on proxy configuration.
+  if (rawApiUrl) {
+    const normalized = normalizeBaseUrl(rawApiUrl);
+    if (!isHttpUrl(normalized)) {
+      throw new Error(
+        `❌ VITE_API_URL geçersiz: "${rawApiUrl}". "http://..." veya "https://..." ile başlamalı.`
+      );
+    }
+    return normalized;
+  }
+
+  if (import.meta.env.DEV) {
+    // In dev, if no explicit base URL is set, rely on Vite proxy/same-origin.
+    return '';
+  }
+
+  // Production fallback: same origin (useful when frontend is served by backend)
+  return '';
+})();
 
 export const api = (path: string) => {
-  const p = path.startsWith('/') ? path : `/${path}`;
+  const p = normalizePath(path);
   return `${API_BASE_URL}${p}`;
 };
 

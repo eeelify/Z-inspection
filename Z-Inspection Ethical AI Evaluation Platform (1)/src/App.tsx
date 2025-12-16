@@ -34,6 +34,8 @@ function App() {
   const [users, setUsers] = useState<User[]>([]);
   
   const [needsPrecondition, setNeedsPrecondition] = useState(false);
+  const [dashboardPreferredTab, setDashboardPreferredTab] = useState<"assigned" | "commented" | null>(null);
+  const [assignmentsRefreshToken, setAssignmentsRefreshToken] = useState(0);
 
   // --- VERİ ÇEKME (FETCH) ---
   useEffect(() => {
@@ -195,6 +197,52 @@ function App() {
     setSelectedTension(null);
     setSelectedOwner(null);
     setSelectedUseCase(null);
+  };
+
+  const handleFinishEvolution = async (project: Project) => {
+    try {
+      const projectId = project?.id || (project as any)?._id;
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!projectId || !userId) return;
+
+      const res = await fetch(api(`/api/projects/${projectId}/finish-evolution`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!res.ok) {
+        const rawText = await res.text().catch(() => "");
+        const err = (() => {
+          try {
+            return rawText ? JSON.parse(rawText) : {};
+          } catch {
+            return {};
+          }
+        })();
+
+        if ((err as any)?.error === "NOT_ALL_TENSIONS_VOTED") {
+          alert("Please make sure you have voted on all tensions.");
+          return;
+        }
+        const details = rawText && rawText.length < 500 ? rawText : "";
+        alert((err as any)?.error || `Failed to finish evolution.${details ? `\n\n${details}` : ""}`);
+        return;
+      }
+
+      setAssignmentsRefreshToken((x) => x + 1);
+      setDashboardPreferredTab("commented");
+      setCurrentView("dashboard");
+      setSelectedProject(null);
+      setSelectedTension(null);
+      setSelectedOwner(null);
+      setSelectedUseCase(null);
+
+      window.dispatchEvent(new Event("message-sent"));
+    } catch (error) {
+      console.error("Finish evolution error:", error);
+      alert("Could not connect to the server.");
+    }
   };
 
   const handleViewTension = (tension: Tension) => {
@@ -382,6 +430,7 @@ function App() {
             users={users}
             onBack={handleBackToDashboard}
             onStartEvaluation={() => handleStartEvaluation(selectedProject)}
+            onFinishEvolution={() => handleFinishEvolution(selectedProject)}
             onViewTension={handleViewTension}
             onViewOwner={handleViewOwner}
             onCreateTension={handleCreateTension}
@@ -413,15 +462,14 @@ function App() {
           return currentUser?.role === "use-case-owner" ? (
             <UseCaseOwnerDashboard
               currentUser={currentUser}
-              projects={projects}
-              users={users}
               useCases={useCases}
-              onViewProject={handleViewProject}
-              onStartEvaluation={handleStartEvaluation}
-              onCreateProject={handleCreateProject}
-              onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              users={users}
+              projects={projects}
+              onCreateUseCase={handleCreateUseCase}
+              onViewUseCase={handleViewUseCase}
+              onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -444,11 +492,15 @@ function App() {
               users={users}
               onViewProject={handleViewProject}
               onStartEvaluation={handleStartEvaluation}
+              onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
               onNavigate={setCurrentView}
               onViewUseCase={handleViewUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              preferredTab={dashboardPreferredTab}
+              onPreferredTabApplied={() => setDashboardPreferredTab(null)}
+              assignmentsRefreshToken={assignmentsRefreshToken}
             />
           );
         }
@@ -493,15 +545,14 @@ function App() {
           return currentUser?.role === "use-case-owner" ? (
             <UseCaseOwnerDashboard
               currentUser={currentUser}
-              projects={projects}
-              users={users}
               useCases={useCases}
-              onViewProject={handleViewProject}
-              onStartEvaluation={handleStartEvaluation}
-              onCreateProject={handleCreateProject}
-              onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              users={users}
+              projects={projects}
+              onCreateUseCase={handleCreateUseCase}
+              onViewUseCase={handleViewUseCase}
+              onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -524,11 +575,15 @@ function App() {
               users={users}
               onViewProject={handleViewProject}
               onStartEvaluation={handleStartEvaluation}
+              onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
               onNavigate={setCurrentView}
               onViewUseCase={handleViewUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              preferredTab={dashboardPreferredTab}
+              onPreferredTabApplied={() => setDashboardPreferredTab(null)}
+              assignmentsRefreshToken={assignmentsRefreshToken}
             />
           );
         }
@@ -572,15 +627,14 @@ function App() {
           return currentUser?.role === "use-case-owner" ? (
             <UseCaseOwnerDashboard
               currentUser={currentUser}
-              projects={projects}
-              users={users}
               useCases={useCases}
-              onViewProject={handleViewProject}
-              onStartEvaluation={handleStartEvaluation}
-              onCreateProject={handleCreateProject}
-              onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              users={users}
+              projects={projects}
+              onCreateUseCase={handleCreateUseCase}
+              onViewUseCase={handleViewUseCase}
+              onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -603,11 +657,15 @@ function App() {
               users={users}
               onViewProject={handleViewProject}
               onStartEvaluation={handleStartEvaluation}
+              onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
               onNavigate={setCurrentView}
               onViewUseCase={handleViewUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              preferredTab={dashboardPreferredTab}
+              onPreferredTabApplied={() => setDashboardPreferredTab(null)}
+              assignmentsRefreshToken={assignmentsRefreshToken}
             />
           );
         }
@@ -720,11 +778,15 @@ function App() {
               users={users}
               onViewProject={handleViewProject}
               onStartEvaluation={handleStartEvaluation}
+              onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
               onNavigate={setCurrentView}
               onViewUseCase={handleViewUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              preferredTab={dashboardPreferredTab}
+              onPreferredTabApplied={() => setDashboardPreferredTab(null)}
+              assignmentsRefreshToken={assignmentsRefreshToken}
             />
           );
         }
@@ -743,15 +805,14 @@ function App() {
           {currentUser?.role === "use-case-owner" ? (
             <UseCaseOwnerDashboard
               currentUser={currentUser}
-              projects={projects}
-              users={users}
               useCases={useCases}
-              onViewProject={handleViewProject}
-              onStartEvaluation={handleStartEvaluation}
-              onCreateProject={handleCreateProject}
-              onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              users={users}
+              projects={projects}
+              onCreateUseCase={handleCreateUseCase}
+              onViewUseCase={handleViewUseCase}
+              onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
+              onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -774,11 +835,15 @@ function App() {
               users={users}
               onViewProject={handleViewProject}
               onStartEvaluation={handleStartEvaluation}
+              onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
               onNavigate={setCurrentView}
               onViewUseCase={handleViewUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              preferredTab={dashboardPreferredTab}
+              onPreferredTabApplied={() => setDashboardPreferredTab(null)}
+              assignmentsRefreshToken={assignmentsRefreshToken}
             />
           )}
         </div>

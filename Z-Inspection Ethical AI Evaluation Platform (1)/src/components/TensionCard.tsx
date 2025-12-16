@@ -8,9 +8,10 @@ interface TensionCardProps {
   onVote: (tensionId: string, voteType: 'agree' | 'disagree') => void;
   onCommentClick: (tension: Tension) => void;
   onDelete?: (tensionId: string) => void;
+  disableVoting?: boolean;
 }
 
-export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDelete }: TensionCardProps) {
+export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDelete, disableVoting }: TensionCardProps) {
   const userVote = tension.userVote; 
   const agreeCount = tension.consensus?.agree || 0;
   const disagreeCount = tension.consensus?.disagree || 0;
@@ -95,10 +96,17 @@ export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDe
         <div className="flex space-x-3">
           {/* AGREE */}
           <button
-            onClick={(e) => { e.stopPropagation(); onVote(tension.id || (tension as any)._id, 'agree'); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (disableVoting) return;
+              onVote(tension.id || (tension as any)._id, 'agree');
+            }}
+            disabled={Boolean(disableVoting)}
             className={`flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-              userVote === 'agree' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-green-50'
-            }`}
+              userVote === 'agree'
+                ? 'bg-green-100 text-green-700 border-green-300'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-green-50'
+            } ${disableVoting ? 'opacity-50 cursor-not-allowed hover:bg-white' : ''}`}
           >
             <ThumbsUp className={`w-4 h-4 mr-1.5 ${userVote === 'agree' ? 'fill-current' : ''}`} />
             Agree ({agreeCount})
@@ -106,10 +114,17 @@ export function TensionCard({ tension, currentUser, onVote, onCommentClick, onDe
 
           {/* DISAGREE */}
           <button
-            onClick={(e) => { e.stopPropagation(); onVote(tension.id || (tension as any)._id, 'disagree'); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (disableVoting) return;
+              onVote(tension.id || (tension as any)._id, 'disagree');
+            }}
+            disabled={Boolean(disableVoting)}
             className={`flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-              userVote === 'disagree' ? 'bg-red-100 text-red-700 border-red-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-red-50'
-            }`}
+              userVote === 'disagree'
+                ? 'bg-red-100 text-red-700 border-red-300'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-red-50'
+            } ${disableVoting ? 'opacity-50 cursor-not-allowed hover:bg-white' : ''}`}
           >
             <ThumbsDown className={`w-4 h-4 mr-1.5 ${userVote === 'disagree' ? 'fill-current' : ''}`} />
             Disagree ({disagreeCount})

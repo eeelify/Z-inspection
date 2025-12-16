@@ -260,6 +260,8 @@ const MessageSchema = new mongoose.Schema({
   fromUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   toUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   text: { type: String, required: true },
+  // Notification-only messages should show in bell notifications but not in chat threads
+  isNotification: { type: Boolean, default: false, index: true },
   createdAt: { type: Date, default: Date.now },
   readAt: { type: Date }
 });
@@ -720,6 +722,140 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
   } catch (err) { 
     console.error(err);
     res.status(500).json({ error: err.message }); 
+  }
+});
+
+// --- Evolution completion (Finish Evolution) ---
+// GET /api/project-assignments?userId=
+// Returns assignment records for a user (used to power "Commented" tab and Finish Evolution visibility)
+app.get('/api/project-assignments', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const ProjectAssignment = require('./models/projectAssignment');
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+    const assignments = await ProjectAssignment.find({ userId: userIdObj })
+      .select('projectId userId role status completedAt evolutionCompletedAt')
+      .lean();
+
+    res.json(
+      (assignments || []).map((a) => ({
+        ...a,
+        id: String(a._id),
+        projectId: String(a.projectId),
+        userId: String(a.userId),
+      }))
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/projects/:projectId/finish-evolution
+// Server-side check: user must have voted on ALL tensions in the project.
+// If ok, marks the user's ProjectAssignment as evolutionCompletedAt and notifies admin via notification message.
+app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { userId } = req.body || {};
+
+    if (!projectId) return res.status(400).json({ error: 'Missing projectId' });
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    const userIdStr = String(userId);
+
+    const project = await Project.findById(projectIdObj).lean();
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const user = await User.findById(userIdObj).select('name role').lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Check tension votes
+    const tensions = await Tension.find({ projectId: projectIdObj }).select('votes').lean();
+    const totalTensions = tensions.length;
+    const votedTensions = tensions.filter((t) => {
+      const votes = Array.isArray(t.votes) ? t.votes : [];
+      return votes.some((v) => String(v.userId) === userIdStr);
+    }).length;
+
+    if (totalTensions > 0 && votedTensions < totalTensions) {
+      return res.status(400).json({
+        error: 'NOT_ALL_TENSIONS_VOTED',
+        totalTensions,
+        votedTensions,
+      });
+    }
+
+    const ProjectAssignment = require('./models/projectAssignment');
+    let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+
+    // Create assignment if missing (should be rare)
+    if (!assignment) {
+      try {
+        const { createAssignment } = require('./services/evaluationService');
+        const role = user.role || 'unknown';
+        // Preserve existing behavior: ensure general-v1 is included. Role-specific questionnaire is optional here.
+        const questionnaires = ['general-v1'];
+        assignment = await createAssignment(projectIdObj, userIdObj, role, questionnaires);
+      } catch {
+        // fallback: create minimal assignment doc
+        assignment = await ProjectAssignment.create({
+          projectId: projectIdObj,
+          userId: userIdObj,
+          role: user.role || 'unknown',
+          questionnaires: ['general-v1'],
+          status: 'assigned',
+        });
+      }
+    }
+
+    if (assignment.evolutionCompletedAt) {
+      return res.json({
+        success: true,
+        alreadyCompleted: true,
+        totalTensions,
+        votedTensions,
+        evolutionCompletedAt: assignment.evolutionCompletedAt,
+      });
+    }
+
+    assignment.evolutionCompletedAt = new Date();
+    await assignment.save();
+
+    // Notify ALL admins (case-insensitive match)
+    const adminUsers = await User.find({ role: { $regex: /^admin$/i } }).select('_id').lean();
+    if (Array.isArray(adminUsers) && adminUsers.length > 0) {
+      const notificationText = `[NOTIFICATION] Evolution completed for project "${project.title}" by ${user.name}`;
+      await Promise.all(
+        adminUsers
+          .filter((a) => a?._id)
+          .map((a) =>
+            Message.create({
+              projectId: projectIdObj,
+              fromUserId: userIdObj,
+              toUserId: a._id,
+              text: notificationText,
+              isNotification: true,
+              createdAt: new Date(),
+              readAt: null,
+            })
+          )
+      );
+    }
+
+    res.json({
+      success: true,
+      alreadyCompleted: false,
+      totalTensions,
+      votedTensions,
+      evolutionCompletedAt: assignment.evolutionCompletedAt,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -2498,6 +2634,7 @@ app.get('/api/messages/thread', async (req, res) => {
     
     const messages = await Message.find({
       projectId: projectId,
+      isNotification: { $ne: true },
       $or: [
         { fromUserId: user1, toUserId: user2 },
         { fromUserId: user2, toUserId: user1 }
@@ -2516,7 +2653,7 @@ app.get('/api/messages/thread', async (req, res) => {
 // POST /api/messages
 app.post('/api/messages', async (req, res) => {
   try {
-    const { projectId, fromUserId, toUserId, text } = req.body;
+    const { projectId, fromUserId, toUserId, text, isNotification } = req.body;
     if (!projectId || !fromUserId || !toUserId || !text) {
       return res.status(400).json({ error: 'Missing required fields: projectId, fromUserId, toUserId, text' });
     }
@@ -2526,6 +2663,7 @@ app.post('/api/messages', async (req, res) => {
       fromUserId,
       toUserId,
       text,
+      isNotification: Boolean(isNotification),
       createdAt: new Date()
     });
     
@@ -2714,13 +2852,17 @@ app.get('/api/messages/unread-count', async (req, res) => {
           fromUserName: msg.fromUserId.name,
           count: 0,
           lastMessage: msg.text,
-          lastMessageTime: msg.createdAt
+          lastMessageTime: msg.createdAt,
+          lastMessageId: String(msg._id),
+          isNotification: Boolean(msg.isNotification)
         };
       }
       conversations[key].count++;
       if (msg.createdAt > conversations[key].lastMessageTime) {
         conversations[key].lastMessage = msg.text;
         conversations[key].lastMessageTime = msg.createdAt;
+        conversations[key].lastMessageId = String(msg._id);
+        conversations[key].isNotification = Boolean(msg.isNotification);
       }
     });
     
@@ -2754,6 +2896,7 @@ app.get('/api/messages/conversations', async (req, res) => {
 
     // lean() -> populate edilmiş alanlar plain object olur, daha stabil
     const allMessages = await Message.find({
+      isNotification: { $ne: true },
       $or: [{ fromUserId: userIdObj }, { toUserId: userIdObj }],
     })
       .populate('projectId', 'title')

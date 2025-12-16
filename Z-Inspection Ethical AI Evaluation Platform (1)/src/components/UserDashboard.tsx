@@ -26,10 +26,15 @@ interface UserDashboardProps {
   users: User[];
   onViewProject: (project: Project, chatUserId?: string) => void;
   onStartEvaluation: (project: Project) => void;
+  onFinishEvolution?: (project: Project) => void;
   onDeleteProject: (projectId: string) => void;
   onNavigate: (view: string) => void;
+  onViewUseCase?: (useCase: UseCase) => void;
   onLogout: () => void;
   onUpdateUser?: (user: User) => void;
+  preferredTab?: "assigned" | "commented" | null;
+  onPreferredTabApplied?: () => void;
+  assignmentsRefreshToken?: number;
 }
 
 const roleColors = {
@@ -69,10 +74,14 @@ export function UserDashboard({
   users,
   onViewProject,
   onStartEvaluation,
+  onFinishEvolution,
   onDeleteProject,
   onNavigate,
   onLogout,
   onUpdateUser,
+  preferredTab,
+  onPreferredTabApplied,
+  assignmentsRefreshToken,
 }: UserDashboardProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentTab, setCurrentTab] = useState<"assigned" | "commented">(
@@ -90,8 +99,37 @@ export function UserDashboard({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [projectProgresses, setProjectProgresses] = useState<Record<string, number>>({});
+  const [assignmentByProjectId, setAssignmentByProjectId] = useState<Record<string, any>>({});
 
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors];
+
+  // Apply preferred tab from parent (used after "Finish Evolution" to jump to Commented)
+  useEffect(() => {
+    if (preferredTab) {
+      setCurrentTab(preferredTab);
+      onPreferredTabApplied?.();
+    }
+  }, [preferredTab, onPreferredTabApplied]);
+
+  // Fetch assignment metadata (evolutionCompletedAt) for the current user
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      try {
+        const res = await fetch(api(`/api/project-assignments?userId=${currentUser.id}`));
+        if (!res.ok) return;
+        const data = await res.json();
+        const map: Record<string, any> = {};
+        (data || []).forEach((a: any) => {
+          if (a?.projectId) map[String(a.projectId)] = a;
+        });
+        setAssignmentByProjectId(map);
+      } catch (e) {
+        // ignore; UI will fallback to showing assigned projects only
+      }
+    };
+
+    if (currentUser.id) fetchAssignments();
+  }, [currentUser.id, assignmentsRefreshToken]);
 
   // Fetch progress for all assigned projects
   useEffect(() => {
@@ -316,22 +354,26 @@ export function UserDashboard({
       } catch (error) {
         console.error('Error marking messages as read:', error);
       }
-      
-      // Open project with chat panel for the sender
+
+      // Notification-only items should NOT open Chats.
+      const lastMessageText = String(conversation.lastMessage || '');
+      const isNotificationOnly =
+        Boolean(conversation.isNotification) || lastMessageText.startsWith('[NOTIFICATION]');
+      if (isNotificationOnly) {
+        setShowNotifications(false);
+        return;
+      }
+
+      // Open project with chat panel for the sender (normal messages)
       onViewProject(project, conversation.fromUserId);
       setShowNotifications(false);
     }
   };
 
   // Assigned Projects
-  const assignedProjects = projects.filter((p) =>
-    p.assignedUsers.includes(currentUser.id)
-  );
-
-  // Commented Projects (placeholder logic)
-  const commentedProjects = projects.filter(
-    (p) => !p.assignedUsers.includes(currentUser.id)
-  );
+  const myProjects = projects.filter((p) => p.assignedUsers.includes(currentUser.id));
+  const assignedProjects = myProjects.filter((p) => !assignmentByProjectId[p.id]?.evolutionCompletedAt);
+  const commentedProjects = myProjects.filter((p) => Boolean(assignmentByProjectId[p.id]?.evolutionCompletedAt));
 
   const activeProjectList =
     currentTab === "assigned" ? assignedProjects : commentedProjects;
@@ -554,7 +596,9 @@ export function UserDashboard({
                                     {conv.projectTitle}
                                   </div>
                                   <div className="text-xs text-gray-500 line-clamp-2">
-                                    {conv.lastMessage}
+                                    {String(conv.lastMessage || '').startsWith('[NOTIFICATION]')
+                                      ? String(conv.lastMessage).replace(/^\[NOTIFICATION\]\s*/, '')
+                                      : conv.lastMessage}
                                   </div>
                                 </div>
                                 {conv.count > 1 && (
@@ -845,16 +889,38 @@ export function UserDashboard({
                         View Details
                       </button>
 
-                      {canStartEvaluation(project) && (
-                        <button
-                          onClick={() => onStartEvaluation(project)}
-                          className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
-                          style={{ backgroundColor: roleColor }}
-                        >
-                          <Play className="h-3 w-3 mr-2" />
-                          Start Evaluation
-                        </button>
-                      )}
+                      {(() => {
+                        const progress = projectProgresses[project.id] ?? project.progress ?? 0;
+                        const evolutionCompleted = Boolean(assignmentByProjectId[project.id]?.evolutionCompletedAt);
+                        const canFinish = progress >= 100 && !evolutionCompleted;
+                        if (canFinish) {
+                          return (
+                            <button
+                              onClick={() => onFinishEvolution?.(project)}
+                              className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
+                              style={{ backgroundColor: roleColor }}
+                            >
+                              <Target className="h-3 w-3 mr-2" />
+                              Finish Evolution
+                            </button>
+                          );
+                        }
+
+                        if (canStartEvaluation(project) && progress < 100 && !evolutionCompleted) {
+                          return (
+                            <button
+                              onClick={() => onStartEvaluation(project)}
+                              className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
+                              style={{ backgroundColor: roleColor }}
+                            >
+                              <Play className="h-3 w-3 mr-2" />
+                              Start Evolution
+                            </button>
+                          );
+                        }
+
+                        return null;
+                      })()}
 
                       {project.useCase && (
                         <button 

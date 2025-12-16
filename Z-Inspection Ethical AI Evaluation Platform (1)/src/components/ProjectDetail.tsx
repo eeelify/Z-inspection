@@ -18,6 +18,7 @@ interface ProjectDetailProps {
   projects?: Project[]; // Add projects prop for communication
   onBack: () => void;
   onStartEvaluation: () => void;
+  onFinishEvolution?: () => void;
   onViewTension?: (tension: Tension) => void;
   onViewOwner?: (owner: User) => void;
   onCreateTension?: (data: any) => void;
@@ -42,6 +43,7 @@ export function ProjectDetail({
   projects = [],
   onBack,
   onStartEvaluation,
+  onFinishEvolution,
   onViewTension,
   onViewOwner,
   initialChatUserId,
@@ -61,6 +63,7 @@ export function ProjectDetail({
   const [generating, setGenerating] = useState(false);
   const previousProgressRef = useRef<number>(project.progress || 0);
   const [memberProgresses, setMemberProgresses] = useState<Record<string, number>>({});
+  const [evolutionCompletedAt, setEvolutionCompletedAt] = useState<string | null>(null);
 
   // Calculate assignedUserDetails early to avoid "before initialization" error
   const assignedUserDetails = users.filter((user) => project.assignedUsers.includes(user.id));
@@ -228,6 +231,22 @@ export function ProjectDetail({
     fetchUseCase();
   }, [project.id, currentUser.id, project.useCase]);
 
+  // Load evolution completion flag for this user+project (drives Start/Finish button on tension page)
+  useEffect(() => {
+    const loadEvolutionCompletion = async () => {
+      try {
+        const res = await fetch(api(`/api/project-assignments?userId=${currentUser.id}`));
+        if (!res.ok) return;
+        const data = await res.json();
+        const found = (data || []).find((a: any) => String(a.projectId) === String(project.id));
+        setEvolutionCompletedAt(found?.evolutionCompletedAt || null);
+      } catch {
+        // ignore
+      }
+    };
+    if (currentUser.id && project.id) loadEvolutionCompletion();
+  }, [currentUser.id, project.id]);
+
   // Tüm assigned members için progress yükle
   useEffect(() => {
     const loadAllMemberProgresses = async () => {
@@ -376,6 +395,8 @@ export function ProjectDetail({
   const isAssigned = project.assignedUsers.includes(currentUser.id);
   const progressDisplay = Math.max(0, Math.min(100, userProgress));
   const canViewOwners = currentUser.role === 'admin';
+  const isCommentedProjectForUser = currentUser.role !== 'admin' && Boolean(evolutionCompletedAt);
+  const canManageTensions = !isCommentedProjectForUser;
 
   // Use Case Owner ismini bulma
   const useCaseOwnerName = linkedUseCase ? users.find(u => u.id === linkedUseCase.ownerId)?.name : 'Unknown';
@@ -542,7 +563,12 @@ export function ProjectDetail({
             )}
             {isAssigned && progressDisplay < 100 && (
               <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
-                Start Evaluation
+                Start Evolution
+              </button>
+            )}
+            {isAssigned && progressDisplay >= 100 && !evolutionCompletedAt && (
+              <button onClick={onFinishEvolution} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
+                Finish Evolution
               </button>
             )}
           </div>
@@ -694,12 +720,14 @@ export function ProjectDetail({
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-medium text-gray-900">Tensions Management</h3>
-                  <button 
-                    onClick={() => setShowAddTension(true)} 
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center shadow-sm"
-                  >
-                    <Plus className="h-4 w-4 mr-2" /> Add Tension
-                  </button>
+                  {canManageTensions && (
+                    <button 
+                      onClick={() => setShowAddTension(true)} 
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center shadow-sm"
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Add Tension
+                    </button>
+                  )}
                 </div>
 
                 {tensions.length > 0 ? (
@@ -711,7 +739,8 @@ export function ProjectDetail({
                         currentUser={currentUser}
                         onVote={handleVote}
                         onCommentClick={(t) => onViewTension?.(t)}
-                        onDelete={handleDeleteTension}
+                        onDelete={canManageTensions ? handleDeleteTension : undefined}
+                        disableVoting={!canManageTensions}
                       />
                     ))}
                   </div>
@@ -866,7 +895,9 @@ export function ProjectDetail({
         </div>
       </div>
 
-      {showAddTension && <AddTensionModal onClose={() => setShowAddTension(false)} onSave={handleSaveTension} />}
+      {showAddTension && canManageTensions && (
+        <AddTensionModal onClose={() => setShowAddTension(false)} onSave={handleSaveTension} />
+      )}
       
       {chatPanelOpen && chatOtherUser && chatProject && (
         <ChatPanel
