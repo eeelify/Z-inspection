@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, FormEvent } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, FormEvent } from 'react';
 import { 
   ArrowLeft, Save, Send, Plus, AlertTriangle, CheckCircle, XCircle, 
-  Info, ChevronRight, ChevronLeft, Loader2, Trash2, Upload 
+  Info, ChevronRight, ChevronLeft, Loader2, Trash2, Upload, X
 } from 'lucide-react';
 
 import { Project, User, Question, StageKey, QuestionType, UseCase, EthicalPrinciple, Tension, QuestionOption } from '../types';
@@ -46,7 +46,38 @@ const riskSeverityOptions = [
   { value: 'critical', label: 'Critical', className: 'bg-purple-50 text-purple-700 border-purple-200' },
 ];
 
+const getScoreClasses = (value: number, selected: number | null | undefined) => {
+  const isSelected = typeof selected === 'number' && selected === value;
+
+  if (!isSelected) {
+    return 'border-gray-200 bg-white hover:bg-gray-50';
+  }
+
+  switch (value) {
+    case 4:
+      return 'border-green-500 bg-green-200 shadow-md';
+    case 3:
+      return 'border-lime-500 bg-lime-200 shadow-md';
+    case 2:
+      return 'border-yellow-500 bg-yellow-200 shadow-md';
+    case 1:
+      return 'border-orange-500 bg-orange-300 shadow-md';
+    case 0:
+      return 'border-red-500 bg-red-200 shadow-md';
+    default:
+      return '';
+  }
+};
+
 export function EvaluationForm({ project, currentUser, onBack, onSubmit }: EvaluationFormProps) {
+  // Log component mount
+  console.log('🟢 EvaluationForm component RENDERED:', { 
+    projectId: project?.id || (project as any)?._id, 
+    userId: currentUser?.id || (currentUser as any)?._id,
+    hasProject: !!project,
+    hasUser: !!currentUser
+  });
+  
   // Projenin mevcut stage'ini başlangıç değeri olarak alabiliriz veya 'set-up' ile başlatabiliriz.
   // Ancak kullanıcının kaldığı yerden devam etmesi için 'set-up' ile başlatıp veriyi çekmek daha güvenli.
   const [currentStage, setCurrentStage] = useState<StageKey>('set-up');
@@ -57,6 +88,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const [riskScores, setRiskScores] = useState<Record<string, 0 | 1 | 2 | 3 | 4>>({}); // Her soru için risk skoru (0-4)
   const [riskLevel, setRiskLevel] = useState<RiskLevel>('medium');
   const [customQuestions, setCustomQuestions] = useState<Question[]>([]);
+  const [loadedQuestions, setLoadedQuestions] = useState<Question[]>([]); // Questions loaded from MongoDB
   const [showAddQuestion, setShowAddQuestion] = useState(false);
   const [isDraft, setIsDraft] = useState(true);
   const [loading, setLoading] = useState(false); // Yükleniyor durumu
@@ -65,12 +97,36 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const [linkedUseCase, setLinkedUseCase] = useState<UseCase | null>(null);
   const [generalRisks, setGeneralRisks] = useState<Array<{ id: string; title: string; description: string; severity?: 'low' | 'medium' | 'high' | 'critical'; relatedQuestions?: string[] }>>([]);
   const [showReviewScreen, setShowReviewScreen] = useState(false);
+  const [showQuestionNav, setShowQuestionNav] = useState(false);
   const [editingRiskIdReview, setEditingRiskIdReview] = useState<string | null>(null);
   const [tensions, setTensions] = useState<Tension[]>([]);
   const [editingTensionId, setEditingTensionId] = useState<string | null>(null);
   const [votingTensionId, setVotingTensionId] = useState<string | null>(null);
   const [userProgress, setUserProgress] = useState<number>(0); // Backend'den gelen progress
   const [hasFetchedProgress, setHasFetchedProgress] = useState<boolean>(false); // Backend'den progress fetch edildi mi?
+  const [hasLoadedResponses, setHasLoadedResponses] = useState<boolean>(false); // MongoDB responses loaded flag
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true); // Track initial load to prevent state reset
+  const resumeInitializedRef = useRef<boolean>(false); // Prevent resume logic from running multiple times
+  const [resumeQuestionCode, setResumeQuestionCode] = useState<string | null>(null); // Question code to resume at
+  const [resumeComplete, setResumeComplete] = useState<boolean>(false); // Track if resume logic has completed
+  
+  // Reset resume state when project or user changes (component remounts)
+  useEffect(() => {
+    console.log('🔄 EvaluationForm mounted/updated:', { 
+      projectId: project.id || (project as any)._id, 
+      userId: currentUser.id || (currentUser as any)._id,
+      project: project,
+      currentUser: currentUser
+    });
+    // Reset resume state when project/user changes
+    resumeInitializedRef.current = false;
+    setIsInitialLoad(true);
+    setResumeComplete(false);
+    setHasLoadedResponses(false);
+    setResumeQuestionCode(null);
+    setLoadedQuestions([]);
+    console.log('🔄 Reset resume state - isInitialLoad set to true');
+  }, [project.id, currentUser.id]);
   
   // Tension form state
   const [principle1, setPrinciple1] = useState<EthicalPrinciple | undefined>();
@@ -94,11 +150,21 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const getOptionValue = (option: QuestionOption) => typeof option === 'string' ? option : option.value;
   const getOptionLabel = (option: QuestionOption) => typeof option === 'string' ? option : option.label;
 
+  const isQuestionAnswered = (questionId: string) => {
+    const v = answers[questionId];
+    if (v === undefined || v === null) return false;
+    if (typeof v === 'string') return v.trim().length > 0;
+    if (Array.isArray(v)) return v.length > 0;
+    // numbers/objects count as answered (risk/likert/etc.)
+    return true;
+  };
+
   const currentQuestions = useMemo(() => {
-    const roleQuestions = getQuestionsByRole(roleKey);
+    // Use loaded questions from MongoDB if available, otherwise fall back to hardcoded
+    const roleQuestions = loadedQuestions.length > 0 ? loadedQuestions : getQuestionsByRole(roleKey);
     const allQuestions = [...roleQuestions, ...customQuestions];
     return allQuestions.filter(q => q.stage === currentStage);
-  }, [roleKey, currentStage, customQuestions]);
+  }, [roleKey, currentStage, customQuestions, loadedQuestions]);
 
   // Assess stage'indeki tüm soruları almak için
   const assessQuestions = useMemo(() => {
@@ -107,26 +173,484 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     return allQuestions.filter(q => q.stage === 'assess');
   }, [roleKey, customQuestions]);
 
-  const hasProvidedAnswer = (value: any) => {
-    if (value === undefined || value === null) return false;
-    if (typeof value === 'string') return value.trim().length > 0;
-    if (Array.isArray(value)) return value.length > 0;
-    // numbers/objects/booleans: treat as provided
+  // Helper function to determine questionnaireKey from role
+  const getQuestionnaireKeyForRole = (role: string): string => {
+    const roleLower = role.toLowerCase();
+    if (roleLower === 'ethical-expert') return 'ethical-expert-v1';
+    if (roleLower === 'medical-expert') return 'medical-expert-v1';
+    if (roleLower === 'technical-expert') return 'technical-expert-v1';
+    if (roleLower === 'legal-expert') return 'legal-expert-v1';
+    return 'general-v1';
+  };
+
+  // Helper function to map Response answer to local state format
+  const mapResponseAnswerToLocalState = (responseAnswer: any): { answer: any; priority?: RiskLevel; riskScore?: 0 | 1 | 2 | 3 | 4 } => {
+    const result: { answer: any; priority?: RiskLevel; riskScore?: 0 | 1 | 2 | 3 | 4 } = { answer: null };
+    
+    // Check if answer exists and is not null/empty
+    if (!responseAnswer) {
+      return result;
+    }
+
+    const answerData = responseAnswer.answer;
+    
+    // Check if answer is null, undefined, or empty object
+    if (!answerData || (typeof answerData === 'object' && Object.keys(answerData).length === 0)) {
+      return result;
+    }
+    
+    // Map answer based on type
+    if (answerData.choiceKey !== undefined && answerData.choiceKey !== null && answerData.choiceKey !== '') {
+      result.answer = answerData.choiceKey;
+    } else if (answerData.text !== undefined && answerData.text !== null && answerData.text !== '') {
+      result.answer = answerData.text;
+    } else if (answerData.numeric !== undefined && answerData.numeric !== null) {
+      result.answer = answerData.numeric;
+    } else if (answerData.multiChoiceKeys && Array.isArray(answerData.multiChoiceKeys) && answerData.multiChoiceKeys.length > 0) {
+      result.answer = answerData.multiChoiceKeys;
+    }
+
+    // Map risk score (score in Response is 0-4, which maps to riskScores)
+    // Only map if it's a valid score (not the default 2 for unanswered)
+    if (responseAnswer.score !== undefined && responseAnswer.score !== null) {
+      result.riskScore = responseAnswer.score as 0 | 1 | 2 | 3 | 4;
+    }
+
+    return result;
+  };
+
+  // Helper function to check if an answer is unanswered
+  const isAnswerUnanswered = (answer: any): boolean => {
+    if (!answer || typeof answer !== 'object') return true;
+    
+    // Check for choiceKey
+    if (answer.choiceKey !== undefined && answer.choiceKey !== null && answer.choiceKey !== '') {
+      return false;
+    }
+    
+    // Check for text
+    if (answer.text !== undefined && answer.text !== null && typeof answer.text === 'string' && answer.text.trim().length > 0) {
+      return false;
+    }
+    
+    // Check for numeric
+    if (answer.numeric !== undefined && answer.numeric !== null && typeof answer.numeric === 'number') {
+      return false;
+    }
+    
+    // Check for multiChoiceKeys
+    if (answer.multiChoiceKeys && Array.isArray(answer.multiChoiceKeys) && answer.multiChoiceKeys.length > 0) {
+      return false;
+    }
+    
     return true;
   };
 
+  // Helper function to map questionnaireKey to stage
+  const getStageForQuestionnaire = (questionnaireKey: string): StageKey => {
+    // general-v1 is set-up stage, role-specific questionnaires are assess stage
+    if (questionnaireKey === 'general-v1') {
+      return 'set-up';
+    }
+    return 'assess';
+  };
+
+  // Resume logic: Load responses and determine where to resume
+  useEffect(() => {
+    // Always log to see if useEffect is triggered
+    console.log('🔍 Resume logic useEffect triggered:', { 
+      resumeInitialized: resumeInitializedRef.current, 
+      isInitialLoad,
+      projectId: project?.id || (project as any)?._id,
+      userId: currentUser?.id || (currentUser as any)?._id,
+      hasProject: !!project,
+      hasUser: !!currentUser,
+      projectObject: project,
+      currentUserObject: currentUser
+    });
+    
+    // Early return checks with detailed logging
+    if (resumeInitializedRef.current) {
+      console.log('⏭️ Resume logic skipped: already initialized');
+      return;
+    }
+    
+    if (!isInitialLoad) {
+      console.log('⏭️ Resume logic skipped: isInitialLoad is false', { isInitialLoad });
+      return;
+    }
+    
+    const projectId = project?.id || (project as any)?._id;
+    if (!project || !projectId) {
+      console.log('⏭️ Resume logic skipped: project is missing or has no id', { project, projectId });
+      return;
+    }
+    
+    const userId = currentUser?.id || (currentUser as any)?._id;
+    if (!currentUser || !userId) {
+      console.log('⏭️ Resume logic skipped: currentUser is missing or has no id', { currentUser, userId });
+      return;
+    }
+    
+    console.log('🚀 Starting resume logic...', { projectId, userId });
+    const resumeEvaluation = async () => {
+      try {
+        setLoading(true);
+        resumeInitializedRef.current = true;
+        console.log('📡 Resume logic: Fetching data...');
+        
+        const projectId = project.id || (project as any)._id;
+        const userId = currentUser.id || (currentUser as any)._id;
+        const role = currentUser.role || 'any';
+        
+        // Step 1: Fetch projectassignments to get assigned questionnaires
+        let assignedQuestionnaires: string[] = [];
+        try {
+          const assignmentResponse = await fetch(
+            api(`/api/project-assignments?userId=${userId}`)
+          );
+          if (assignmentResponse.ok) {
+            const assignments = await assignmentResponse.json();
+            const assignment = assignments.find((a: any) => 
+              String(a.projectId) === String(projectId)
+            );
+            if (assignment && assignment.questionnaires && Array.isArray(assignment.questionnaires)) {
+              assignedQuestionnaires = assignment.questionnaires;
+              // Ensure general-v1 is included if not already present
+              if (!assignedQuestionnaires.includes('general-v1')) {
+                assignedQuestionnaires.unshift('general-v1');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching project assignments:', error);
+        }
+        
+        // Fallback: if no assignments found, use role-based logic
+        if (assignedQuestionnaires.length === 0) {
+          const roleQuestionnaireKey = getQuestionnaireKeyForRole(role);
+          assignedQuestionnaires = roleQuestionnaireKey !== 'general-v1' 
+            ? ['general-v1', roleQuestionnaireKey]
+            : ['general-v1'];
+        }
+        
+        console.log('📋 Assigned questionnaires:', assignedQuestionnaires);
+        
+        // Step 2: Fetch responses for all assigned questionnaires
+        const responsePromises = assignedQuestionnaires.map(async (questionnaireKey) => {
+          try {
+            const response = await fetch(
+              api(`/api/evaluations/responses?projectId=${projectId}&userId=${userId}&questionnaireKey=${questionnaireKey}`)
+            );
+            if (response.ok) {
+              const data = await response.json();
+              return { questionnaireKey, response: data };
+            }
+            return { questionnaireKey, response: null };
+          } catch (error) {
+            console.error(`Error fetching response for ${questionnaireKey}:`, error);
+            return { questionnaireKey, response: null };
+          }
+        });
+        
+        const responses = await Promise.all(responsePromises);
+        
+        // Step 3: Fetch questions for each questionnaire to understand order
+        const questionsByQuestionnaire: Record<string, any[]> = {};
+        const allLoadedQuestions: Question[] = [];
+        const questionsPromises = assignedQuestionnaires.map(async (questionnaireKey) => {
+          try {
+            const questionsResponse = await fetch(
+              api(`/api/evaluations/questions?questionnaireKey=${questionnaireKey}&role=${role}`)
+            );
+            if (questionsResponse.ok) {
+              const questions = await questionsResponse.json();
+              // Sort by order field
+              questions.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+              questionsByQuestionnaire[questionnaireKey] = questions;
+              
+              // Convert backend questions to frontend Question format
+              const stage = getStageForQuestionnaire(questionnaireKey);
+              questions.forEach((q: any) => {
+                const frontendQuestion: Question = {
+                  id: q._id ? String(q._id) : q.code,
+                  _id: q._id,
+                  code: q.code,
+                  text: typeof q.text === 'object' ? (q.text.en || q.text.tr || '') : q.text || '',
+                  stage: stage,
+                  type: q.answerType === 'single_choice' ? 'radio' : 
+                        q.answerType === 'multi_choice' ? 'checkbox' :
+                        q.answerType === 'open_text' ? 'text' :
+                        q.answerType === 'numeric' ? 'text' : 'text', // numeric maps to text for now
+                  required: q.required !== false,
+                  options: q.options ? q.options.map((opt: any) => ({
+                    value: opt.key,
+                    label: typeof opt.label === 'object' ? (opt.label.en || opt.label.tr || '') : opt.label || ''
+                  })) : undefined,
+                  description: q.description ? (typeof q.description === 'object' ? (q.description.en || q.description.tr || '') : q.description) : undefined
+                };
+                allLoadedQuestions.push(frontendQuestion);
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching questions for ${questionnaireKey}:`, error);
+            questionsByQuestionnaire[questionnaireKey] = [];
+          }
+        });
+        await Promise.all(questionsPromises);
+        
+        // Set loaded questions for frontend use
+        setLoadedQuestions(allLoadedQuestions);
+        
+        // Step 4: Determine which questionnaire to open (first unfinished)
+        let resumeQuestionnaireKey: string | null = null;
+        let resumeQuestionIndex: number = 0;
+        let resumeStage: StageKey = 'set-up';
+        
+        for (const questionnaireKey of assignedQuestionnaires) {
+          const response = responses.find(r => r.questionnaireKey === questionnaireKey);
+          const questions = questionsByQuestionnaire[questionnaireKey] || [];
+          
+          // Check if questionnaire is unfinished
+          const stage = getStageForQuestionnaire(questionnaireKey);
+          const isUnfinished = !response || 
+            !response.response || 
+            response.response.status !== 'submitted' ||
+            (response.response.answers && response.response.answers.some((ans: any) => {
+              const answerUnanswered = isAnswerUnanswered(ans.answer);
+              // For assess stage, also check if risk score is missing (score === 0 is valid, so check for undefined/null)
+              if (stage === 'assess' && !answerUnanswered) {
+                // Answer exists, but check if score is missing (undefined or null, but 0 is valid)
+                const scoreMissing = ans.score === undefined || ans.score === null;
+                return scoreMissing;
+              }
+              return answerUnanswered;
+            }));
+          
+          if (isUnfinished) {
+            resumeQuestionnaireKey = questionnaireKey;
+            resumeStage = getStageForQuestionnaire(questionnaireKey);
+            
+            // Step 5: Find first unanswered question index and questionCode
+            // Use MongoDB response.answers array directly to check which questions are answered
+            let resumeCode: string | null = null;
+            const responseAnswers = response && response.response && response.response.answers ? response.response.answers : [];
+            console.log(`📊 Questionnaire ${questionnaireKey}: Found ${responseAnswers.length} answers in MongoDB response`);
+            
+            if (responseAnswers.length > 0) {
+              // Create a map of questionCode to answer for quick lookup
+              const answerMap = new Map<string, any>();
+              responseAnswers.forEach((ans: any) => {
+                if (ans.questionCode) {
+                  answerMap.set(ans.questionCode, ans);
+                }
+              });
+              
+              console.log(`📊 Answer map has ${answerMap.size} entries for ${questions.length} questions`);
+              
+              // Find first unanswered question by iterating through questions in order
+              for (let i = 0; i < questions.length; i++) {
+                const question = questions[i];
+                const answer = answerMap.get(question.code);
+                
+                const answerUnanswered = !answer || isAnswerUnanswered(answer.answer);
+                // For assess stage, also check if risk score is missing
+                let needsResume = answerUnanswered;
+                if (!answerUnanswered && resumeStage === 'assess') {
+                  // Answer exists, but check if score is missing (undefined or null, but 0 is valid)
+                  needsResume = answer.score === undefined || answer.score === null;
+                }
+                
+                if (needsResume) {
+                  resumeQuestionIndex = i;
+                  resumeCode = question.code;
+                  console.log(`📍 Found first unanswered question at index ${i}: ${question.code}`);
+                  break;
+                }
+              }
+              
+              // If all questions are answered, go to last question
+              if (resumeCode === null && questions.length > 0) {
+                console.log(`✅ All questions appear to be answered, going to last question`);
+                resumeQuestionIndex = questions.length - 1;
+                resumeCode = questions[questions.length - 1].code;
+              }
+            } else {
+              // No responses yet, start at first question
+              console.log(`📝 No answers found, starting at first question`);
+              resumeQuestionIndex = 0;
+              if (questions.length > 0) {
+                resumeCode = questions[0].code;
+              }
+            }
+            
+            console.log(`🎯 Resume position: index=${resumeQuestionIndex}, code=${resumeCode}`);
+            setResumeQuestionCode(resumeCode);
+            
+            break; // Found first unfinished questionnaire, stop searching
+          }
+        }
+        
+        // If all questionnaires are finished, use the last one
+        if (!resumeQuestionnaireKey && assignedQuestionnaires.length > 0) {
+          resumeQuestionnaireKey = assignedQuestionnaires[assignedQuestionnaires.length - 1];
+          resumeStage = getStageForQuestionnaire(resumeQuestionnaireKey);
+          const questions = questionsByQuestionnaire[resumeQuestionnaireKey] || [];
+          resumeQuestionIndex = questions.length > 0 ? questions.length - 1 : 0;
+          if (questions.length > 0) {
+            setResumeQuestionCode(questions[questions.length - 1].code);
+          }
+        }
+        
+        // Step 6: Load all answers into state using loadedQuestions
+        const loadedAnswers: Record<string, any> = {};
+        const loadedPriorities: Record<string, RiskLevel> = {};
+        const loadedRiskScores: Record<string, 0 | 1 | 2 | 3 | 4> = {};
+        
+        responses.forEach(({ response }) => {
+          if (response && response.answers && Array.isArray(response.answers)) {
+            console.log(`📝 Loading ${response.answers.length} answers from response`);
+            response.answers.forEach((responseAnswer: any) => {
+              if (!responseAnswer.questionCode) return;
+              
+              // Find question by code in loadedQuestions (MongoDB questions)
+              const question = allLoadedQuestions.find(q => 
+                q.code === responseAnswer.questionCode || 
+                q.id === responseAnswer.questionCode ||
+                (q._id && String(q._id) === String(responseAnswer.questionId))
+              );
+              
+              if (!question) {
+                console.warn(`⚠️ Question not found for code: ${responseAnswer.questionCode}`);
+                return;
+              }
+              
+              const questionKey = question.id;
+              const mapped = mapResponseAnswerToLocalState(responseAnswer);
+              
+              if (mapped.answer !== null && mapped.answer !== undefined && mapped.answer !== '') {
+                loadedAnswers[questionKey] = mapped.answer;
+              }
+              
+              if (mapped.riskScore !== undefined) {
+                loadedRiskScores[questionKey] = mapped.riskScore;
+              }
+            });
+          }
+        });
+        
+        console.log(`📊 Loaded ${Object.keys(loadedAnswers).length} answers, ${Object.keys(loadedRiskScores).length} risk scores`);
+        
+        // Update state
+        if (Object.keys(loadedAnswers).length > 0 || Object.keys(loadedRiskScores).length > 0) {
+          setAnswers(prev => ({ ...prev, ...loadedAnswers }));
+          setQuestionPriorities(prev => ({ ...prev, ...loadedPriorities }));
+          setRiskScores(prev => ({ ...prev, ...loadedRiskScores }));
+        }
+        
+        // Step 7: Calculate resume position BEFORE setting state
+        let finalResumeIndex = 0;
+        if (resumeQuestionnaireKey && resumeQuestionCode && allLoadedQuestions.length > 0) {
+          // Filter questions by stage to get the correct index
+          const stageQuestions = allLoadedQuestions.filter(q => q.stage === resumeStage);
+          const resumeIndexInStage = stageQuestions.findIndex(q => 
+            q.code === resumeQuestionCode || 
+            q.id === resumeQuestionCode ||
+            (q._id && String(q._id) === resumeQuestionCode)
+          );
+          
+          if (resumeIndexInStage !== -1) {
+            finalResumeIndex = resumeIndexInStage;
+            console.log(`✅ Resuming at questionnaire: ${resumeQuestionnaireKey}, stage: ${resumeStage}, question code: ${resumeQuestionCode}`);
+            console.log(`📊 Total loaded questions: ${allLoadedQuestions.length}, stage questions: ${stageQuestions.length}, resume index: ${finalResumeIndex}`);
+            console.log(`📊 Answers loaded: ${Object.keys(loadedAnswers).length}, risk scores: ${Object.keys(loadedRiskScores).length}`);
+          } else {
+            console.warn(`⚠️ Resume question not found in stage questions, using backend index: ${resumeQuestionIndex}`);
+            finalResumeIndex = resumeQuestionIndex;
+          }
+        } else if (resumeQuestionnaireKey && resumeQuestionCode) {
+          console.log(`⚠️ Questions not loaded yet, using backend index: ${resumeQuestionIndex}`);
+          finalResumeIndex = resumeQuestionIndex;
+        }
+        
+        // Set all state updates together
+        setLoadedQuestions(allLoadedQuestions);
+        if (resumeQuestionnaireKey && resumeQuestionCode) {
+          setCurrentStage(resumeStage);
+          // Keep resumeQuestionCode so useEffect can find the index
+          // useEffect will clear it after using
+          
+          // Also set the index directly if we have it
+          if (finalResumeIndex !== undefined && finalResumeIndex >= 0) {
+            console.log(`🎯 Setting currentQuestionIndex directly to ${finalResumeIndex}`);
+            // Use setTimeout to ensure state updates are processed
+            setTimeout(() => {
+              setCurrentQuestionIndex(finalResumeIndex);
+            }, 200);
+          }
+        }
+        
+        setHasLoadedResponses(true);
+        setIsInitialLoad(false);
+        setResumeComplete(true);
+        
+      } catch (error) {
+        console.error("Error in resume logic:", error);
+        setIsInitialLoad(false);
+        setResumeComplete(true); // Mark as complete even on error to allow fallback
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    // Call resumeEvaluation immediately
+    resumeEvaluation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run ONLY on mount - we check project/user inside
+
   // --- 1. VERİ ÇEKME (FETCH DATA) ---
   useEffect(() => {
+    // Skip if we've already loaded from MongoDB responses
+    if (hasLoadedResponses) {
+      // Still fetch legacy evaluation data for generalRisks and other metadata
+      const fetchLegacyData = async () => {
+        try {
+          const response = await fetch(api(`/api/evaluations?projectId=${project.id || (project as any)._id}&userId=${currentUser.id || (currentUser as any)._id}&stage=${currentStage}`));
+          if (response.ok) {
+            const data = await response.json();
+            // Only load generalRisks and riskLevel from legacy endpoint
+            if (data.riskLevel) setRiskLevel(data.riskLevel as RiskLevel);
+            if (data.generalRisks && Array.isArray(data.generalRisks)) {
+              setGeneralRisks(data.generalRisks.map((r: any) => ({
+                ...r,
+                severity: r.severity || 'medium',
+                relatedQuestions: r.relatedQuestions || []
+              })));
+            } else if (currentStage === 'set-up') {
+              setGeneralRisks([]);
+            }
+            if (data.status === 'completed') setIsDraft(false);
+          }
+        } catch (error) {
+          console.error("Legacy data fetch error:", error);
+        }
+      };
+      fetchLegacyData();
+      return;
+    }
+
     const fetchEvaluation = async () => {
       setLoading(true);
       try {
         const response = await fetch(api(`/api/evaluations?projectId=${project.id || (project as any)._id}&userId=${currentUser.id || (currentUser as any)._id}&stage=${currentStage}`));
         if (response.ok) {
           const data = await response.json();
-          // Eğer veritabanında cevaplar varsa state'e yükle
-          if (data.answers) setAnswers(data.answers);
-          if (data.questionPriorities) setQuestionPriorities(data.questionPriorities); // Soru önem derecelerini yükle
-          if (data.riskScores) setRiskScores(data.riskScores); // Risk skorlarını yükle
+          // Only load if we haven't loaded from MongoDB responses yet
+          if (!hasLoadedResponses) {
+            if (data.answers) setAnswers(data.answers);
+            if (data.questionPriorities) setQuestionPriorities(data.questionPriorities);
+            if (data.riskScores) setRiskScores(data.riskScores);
+          }
           if (data.riskLevel) setRiskLevel(data.riskLevel as RiskLevel);
           // Custom questions (persisted)
           if (Array.isArray(data.customQuestions)) {
@@ -148,11 +672,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
               relatedQuestions: r.relatedQuestions || []
             })));
           } else if (currentStage === 'set-up') {
-            // Set-up stage'inde eğer veritabanında risk yoksa, state'i boş bırak
-            // (kullanıcı daha önce risk eklemediyse)
             setGeneralRisks([]);
           }
-          // Status completed ise draft olmadığını belirt
           if (data.status === 'completed') setIsDraft(false);
         }
       } catch (error) {
@@ -201,10 +722,12 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       }
     };
 
-    fetchEvaluation();
+    if (!hasLoadedResponses) {
+      fetchEvaluation();
+    }
     fetchUseCase();
     fetchSetUpRisks();
-  }, [currentStage, project.id, currentUser.id, project.useCase, showReviewScreen]);
+  }, [currentStage, project.id, currentUser.id, project.useCase, showReviewScreen, hasLoadedResponses]);
 
   // If a new question is added while on Review, jump user back to that question.
   useEffect(() => {
@@ -260,12 +783,60 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
   // Cevaplar ve sorular yüklendikten sonra cevaplanmamış ilk soruyu bul
   useEffect(() => {
-    if (loading || currentQuestions.length === 0) {
+    if (!resumeComplete || !hasLoadedResponses || loadedQuestions.length === 0 || !resumeQuestionCode) {
+      if (!resumeComplete) console.log('⏳ Waiting for resume to complete...');
+      if (!hasLoadedResponses) console.log('⏳ Waiting for responses to load...');
+      if (loadedQuestions.length === 0) console.log('⏳ Waiting for questions to load...');
+      if (!resumeQuestionCode) console.log('⏳ Waiting for resume question code...');
       return;
     }
     
-    // Eğer hiç cevap yoksa ilk sorudan başla
+    // Wait for currentQuestions to be updated with loadedQuestions
+    if (currentQuestions.length === 0) {
+      console.log('⏳ Waiting for currentQuestions to be populated...');
+      return;
+    }
+    
+    console.log(`🔍 Looking for resume question code: ${resumeQuestionCode}`);
+    console.log(`🔍 Current questions (${currentQuestions.length}):`, currentQuestions.map(q => ({ code: q.code, id: q.id, stage: q.stage })));
+    console.log(`🔍 Current stage: ${currentStage}`);
+    
+    // Find resume question in currentQuestions
+    const resumeIndex = currentQuestions.findIndex(q => 
+      q.code === resumeQuestionCode || 
+      q.id === resumeQuestionCode ||
+      (q._id && String(q._id) === resumeQuestionCode)
+    );
+    
+    if (resumeIndex !== -1) {
+      console.log(`✅ Resuming at question code: ${resumeQuestionCode}, index: ${resumeIndex} (out of ${currentQuestions.length} questions in ${currentStage} stage)`);
+      setCurrentQuestionIndex(resumeIndex);
+      setResumeQuestionCode(null); // Clear after using
+      return;
+    } else {
+      console.warn(`⚠️ Resume question code ${resumeQuestionCode} not found in currentQuestions`);
+      console.warn(`⚠️ Current questions:`, currentQuestions.map(q => ({ code: q.code, id: q.id, stage: q.stage })));
+      setResumeQuestionCode(null); // Clear invalid code
+    }
+  }, [resumeComplete, hasLoadedResponses, loadedQuestions, currentQuestions, currentStage, resumeQuestionCode]);
+
+  // Cevaplar ve sorular yüklendikten sonra cevaplanmamış ilk soruyu bul
+  // NOTE: This is fallback logic only. Resume logic sets the index directly.
+  useEffect(() => {
+    // Wait for initial load and resume to complete, and questions to be loaded
+    if (isInitialLoad || loading || currentQuestions.length === 0 || !resumeComplete) {
+      return;
+    }
+    
+    // Skip if resume logic already set the position (hasLoadedResponses = true means resume logic ran)
+    if (hasLoadedResponses) {
+      console.log('⏭️ Skipping fallback logic - resume logic already set the position');
+      return;
+    }
+    
+    // Eğer hiç cevap yoksa ilk sorudan başla (fallback only)
     if (Object.keys(answers).length === 0) {
+      console.log('📝 No answers found, starting at first question (fallback)');
       setCurrentQuestionIndex(0);
       return;
     }
@@ -292,6 +863,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       
       let hasAnswer = false;
       let hasPriority = false;
+      let hasRiskScore = false;
       
       // Her olası ID formatını kontrol et
       for (const id of possibleIds) {
@@ -314,11 +886,20 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         if (priorityKey && questionPriorities[priorityKey] !== undefined) {
           hasPriority = true;
         }
+
+        const riskScoreKey = Object.keys(riskScores).find(key => 
+          String(key).toLowerCase() === answerKey.toLowerCase() ||
+          String(key) === answerKey
+        );
+        
+        if (riskScoreKey && riskScores[riskScoreKey] !== undefined && riskScores[riskScoreKey] !== null) {
+          hasRiskScore = true;
+        }
       }
       
-      console.log(`Question ${i} (${question.id || question.code || question._id}): hasAnswer=${hasAnswer}, hasPriority=${hasPriority}`);
+      console.log(`Question ${i} (${question.id || question.code || question._id}): hasAnswer=${hasAnswer}, hasPriority=${hasPriority}, hasRiskScore=${hasRiskScore}`);
       
-      // Set-up stage'inde sadece answer yeterli, assess'te hem answer hem priority gerekli
+      // Set-up stage'inde sadece answer yeterli, assess'te hem answer, hem priority, hem risk score gerekli
       if (currentStage === 'set-up') {
         if (!hasAnswer) {
           firstUnansweredIndex = i;
@@ -326,7 +907,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           break;
         }
       } else {
-        if (!hasAnswer || !hasPriority) {
+        if (!hasAnswer || !hasPriority || !hasRiskScore) {
           firstUnansweredIndex = i;
           console.log(`Found first unanswered question at index ${i}`);
           break;
@@ -342,7 +923,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     
     console.log(`Setting currentQuestionIndex to ${firstUnansweredIndex}`);
     setCurrentQuestionIndex(firstUnansweredIndex);
-  }, [loading, answers, questionPriorities, currentQuestions, currentStage]);
+  }, [isInitialLoad, loading, answers, questionPriorities, riskScores, currentQuestions, currentStage, resumeQuestionCode, resumeComplete, hasLoadedResponses, loadedQuestions]);
 
 
   // Review screen açıldığında tensionları yükle
@@ -403,7 +984,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const isFirstQuestion = currentQuestionIndex === 0;
 
   // --- 2. VERİ KAYDETME (SAVE DATA) ---
-  const saveEvaluation = async (status: 'draft' | 'completed' = 'draft') => {
+  const saveEvaluation = useCallback(async (status: 'draft' | 'completed' = 'draft', silent: boolean = false) => {
     setSaving(true);
     try {
       const response = await fetch(api('/api/evaluations'), {
@@ -427,18 +1008,39 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       const savedData = await response.json();
       console.log('Saved:', savedData);
       
-      if (status === 'draft') {
+      if (status === 'draft' && !silent) {
         alert('✅ Draft saved successfully to Database!');
       }
       return true;
     } catch (error) {
       console.error(error);
-      alert('❌ Error saving data. Please check your connection.');
+      if (!silent) {
+        alert('❌ Error saving data. Please check your connection.');
+      }
       return false;
     } finally {
       setSaving(false);
     }
-  };
+  }, [project.id, currentUser.id, currentStage, answers, questionPriorities, riskScores, riskLevel, generalRisks]);
+
+  // Debounced auto-save to MongoDB
+  useEffect(() => {
+    // Don't auto-save during initial load
+    if (isInitialLoad || !hasLoadedResponses) return;
+
+    const timeoutId = setTimeout(async () => {
+      // Only auto-save if there are actual changes
+      if (Object.keys(answers).length > 0 || Object.keys(riskScores).length > 0) {
+        try {
+          await saveEvaluation('draft', true); // Silent auto-save
+        } catch (error) {
+          console.error('Auto-save error:', error);
+        }
+      }
+    }, 2000); // Debounce: save 2 seconds after last change
+
+    return () => clearTimeout(timeoutId);
+  }, [answers, riskScores, questionPriorities, isInitialLoad, hasLoadedResponses, saveEvaluation]);
 
   // --- NAVIGATION LOGIC ---
 
@@ -966,12 +1568,6 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 <p className="text-xs text-gray-500 font-medium">Progress</p>
                 <p className="text-sm font-bold text-gray-900">{getCompletionPercentage()}%</p>
               </div>
-              <div className="w-32 bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200">
-                <div
-                  className="h-full rounded-full transition-all duration-500 ease-out shadow-sm"
-                  style={{ width: `${getCompletionPercentage()}%`, backgroundColor: roleColor }}
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -1398,13 +1994,97 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                     </div>
                 </div>
             ) : activeQuestion ? (
-                <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    
+                <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
+                    {/* Mobile: open question list */}
+                    {showQuestionNav && (
+                        <div className="fixed inset-0 z-50 md:hidden">
+                            <div className="absolute inset-0 bg-black/30" onClick={() => setShowQuestionNav(false)} />
+                            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-white shadow-2xl border-r border-gray-200 flex flex-col">
+                                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                                    <div className="font-semibold text-gray-900">Questions</div>
+                                    <button
+                                        type="button"
+                                        className="p-2 rounded-lg hover:bg-gray-100"
+                                        onClick={() => setShowQuestionNav(false)}
+                                        aria-label="Close questions"
+                                    >
+                                        <X className="w-5 h-5 text-gray-600" />
+                                    </button>
+                                </div>
+                                <div className="p-3 overflow-y-auto">
+                                    <div className="space-y-1">
+                                        {currentQuestions.map((q, idx) => {
+                                            const active = idx === currentQuestionIndex;
+                                            const done = isQuestionAnswered(q.id);
+                                            return (
+                                                <button
+                                                    key={q.id || idx}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCurrentQuestionIndex(idx);
+                                                        setShowQuestionNav(false);
+                                                    }}
+                                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                                                        active
+                                                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                            : 'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <span className="font-medium">Q{idx + 1}</span>
+                                                    {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Desktop: left question list */}
+                    <div className="hidden md:block md:w-56 lg:w-64 shrink-0">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-40 max-h-[70vh] overflow-y-auto">
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pb-2">
+                                Questions
+                            </div>
+                            <div className="space-y-1">
+                                {currentQuestions.map((q, idx) => {
+                                    const active = idx === currentQuestionIndex;
+                                    const done = isQuestionAnswered(q.id);
+                                    return (
+                                        <button
+                                            key={q.id || idx}
+                                            type="button"
+                                            onClick={() => setCurrentQuestionIndex(idx)}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                                                active
+                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                    : 'text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <span className="font-medium">Q{idx + 1}</span>
+                                            {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: Active question card */}
+                    <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0">
                     <div className="p-8 border-b border-gray-100 bg-white">
-                        <div className="flex items-center gap-3 mb-4">
+                        <div className="flex flex-wrap items-center gap-3 mb-4">
                             <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
                                 Question {currentQuestionIndex + 1} of {currentQuestions.length}
                             </span>
+                            <button
+                                type="button"
+                                onClick={() => setShowQuestionNav(true)}
+                                className="px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+                            >
+                                Q list
+                            </button>
                             {activeQuestion.required && (
                                 <span className="px-3 py-1 bg-red-50 text-red-600 text-sm font-medium rounded-full border border-red-100">
                                     Required
@@ -1613,64 +2293,28 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                     Required
                                 </span>
                             </div>
-                            <div className="grid grid-cols-5 gap-3 max-w-4xl">
-                                {([
-                                    { value: 4, label: 'Excellent', labelTr: 'Mükemmel', desc: 'Clear understanding, high confidence', color: 'green' },
-                                    { value: 3, label: 'Good', labelTr: 'İyi', desc: 'Minor gaps but generally appropriate', color: 'blue' },
-                                    { value: 2, label: 'Moderate', labelTr: 'Orta', desc: 'Basic awareness, notable gaps', color: 'yellow' },
-                                    { value: 1, label: 'Poor', labelTr: 'Zayıf', desc: 'Significant misunderstanding, low confidence', color: 'orange' },
-                                    { value: 0, label: 'Unacceptable', labelTr: 'Kabul Edilemez', desc: 'No awareness, serious risk', color: 'red' }
-                                ] as const).map(({ value, label, labelTr, desc, color }) => {
-                                    // Use explicit equality checks to handle 0 and 1 correctly
-                                    // Must check if currentRiskScore is a valid number (0-4) and equals the current value
-                                    const currentRiskScore = riskScores[activeQuestion.id];
-                                    const isSelected = (currentRiskScore === 0 || currentRiskScore === 1 || currentRiskScore === 2 || currentRiskScore === 3 || currentRiskScore === 4) && currentRiskScore === value;
-                                    
-                                    const colorClasses = {
-                                        green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30',
-                                        blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
-                                        yellow: isSelected ? 'border-yellow-500 bg-yellow-50 shadow-md' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
-                                        orange: isSelected ? 'border-orange-500 bg-orange-200 shadow-md' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50',
-                                        red: isSelected ? 'border-red-500 bg-red-200 shadow-md' : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
-                                    };
-                                    const bgColorClasses = {
-                                        green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400',
-                                        blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
-                                        yellow: isSelected ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400',
-                                        orange: isSelected ? 'bg-orange-200 text-orange-800' : 'bg-gray-100 text-gray-400',
-                                        red: isSelected ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-400'
-                                    };
+                            <div className="flex gap-2 justify-center">
+                                {[4, 3, 2, 1, 0].map((value) => {
+                                    const current = riskScores[activeQuestion.id];
                                     return (
-                                        <label
+                                        <button
                                             key={value}
-                                            className={`relative flex flex-col items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
+                                            type="button"
+                                            onClick={() => {
+                                                setRiskScores((prev) => ({ ...prev, [activeQuestion.id]: value as 0 | 1 | 2 | 3 | 4 }));
+                                                setIsDraft(true);
+                                            }}
+                                            className={`w-12 h-12 rounded-lg border text-lg font-semibold transition ${getScoreClasses(value, current)}`}
                                         >
-                                            <input
-                                                type="radio"
-                                                name={`risk-${activeQuestion.id}`}
-                                                value={value}
-                                                checked={isSelected}
-                                                onChange={() => {
-                                                    setRiskScores((prev) => ({ ...prev, [activeQuestion.id]: value as 0 | 1 | 2 | 3 | 4 }));
-                                                    setIsDraft(true);
-                                                }}
-                                                className="hidden"
-                                            />
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>
-                                                <span className="text-lg font-bold">{value}</span>
-                                            </div>
-                                            <span className={`text-xs font-bold text-center ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
-                                                {label}
-                                            </span>
-                                            <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
-                                            <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>{desc}</span>
-                                        </label>
+                                            {value}
+                                        </button>
                                     );
                                 })}
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
             ) : (
                  <div className="text-center py-32 bg-white rounded-3xl shadow-sm border border-dashed border-gray-200 flex flex-col items-center justify-center">
                     <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 ring-8 ring-gray-50/50">

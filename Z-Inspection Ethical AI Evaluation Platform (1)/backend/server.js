@@ -2905,7 +2905,8 @@ app.get('/api/messages/unread-count', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId parameter' });
     }
     
-    // Get unread messages grouped by project and sender
+    // Get unread messages grouped by project and sender.
+    // IMPORTANT: Avoid populate() here because missing/deleted refs (project/user) can break the entire endpoint.
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
     const unreadMessages = await Message.find({
       toUserId: userIdObj,
@@ -2913,45 +2914,84 @@ app.get('/api/messages/unread-count', async (req, res) => {
     })
     .populate('projectId', 'title')
     .populate('fromUserId', 'name email')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .lean();
     
     // Group by projectId and fromUserId
     const conversations = {};
     unreadMessages.forEach(msg => {
-      const projectId = msg.projectId._id.toString();
-      const fromUserId = msg.fromUserId._id.toString();
-      const key = `${projectId}-${fromUserId}`;
+      // Skip messages with missing or null populated fields
+      if (!msg || !msg.projectId || !msg.fromUserId) {
+        console.warn('Skipping message with missing projectId or fromUserId:', msg?._id);
+        return;
+      }
       
+      const projectIdRaw = msg.projectId._id || msg.projectId;
+      const fromUserIdRaw = msg.fromUserId._id || msg.fromUserId;
+      
+      if (!projectIdRaw || !fromUserIdRaw) {
+        console.warn('Skipping message with invalid projectId or fromUserId:', msg?._id);
+        return;
+      }
+      
+      const projectId = String(projectIdRaw);
+      const fromUserId = String(fromUserIdRaw);
+      const key = `${projectId}-${fromUserId}`;
+
       if (!conversations[key]) {
         conversations[key] = {
           projectId: projectId,
-          projectTitle: msg.projectId.title,
+          projectTitle: msg.projectId.title || '(No title)',
           fromUserId: fromUserId,
-          fromUserName: msg.fromUserId.name,
+          fromUserName: msg.fromUserId.name || 'Unknown',
           count: 0,
-          lastMessage: msg.text,
+          lastMessage: msg.text || '',
           lastMessageTime: msg.createdAt,
           lastMessageId: String(msg._id),
           isNotification: Boolean(msg.isNotification)
         };
       }
+
       conversations[key].count++;
-      if (msg.createdAt > conversations[key].lastMessageTime) {
-        conversations[key].lastMessage = msg.text;
+      if (msg.createdAt && conversations[key].lastMessageTime && 
+          new Date(msg.createdAt) > new Date(conversations[key].lastMessageTime)) {
+        conversations[key].lastMessage = msg.text || '';
         conversations[key].lastMessageTime = msg.createdAt;
         conversations[key].lastMessageId = String(msg._id);
         conversations[key].isNotification = Boolean(msg.isNotification);
       }
     });
-    
+
     const totalCount = unreadMessages.length;
     const conversationList = Object.values(conversations);
+
+    // Hydrate titles/names (best-effort)
+    const projectIds = [...new Set(conversationList.map(c => c.projectId).filter(Boolean))]
+      .filter((id) => isValidObjectId(id));
+    const fromUserIds = [...new Set(conversationList.map(c => c.fromUserId).filter(Boolean))]
+      .filter((id) => isValidObjectId(id));
+
+    const [projects, fromUsers] = await Promise.all([
+      Project.find({ _id: { $in: projectIds } }).select('title').lean(),
+      User.find({ _id: { $in: fromUserIds } }).select('name email').lean()
+    ]);
+
+    const projectTitleById = {};
+    (projects || []).forEach(p => { projectTitleById[String(p._id)] = p.title; });
+    const userNameById = {};
+    (fromUsers || []).forEach(u => { userNameById[String(u._id)] = u.name; });
+
+    for (const c of conversationList) {
+      c.projectTitle = projectTitleById[c.projectId] || '(Unknown project)';
+      c.fromUserName = userNameById[c.fromUserId] || '(Unknown user)';
+    }
     
     res.json({
       totalCount,
       conversations: conversationList
     });
   } catch (err) {
+    console.error('Error in /api/messages/unread-count:', err);
     res.status(500).json({ error: err.message });
   }
 });

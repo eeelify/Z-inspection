@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronLeft, Save, Loader2, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Save, Loader2, CheckCircle, AlertTriangle, XCircle, X } from 'lucide-react';
 import { Project, User } from '../types';
 import { api } from '../api';
 
@@ -50,6 +50,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   const [loading, setLoading] = useState(true);
   const [generalQuestions, setGeneralQuestions] = useState<GeneralQuestion[]>([]);
   const [completionPercentage, setCompletionPercentage] = useState(0);
+  const [showQuestionNav, setShowQuestionNav] = useState(false);
 
   // Convert backend question format to frontend format
   const convertQuestion = (q: any): GeneralQuestion => {
@@ -291,6 +292,26 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
     return q.code || q.id;
   };
 
+  const isQuestionAnswered = (q: GeneralQuestion) => {
+    const key = getQuestionKey(q);
+    const answerValue = answers[q.id] || answers[key] || (q.code ? answers[q.code] : undefined) || (q._id ? answers[q._id] : undefined);
+    const hasAnswer = Boolean(answerValue && String(answerValue).trim().length > 0);
+
+    const riskValue =
+      (risks[q.id] === 0 || risks[q.id] === 1 || risks[q.id] === 2 || risks[q.id] === 3 || risks[q.id] === 4)
+        ? risks[q.id]
+        : ((risks[key] === 0 || risks[key] === 1 || risks[key] === 2 || risks[key] === 3 || risks[key] === 4)
+            ? risks[key]
+            : ((q.code && (risks[q.code] === 0 || risks[q.code] === 1 || risks[q.code] === 2 || risks[q.code] === 3 || risks[q.code] === 4))
+                ? risks[q.code]
+                : (q._id && (risks[q._id] === 0 || risks[q._id] === 1 || risks[q._id] === 2 || risks[q._id] === 3 || risks[q._id] === 4)
+                    ? risks[q._id]
+                    : undefined)));
+
+    const hasRisk = riskValue === 0 || riskValue === 1 || riskValue === 2 || riskValue === 3 || riskValue === 4;
+    return hasAnswer && hasRisk;
+  };
+
   const saveAnswers = async () => {
     setSaving(true);
     try {
@@ -500,28 +521,103 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 <p className="text-xs text-gray-500 font-medium">Progress</p>
                 <p className="text-sm font-bold text-gray-900">{completionPercentage}%</p>
               </div>
-              <div className="w-48 bg-gray-200 rounded-full h-5 overflow-hidden border border-gray-300">
-                <div
-                  className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-green-500 to-green-600"
-                  style={{ 
-                    width: `${completionPercentage}%`, 
-                    minWidth: completionPercentage > 0 ? '8px' : '0',
-                  }}
-                />
-              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div className="flex-1 px-4 py-8 max-w-5xl mx-auto w-full flex flex-col">
-        {/* Question Card */}
-        <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1">
+        <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
+          {/* Mobile: question list drawer */}
+          {showQuestionNav && (
+            <div className="fixed inset-0 z-50 md:hidden">
+              <div className="absolute inset-0 bg-black/30" onClick={() => setShowQuestionNav(false)} />
+              <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-white shadow-2xl border-r border-gray-200 flex flex-col">
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                  <div className="font-semibold text-gray-900">Questions</div>
+                  <button
+                    type="button"
+                    className="p-2 rounded-lg hover:bg-gray-100"
+                    onClick={() => setShowQuestionNav(false)}
+                    aria-label="Close questions"
+                  >
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+                <div className="p-3 overflow-y-auto">
+                  <div className="space-y-1">
+                    {generalQuestions.map((q, idx) => {
+                      const active = idx === currentQuestionIndex;
+                      const done = isQuestionAnswered(q);
+                      return (
+                        <button
+                          key={q.id || idx}
+                          type="button"
+                          onClick={() => {
+                            setCurrentQuestionIndex(idx);
+                            setShowQuestionNav(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                            active
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="font-medium">Q{idx + 1}</span>
+                          {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Desktop: left question list */}
+          <div className="hidden md:block md:w-56 lg:w-64 shrink-0">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-28 max-h-[70vh] overflow-y-auto">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pb-2">
+                Questions
+              </div>
+              <div className="space-y-1">
+                {generalQuestions.map((q, idx) => {
+                  const active = idx === currentQuestionIndex;
+                  const done = isQuestionAnswered(q);
+                  return (
+                    <button
+                      key={q.id || idx}
+                      type="button"
+                      onClick={() => setCurrentQuestionIndex(idx)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                        active
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="font-medium">Q{idx + 1}</span>
+                      {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Question Card */}
+          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 min-h-0">
             <div className="p-8 border-b border-gray-100 bg-white">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
               <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
                 Question {currentQuestionIndex + 1} of {generalQuestions.length}
               </span>
+              <button
+                type="button"
+                onClick={() => setShowQuestionNav(true)}
+                className="md:hidden px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+              >
+                Q list
+              </button>
               <span className="px-3 py-1 bg-purple-100 text-purple-600 text-sm font-medium rounded-full">
                 {currentQuestion.principle}
               </span>
@@ -706,6 +802,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             </div>
           </div>
         </div>
+      </div>
 
         {/* Navigation Footer */}
         <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 mt-8 flex justify-between items-center z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
