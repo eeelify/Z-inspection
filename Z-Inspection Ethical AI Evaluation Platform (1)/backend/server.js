@@ -2835,31 +2835,47 @@ app.get('/api/messages/unread-count', async (req, res) => {
     })
     .populate('projectId', 'title')
     .populate('fromUserId', 'name email')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .lean();
     
     // Group by projectId and fromUserId
     const conversations = {};
     unreadMessages.forEach(msg => {
-      const projectId = msg.projectId._id.toString();
-      const fromUserId = msg.fromUserId._id.toString();
+      // Skip messages with missing or null populated fields
+      if (!msg || !msg.projectId || !msg.fromUserId) {
+        console.warn('Skipping message with missing projectId or fromUserId:', msg?._id);
+        return;
+      }
+      
+      const projectIdRaw = msg.projectId._id || msg.projectId;
+      const fromUserIdRaw = msg.fromUserId._id || msg.fromUserId;
+      
+      if (!projectIdRaw || !fromUserIdRaw) {
+        console.warn('Skipping message with invalid projectId or fromUserId:', msg?._id);
+        return;
+      }
+      
+      const projectId = String(projectIdRaw);
+      const fromUserId = String(fromUserIdRaw);
       const key = `${projectId}-${fromUserId}`;
       
       if (!conversations[key]) {
         conversations[key] = {
           projectId: projectId,
-          projectTitle: msg.projectId.title,
+          projectTitle: msg.projectId.title || '(No title)',
           fromUserId: fromUserId,
-          fromUserName: msg.fromUserId.name,
+          fromUserName: msg.fromUserId.name || 'Unknown',
           count: 0,
-          lastMessage: msg.text,
+          lastMessage: msg.text || '',
           lastMessageTime: msg.createdAt,
           lastMessageId: String(msg._id),
           isNotification: Boolean(msg.isNotification)
         };
       }
       conversations[key].count++;
-      if (msg.createdAt > conversations[key].lastMessageTime) {
-        conversations[key].lastMessage = msg.text;
+      if (msg.createdAt && conversations[key].lastMessageTime && 
+          new Date(msg.createdAt) > new Date(conversations[key].lastMessageTime)) {
+        conversations[key].lastMessage = msg.text || '';
         conversations[key].lastMessageTime = msg.createdAt;
         conversations[key].lastMessageId = String(msg._id);
         conversations[key].isNotification = Boolean(msg.isNotification);
@@ -2874,6 +2890,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
       conversations: conversationList
     });
   } catch (err) {
+    console.error('Error in /api/messages/unread-count:', err);
     res.status(500).json({ error: err.message });
   }
 });
