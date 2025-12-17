@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft, Calendar, Users as UsersIcon, Target, BarChart3, Plus,
   FileText, Shield, MessageSquare, User as UserIconLucide, GitBranch, Download
@@ -166,6 +166,32 @@ export function ProjectDetail({
       }
     }
   }, [initialChatUserId, users, currentUser.id, chatPanelOpen]);
+
+  const closeChat = useCallback(() => {
+    setChatPanelOpen(false);
+    setChatOtherUser(null);
+    setChatProject(null);
+  }, []);
+
+  // Lock background scroll when chat drawer is open
+  useEffect(() => {
+    if (!chatPanelOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [chatPanelOpen]);
+
+  // Close on Escape when chat is open
+  useEffect(() => {
+    if (!chatPanelOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeChat();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [chatPanelOpen, closeChat]);
 
   const hasEditPermission = true; 
 
@@ -900,21 +926,36 @@ export function ProjectDetail({
       )}
       
       {chatPanelOpen && chatOtherUser && chatProject && (
-        <ChatPanel
-          project={chatProject}
-          currentUser={currentUser}
-          otherUser={chatOtherUser}
-          defaultFullscreen={true}
-          onClose={() => {
-            setChatPanelOpen(false);
-            setChatOtherUser(null);
-            setChatProject(null);
-          }}
-          onMessageSent={() => {
-            // Trigger window event to refresh notifications in other components
-            window.dispatchEvent(new Event('message-sent'));
-          }}
-        />
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={closeChat}
+            aria-hidden="true"
+          />
+
+          {/* Center modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="w-full max-w-3xl h-[85vh] sm:h-[80vh] bg-white shadow-2xl border border-gray-200 rounded-xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <ChatPanel
+                project={chatProject}
+                currentUser={currentUser}
+                otherUser={chatOtherUser}
+                inline={true}
+                onClose={closeChat}
+                onMessageSent={() => {
+                  // Trigger window event to refresh notifications in other components
+                  window.dispatchEvent(new Event('message-sent'));
+                }}
+              />
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
