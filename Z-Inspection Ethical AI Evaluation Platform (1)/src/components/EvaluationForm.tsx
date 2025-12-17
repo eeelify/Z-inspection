@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, FormEvent } from 'react';
 import { 
   ArrowLeft, Save, Send, Plus, AlertTriangle, CheckCircle, XCircle, 
-  Info, ChevronRight, ChevronLeft, Loader2, Trash2, Upload 
+  Info, ChevronRight, ChevronLeft, Loader2, Trash2, Upload, X
 } from 'lucide-react';
 
 import { Project, User, Question, StageKey, QuestionType, UseCase, EthicalPrinciple, Tension, QuestionOption } from '../types';
@@ -86,6 +86,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const [linkedUseCase, setLinkedUseCase] = useState<UseCase | null>(null);
   const [generalRisks, setGeneralRisks] = useState<Array<{ id: string; title: string; description: string; severity?: 'low' | 'medium' | 'high' | 'critical'; relatedQuestions?: string[] }>>([]);
   const [showReviewScreen, setShowReviewScreen] = useState(false);
+  const [showQuestionNav, setShowQuestionNav] = useState(false);
   const [editingRiskIdReview, setEditingRiskIdReview] = useState<string | null>(null);
   const [tensions, setTensions] = useState<Tension[]>([]);
   const [editingTensionId, setEditingTensionId] = useState<string | null>(null);
@@ -137,6 +138,15 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
   const getOptionValue = (option: QuestionOption) => typeof option === 'string' ? option : option.value;
   const getOptionLabel = (option: QuestionOption) => typeof option === 'string' ? option : option.label;
+
+  const isQuestionAnswered = (questionId: string) => {
+    const v = answers[questionId];
+    if (v === undefined || v === null) return false;
+    if (typeof v === 'string') return v.trim().length > 0;
+    if (Array.isArray(v)) return v.length > 0;
+    // numbers/objects count as answered (risk/likert/etc.)
+    return true;
+  };
 
   const currentQuestions = useMemo(() => {
     // Use loaded questions from MongoDB if available, otherwise fall back to hardcoded
@@ -1471,12 +1481,6 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 <p className="text-xs text-gray-500 font-medium">Progress</p>
                 <p className="text-sm font-bold text-gray-900">{getCompletionPercentage()}%</p>
               </div>
-              <div className="w-32 bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200">
-                <div
-                  className="h-full rounded-full transition-all duration-500 ease-out shadow-sm"
-                  style={{ width: `${getCompletionPercentage()}%`, backgroundColor: roleColor }}
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -1903,13 +1907,97 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                     </div>
                 </div>
             ) : activeQuestion ? (
-                <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    
+                <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
+                    {/* Mobile: open question list */}
+                    {showQuestionNav && (
+                        <div className="fixed inset-0 z-50 md:hidden">
+                            <div className="absolute inset-0 bg-black/30" onClick={() => setShowQuestionNav(false)} />
+                            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-white shadow-2xl border-r border-gray-200 flex flex-col">
+                                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                                    <div className="font-semibold text-gray-900">Questions</div>
+                                    <button
+                                        type="button"
+                                        className="p-2 rounded-lg hover:bg-gray-100"
+                                        onClick={() => setShowQuestionNav(false)}
+                                        aria-label="Close questions"
+                                    >
+                                        <X className="w-5 h-5 text-gray-600" />
+                                    </button>
+                                </div>
+                                <div className="p-3 overflow-y-auto">
+                                    <div className="space-y-1">
+                                        {currentQuestions.map((q, idx) => {
+                                            const active = idx === currentQuestionIndex;
+                                            const done = isQuestionAnswered(q.id);
+                                            return (
+                                                <button
+                                                    key={q.id || idx}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setCurrentQuestionIndex(idx);
+                                                        setShowQuestionNav(false);
+                                                    }}
+                                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                                                        active
+                                                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                            : 'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <span className="font-medium">Q{idx + 1}</span>
+                                                    {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Desktop: left question list */}
+                    <div className="hidden md:block md:w-56 lg:w-64 shrink-0">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-40 max-h-[70vh] overflow-y-auto">
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pb-2">
+                                Questions
+                            </div>
+                            <div className="space-y-1">
+                                {currentQuestions.map((q, idx) => {
+                                    const active = idx === currentQuestionIndex;
+                                    const done = isQuestionAnswered(q.id);
+                                    return (
+                                        <button
+                                            key={q.id || idx}
+                                            type="button"
+                                            onClick={() => setCurrentQuestionIndex(idx)}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                                                active
+                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                    : 'text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <span className="font-medium">Q{idx + 1}</span>
+                                            {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: Active question card */}
+                    <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0">
                     <div className="p-8 border-b border-gray-100 bg-white">
-                        <div className="flex items-center gap-3 mb-4">
+                        <div className="flex flex-wrap items-center gap-3 mb-4">
                             <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
                                 Question {currentQuestionIndex + 1} of {currentQuestions.length}
                             </span>
+                            <button
+                                type="button"
+                                onClick={() => setShowQuestionNav(true)}
+                                className="px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+                            >
+                                Q list
+                            </button>
                             {activeQuestion.required && (
                                 <span className="px-3 py-1 bg-red-50 text-red-600 text-sm font-medium rounded-full border border-red-100">
                                     Required
@@ -2139,6 +2227,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         </div>
                     </div>
                 </div>
+            </div>
             ) : (
                  <div className="text-center py-32 bg-white rounded-3xl shadow-sm border border-dashed border-gray-200 flex flex-col items-center justify-center">
                     <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 ring-8 ring-gray-50/50">
