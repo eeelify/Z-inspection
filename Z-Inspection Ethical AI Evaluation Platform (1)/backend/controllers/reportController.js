@@ -154,6 +154,58 @@ exports.generateReport = async (req, res) => {
 
     console.log('✅ Report generated and saved:', report._id);
 
+    // Notify all assigned experts (excluding admin who generated the report)
+    try {
+      const Message = mongoose.model('Message');
+      
+      if (analysisData.project && analysisData.project.assignedUsers && analysisData.project.assignedUsers.length > 0) {
+        const assignedUserIds = analysisData.project.assignedUsers
+          .map(id => {
+            const idStr = id.toString ? id.toString() : String(id);
+            return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : id;
+          })
+          .filter(id => {
+            // Exclude the admin who generated the report
+            if (userIdObj) {
+              const idStr = id.toString ? id.toString() : String(id);
+              const userIdStr = userIdObj.toString ? userIdObj.toString() : String(userIdObj);
+              if (idStr === userIdStr) {
+                return false;
+              }
+            }
+            return true;
+          });
+
+        if (assignedUserIds.length > 0) {
+          const projectTitle = analysisData.project.title || 'Project';
+          const notificationText = `[NOTIFICATION] A new report has been generated for project "${projectTitle}". You can view it in the Reports section.`;
+          
+          const projectIdObj = isValidObjectId(projectId)
+            ? new mongoose.Types.ObjectId(projectId)
+            : projectId;
+          
+          await Promise.all(
+            assignedUserIds.map(assignedUserId =>
+              Message.create({
+                projectId: projectIdObj,
+                fromUserId: userIdObj || assignedUserId, // Use admin ID if available, otherwise use assigned user ID
+                toUserId: assignedUserId,
+                text: notificationText,
+                isNotification: true,
+                createdAt: new Date(),
+                readAt: null,
+              })
+            )
+          );
+          
+          console.log(`📬 Notifications sent to ${assignedUserIds.length} assigned expert(s)`);
+        }
+      }
+    } catch (notificationError) {
+      // Don't fail report generation if notification fails
+      console.error('⚠️ Error sending notifications:', notificationError);
+    }
+
     res.json({
       success: true,
       report: {

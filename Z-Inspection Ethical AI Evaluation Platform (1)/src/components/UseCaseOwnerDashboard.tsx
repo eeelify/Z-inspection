@@ -53,6 +53,7 @@ export function UseCaseOwnerDashboard({
   const [showProfile, setShowProfile] = useState(false);
   const [myUseCases, setMyUseCases] = useState<UseCase[]>([]);
   const [loadingUseCases, setLoadingUseCases] = useState(true);
+  const [useCaseProgresses, setUseCaseProgresses] = useState<Record<string, number>>({});
 
   // Fetch only this owner's use cases directly from backend (much faster)
   const fetchMyUseCases = React.useCallback(async () => {
@@ -79,6 +80,79 @@ export function UseCaseOwnerDashboard({
   useEffect(() => {
     fetchMyUseCases();
   }, [fetchMyUseCases]);
+
+  // Fetch progress for all use cases that are linked to projects
+  useEffect(() => {
+    const fetchUseCaseProgresses = async () => {
+      if (!myUseCases.length || !projects.length || !users.length) return;
+
+      const progresses: Record<string, number> = {};
+      
+      await Promise.all(
+        myUseCases.map(async (useCase) => {
+          const useCaseId = ((useCase as any).id || (useCase as any)._id || '').toString();
+          
+          // Find project linked to this use case
+          const getProjectUseCaseId = (p: any): string | null => {
+            const val = p?.useCase;
+            if (!val) return null;
+            if (typeof val === 'string') return val;
+            return (val.url || val._id || val.id || val.useCaseId || null) as string | null;
+          };
+          
+          const linkedProject = projects.find((p) => {
+            const pid = getProjectUseCaseId(p as any);
+            return pid && pid.toString() === useCaseId;
+          });
+
+          if (!linkedProject || !linkedProject.assignedUsers || linkedProject.assignedUsers.length === 0) {
+            progresses[useCaseId] = useCase.progress || 0;
+            return;
+          }
+
+          try {
+            const { fetchUserProgress } = await import('../utils/userProgress');
+            
+            // Calculate average progress from all assigned users
+            const progressPromises = linkedProject.assignedUsers.map(async (userId: string) => {
+              const user = users.find((u: any) => (u.id || (u as any)._id) === userId);
+              if (!user) return 0;
+              
+              try {
+                const progress = await fetchUserProgress(linkedProject, user);
+                return progress;
+              } catch (error) {
+                console.error(`Error fetching progress for user ${userId}:`, error);
+                return 0;
+              }
+            });
+
+            const progressesList = await Promise.all(progressPromises);
+            const validProgresses = progressesList.filter(p => p > 0);
+            
+            if (validProgresses.length > 0) {
+              const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
+              progresses[useCaseId] = Math.round(average);
+            } else {
+              progresses[useCaseId] = 0;
+            }
+          } catch (error) {
+            console.error(`Error calculating progress for use case ${useCaseId}:`, error);
+            progresses[useCaseId] = useCase.progress || 0;
+          }
+        })
+      );
+      
+      setUseCaseProgresses(progresses);
+    };
+
+    if (myUseCases.length > 0 && projects.length > 0 && users.length > 0) {
+      fetchUseCaseProgresses();
+      // Update progress every 5 seconds
+      const interval = setInterval(fetchUseCaseProgresses, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [myUseCases, projects, users]);
   
   // Find admin user
   const adminUser = users.find(u => u.role === 'admin');
@@ -452,6 +526,11 @@ export function UseCaseOwnerDashboard({
                 // Display rule: show status badge always, but if linked to a project show "In Review" instead of "Assigned".
                 const showStatusBadge = true;
 
+                // Use calculated progress if available, otherwise fallback to useCase.progress
+                const displayProgress = useCaseProgresses[useCaseId] !== undefined 
+                  ? useCaseProgresses[useCaseId] 
+                  : (useCase.progress || 0);
+
                 return (
                 <div
                   key={useCase.id}
@@ -492,12 +571,12 @@ export function UseCaseOwnerDashboard({
                   <div className="px-6 py-4 border-b border-gray-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-600">Progress</span>
-                      <span className="text-xs text-gray-900">{useCase.progress}%</span>
+                      <span className="text-xs text-gray-900">{displayProgress}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-green-600 h-2 rounded-full transition-all"
-                        style={{ width: `${useCase.progress}%` }}
+                        style={{ width: `${displayProgress}%` }}
                       />
                     </div>
                   </div>
