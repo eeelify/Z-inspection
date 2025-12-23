@@ -577,29 +577,55 @@ export function UseCaseOwnerDashboard({
         />
       )}
       
-      {/* CHAT PANEL */}
+      {/* CHAT PANEL - Modal in center */}
       {chatPanelOpen && chatAdmin && chatProject && (
-        <ChatPanel
-          project={chatProject}
-          currentUser={currentUser}
-          otherUser={chatAdmin}
-          inline={false}
-          onClose={() => {
-            setChatPanelOpen(false);
-            setChatAdmin(null);
-            setChatProject(null);
-          }}
-          onMessageSent={() => {
-            window.dispatchEvent(new Event('message-sent'));
-            fetchUnreadCount();
-          }}
-          onDeleteConversation={() => {
-            setChatPanelOpen(false);
-            setChatAdmin(null);
-            setChatProject(null);
-            fetchUnreadCount();
-          }}
-        />
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => {
+              setChatPanelOpen(false);
+              setChatAdmin(null);
+              setChatProject(null);
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Center modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="w-full max-w-2xl bg-white shadow-2xl border border-gray-200 rounded-xl overflow-hidden flex flex-col min-h-0"
+              style={{ height: '70vh', maxHeight: 650 }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="flex-1 min-h-0 h-full overflow-hidden">
+                <ChatPanel
+                  project={chatProject}
+                  currentUser={currentUser}
+                  otherUser={chatAdmin}
+                  inline={true}
+                  onClose={() => {
+                    setChatPanelOpen(false);
+                    setChatAdmin(null);
+                    setChatProject(null);
+                  }}
+                  onMessageSent={() => {
+                    window.dispatchEvent(new Event('message-sent'));
+                    fetchUnreadCount();
+                  }}
+                  onDeleteConversation={() => {
+                    setChatPanelOpen(false);
+                    setChatAdmin(null);
+                    setChatProject(null);
+                    fetchUnreadCount();
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* PROFILE MODAL */}
@@ -648,6 +674,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [aiSystemCategory, setAiSystemCategory] = useState('Healthcare & Medical');
+  const [aiSystemLink, setAiSystemLink] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [files, setFiles] = useState<FileAttachment[]>([]);
   
@@ -779,6 +806,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
       title,
       description,
       aiSystemCategory,
+      aiSystemLink: aiSystemLink || undefined,
       status: 'assigned',
       progress: 0,
       ownerId: currentUser.id,
@@ -1019,6 +1047,23 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
             <div>
               <h3 className="text-lg text-gray-900 mb-4">📋 Use Case Questions</h3>
               <p className="text-sm text-gray-600 mb-6">Please answer the following questions about your AI system use case.</p>
+            </div>
+
+            {/* AI System Link (optional) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                AI System Link (optional)
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                If available, provide a link to the AI system documentation, website, or repository.
+              </p>
+              <input
+                type="url"
+                value={aiSystemLink}
+                onChange={(e) => setAiSystemLink(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="https://example.com/ai-system"
+              />
             </div>
 
             {loadingQuestions ? (

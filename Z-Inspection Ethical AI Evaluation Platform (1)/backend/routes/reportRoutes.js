@@ -37,6 +37,9 @@ router.get('/test-api-key', async (req, res) => {
 // POST /api/reports/generate - Generate AI report
 router.post('/generate', reportController.generateReport);
 
+// GET /api/reports/my-reports - Get reports for projects assigned to user (must be before /:id route)
+router.get('/my-reports', reportController.getMyReports);
+
 // GET /api/reports - Get all reports
 router.get('/', reportController.getAllReports);
 

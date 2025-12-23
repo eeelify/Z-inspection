@@ -12,6 +12,8 @@ import {
   Play,
   Clock,
   X,
+  FileText,
+  Trash2,
 } from "lucide-react";
 import { Project, User, UseCase } from "../types";
 import { ChatPanel } from "./ChatPanel";
@@ -32,7 +34,7 @@ interface UserDashboardProps {
   onViewUseCase?: (useCase: UseCase) => void;
   onLogout: () => void;
   onUpdateUser?: (user: User) => void;
-  preferredTab?: "assigned" | "commented" | null;
+  preferredTab?: "assigned" | "finished" | null;
   onPreferredTabApplied?: () => void;
   assignmentsRefreshToken?: number;
 }
@@ -84,10 +86,9 @@ export function UserDashboard({
   assignmentsRefreshToken,
 }: UserDashboardProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentTab, setCurrentTab] = useState<"assigned" | "commented">(
+  const [currentTab, setCurrentTab] = useState<"assigned" | "finished" | "reports">(
     "assigned"
   );
-  const [activeFilter, setActiveFilter] = useState("all");
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -100,10 +101,13 @@ export function UserDashboard({
   const [showProfile, setShowProfile] = useState(false);
   const [projectProgresses, setProjectProgresses] = useState<Record<string, number>>({});
   const [assignmentByProjectId, setAssignmentByProjectId] = useState<Record<string, any>>({});
+  const [reports, setReports] = useState<any[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors];
 
-  // Apply preferred tab from parent (used after "Finish Evolution" to jump to Commented)
+  // Apply preferred tab from parent (used after "Finish Evolution" to jump to Finished)
   useEffect(() => {
     if (preferredTab) {
       setCurrentTab(preferredTab);
@@ -228,6 +232,101 @@ export function UserDashboard({
       return () => clearInterval(interval);
     }
   }, [showChats, currentUser.id]);
+
+  // Fetch reports for assigned projects
+  const fetchReports = async () => {
+    try {
+      setReportsLoading(true);
+      const response = await fetch(api(`/api/reports/my-reports?userId=${currentUser.id}`));
+      if (response.ok) {
+        const data = await response.json();
+        setReports(data);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  // Fetch reports when reports tab is shown
+  useEffect(() => {
+    if (currentTab === 'reports') {
+      fetchReports();
+    }
+  }, [currentTab, currentUser.id]);
+
+  // View report
+  const handleViewReport = async (reportId: string) => {
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}`));
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedReport(data);
+      } else {
+        alert('Report could not be loaded');
+      }
+    } catch (error) {
+      console.error('Error fetching report:', error);
+      alert('Report could not be loaded');
+    }
+  };
+
+  // Download report as PDF
+  const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json();
+        alert('PDF could not be downloaded: ' + (error.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading PDF:', error);
+      alert('PDF could not be downloaded: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  // Delete report
+  const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const confirmDelete = window.confirm(`Are you sure you want to delete the report "${reportTitle}"? This action cannot be undone.`);
+    if (!confirmDelete) return;
+
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}`), {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        alert('✅ Report deleted successfully');
+        fetchReports(); // Refresh reports list
+        if (selectedReport && (selectedReport._id === reportId || selectedReport.id === reportId)) {
+          setSelectedReport(null); // Close modal if deleted report is being viewed
+        }
+      } else {
+        const error = await response.json();
+        alert('❌ Error: ' + (error.error || 'Failed to delete report'));
+      }
+    } catch (error: any) {
+      console.error('Error deleting report:', error);
+      alert('❌ Error: ' + (error.message || 'Failed to delete report'));
+    }
+  };
 
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
@@ -386,18 +485,17 @@ export function UserDashboard({
   // Assigned Projects
   const myProjects = projects.filter((p) => p.assignedUsers.includes(currentUser.id));
   const assignedProjects = myProjects.filter((p) => !assignmentByProjectId[p.id]?.evolutionCompletedAt);
-  const commentedProjects = myProjects.filter((p) => Boolean(assignmentByProjectId[p.id]?.evolutionCompletedAt));
+  const finishedProjects = myProjects.filter((p) => Boolean(assignmentByProjectId[p.id]?.evolutionCompletedAt));
 
   const activeProjectList =
-    currentTab === "assigned" ? assignedProjects : commentedProjects;
+    currentTab === "assigned" ? assignedProjects : finishedProjects;
 
   const filteredProjects = activeProjectList.filter((p) => {
-    const matchFilter = activeFilter === "all" || p.status === activeFilter;
     const matchSearch =
       p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.shortDescription.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchFilter && matchSearch;
+    return matchSearch;
   });
 
   const canStartEvaluation = (project: Project) => {
@@ -526,22 +624,6 @@ export function UserDashboard({
                 Z-Inspection Platform
               </h1>
 
-              {/* FILTER BUTTONS */}
-              <div className="hidden md:flex space-x-2">
-                {["all", "ongoing", "proven", "disproven"].map((key) => (
-                  <button
-                    key={key}
-                    onClick={() => setActiveFilter(key)}
-                    className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                      activeFilter === key
-                        ? "bg-gray-900 text-white"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }`}
-                  >
-                    {key.toUpperCase()}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Right side: search, bell, user */}
@@ -683,14 +765,27 @@ export function UserDashboard({
               <button
                 onClick={() => {
                   setShowChats(false);
+                  setCurrentTab("assigned");
                   onNavigate("dashboard");
                 }}
                 className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${
-                  !showChats ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                  !showChats && currentTab !== 'reports' ? 'bg-blue-50 border-r-2 border-blue-500' : ''
                 }`}
               >
                 <Folder className="h-4 w-4 mr-3" />
                 My Projects
+              </button>
+              <button
+                onClick={() => {
+                  setShowChats(false);
+                  setCurrentTab("reports");
+                }}
+                className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${
+                  !showChats && currentTab === 'reports' ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                }`}
+              >
+                <FileText className="h-4 w-4 mr-3" />
+                Reports
               </button>
               <button
                 onClick={() => onNavigate("shared-area")}
@@ -808,19 +903,20 @@ export function UserDashboard({
                   </button>
 
                   <button
-                    onClick={() => setCurrentTab("commented")}
+                    onClick={() => setCurrentTab("finished")}
                     className={`py-2 px-1 border-b-2 text-sm ${
-                      currentTab === "commented"
+                      currentTab === "finished"
                         ? "border-blue-600 text-blue-600"
                         : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
                   >
-                    💬 Commented ({commentedProjects.length})
+                    ✅ Finished Projects ({finishedProjects.length})
                   </button>
                 </nav>
               </div>
 
               {/* ===== PROJECT LIST ===== */}
+              {currentTab !== "reports" && (
               <div className="space-y-4">
                 {filteredProjects.map((project) => (
               <div
@@ -969,21 +1065,112 @@ export function UserDashboard({
                 {filteredProjects.length === 0 && (
                   <div className="text-center py-12">
                     <div className="text-6xl mb-3">
-                      {currentTab === "assigned" ? "📂" : "💬"}
+                      {currentTab === "assigned" ? "📂" : "✅"}
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No {currentTab} projects found
+                      No {currentTab === "assigned" ? "assigned" : "finished"} projects found
                     </h3>
                     <p className="text-gray-600">
                       {searchTerm
                         ? "No projects match your search."
                         : currentTab === "assigned"
                         ? "You have not been assigned to any projects."
-                        : "You have not commented on any projects yet."}
+                        : "You have not finished any projects yet."}
                     </p>
                   </div>
                 )}
               </div>
+              )}
+
+              {/* ===== REPORTS TAB ===== */}
+              {currentTab === "reports" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900">Project Reports</h2>
+                    <button
+                      onClick={fetchReports}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+
+                  {reportsLoading ? (
+                    <div className="text-center py-12 text-gray-500">Loading reports...</div>
+                  ) : reports.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No reports available</h3>
+                      <p className="text-gray-600">
+                        Reports for your assigned projects will appear here once they are generated.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {reports.map((report: any) => {
+                        const reportId = report._id || report.id;
+                        const projectTitle = report.projectId?.title || 'Unknown Project';
+                        const generatedBy = report.generatedBy?.name || 'System';
+                        const generatedAt = new Date(report.generatedAt || report.createdAt).toLocaleString('en-US');
+
+                        return (
+                          <div
+                            key={reportId}
+                            className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div 
+                                className="flex-1 cursor-pointer"
+                                onClick={() => handleViewReport(reportId)}
+                              >
+                                <h3 className="font-medium text-gray-900 mb-1">{report.title}</h3>
+                                <p className="text-sm text-gray-600 mb-2">{projectTitle}</p>
+                                <div className="flex items-center gap-4 text-xs text-gray-500">
+                                  <span>Created by: {generatedBy}</span>
+                                  <span>•</span>
+                                  <span>{generatedAt}</span>
+                                  {report.metadata && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{report.metadata.totalScores || 0} scores</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
+                                  className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                                  title="Download PDF"
+                                >
+                                  <Download className="h-4 w-4" />
+                                  PDF
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteReport(reportId, report.title, e)}
+                                  className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                                  title="Delete Report"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </button>
+                                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                  report.status === 'final' ? 'bg-green-100 text-green-800' :
+                                  report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {report.status === 'final' ? 'Final' :
+                                   report.status === 'archived' ? 'Archived' : 'Draft'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1059,6 +1246,67 @@ export function UserDashboard({
           }}
           onLogout={onLogout}
         />
+      )}
+
+      {/* REPORT VIEW MODAL */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{selectedReport.title}</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedReport.projectId?.title} • {new Date(selectedReport.generatedAt || selectedReport.createdAt).toLocaleString('en-US')}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
+                {selectedReport.content}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadPDF(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDeleteReport(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Report
+                </button>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

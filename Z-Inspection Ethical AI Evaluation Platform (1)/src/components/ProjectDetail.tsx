@@ -508,14 +508,14 @@ export function ProjectDetail({
 
       if (response.ok) {
         const result = await response.json();
-        alert('✅ Rapor başarıyla oluşturuldu!');
+        alert('✅ Report generated successfully!');
       } else {
         const error = await response.json();
-        alert('❌ Hata: ' + (error.error || 'Rapor oluşturulamadı'));
+        alert('❌ Error: ' + (error.error || 'Failed to generate report'));
       }
     } catch (error: any) {
       console.error('Error generating report:', error);
-      alert('❌ Hata: ' + (error.message || 'Rapor oluşturulamadı'));
+      alert('❌ Error: ' + (error.message || 'Failed to generate report'));
     } finally {
       setGenerating(false);
     }
@@ -622,7 +622,7 @@ export function ProjectDetail({
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {generating ? 'Creating...' : 'Report'}
+                {generating ? 'Generating...' : 'Generate Report'}
               </button>
             )}
             {isAssigned && progressDisplay < 100 && (
@@ -995,6 +995,21 @@ export function ProjectDetail({
           </div>
         </div>
       </div>
+
+      {/* Generating Report Overlay */}
+      {generating && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
+            <div className="flex items-center space-x-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Generating Report</h3>
+                <p className="text-sm text-gray-600 mt-1">Your report is being generated. Please wait...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddTension && canManageTensions && (
         <AddTensionModal onClose={() => setShowAddTension(false)} onSave={handleSaveTension} />

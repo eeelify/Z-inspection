@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, AlertTriangle, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download } from 'lucide-react';
+import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
 import { fetchUserProgress } from '../utils/userProgress';
 import { ChatPanel } from './ChatPanel';
@@ -152,7 +152,6 @@ export function AdminDashboardEnhanced({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [allConversations, setAllConversations] = useState<any[]>([]);
   const [showProfile, setShowProfile] = useState(false);
-  const [projectScores, setProjectScores] = useState<Record<string, number>>({});
 
   // Fetch all conversations (chats)
   const fetchConversations = async () => {
@@ -409,96 +408,6 @@ export function AdminDashboardEnhanced({
     p.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Fetch project scores for risk distribution
-  useEffect(() => {
-    const fetchProjectScores = async () => {
-      try {
-        const scoresMap: Record<string, number> = {};
-        
-        // Fetch scores for all projects
-        for (const project of projects) {
-          const projectId = project.id || (project as any)._id;
-          if (!projectId) continue;
-          
-          try {
-            const response = await fetch(api(`/api/scores?projectId=${encodeURIComponent(projectId)}`));
-            if (response.ok) {
-              const scores = await response.json();
-              if (Array.isArray(scores) && scores.length > 0) {
-                // Calculate average of all scores for this project
-                const avgScores = scores
-                  .map((s: any) => s.totals?.avg)
-                  .filter((avg: any) => avg !== undefined && avg !== null && typeof avg === 'number');
-                
-                if (avgScores.length > 0) {
-                  const projectAvg = avgScores.reduce((a: number, b: number) => a + b, 0) / avgScores.length;
-                  scoresMap[projectId] = projectAvg;
-                }
-              }
-            }
-          } catch (error) {
-            console.error(`Error fetching scores for project ${projectId}:`, error);
-          }
-        }
-        
-        setProjectScores(scoresMap);
-      } catch (error) {
-        console.error('Error fetching project scores:', error);
-      }
-    };
-
-    if (projects.length > 0) {
-      fetchProjectScores();
-    }
-  }, [projects]);
-
-  // Calculate risk levels based on scores
-  const calculateRiskLevel = (avgScore: number | undefined): 'Critical' | 'High' | 'Medium' | 'Low' => {
-    if (avgScore === undefined || avgScore === null) return 'Medium'; // Default for projects without scores
-    
-    // Score range: 0-4 (0 = highest risk, 4 = lowest risk)
-    if (avgScore <= 0.5) return 'Critical';
-    if (avgScore <= 1.5) return 'High';
-    if (avgScore <= 2.5) return 'Medium';
-    return 'Low';
-  };
-
-  // Calculate risk distribution
-  const riskDistribution = projects.reduce((acc, project) => {
-    const projectId = project.id || (project as any)._id;
-    const avgScore = projectScores[projectId];
-    const riskLevel = calculateRiskLevel(avgScore);
-    acc[riskLevel] = (acc[riskLevel] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const totalProjects = projects.length;
-  const riskLevels = [
-    { 
-      level: 'Critical', 
-      count: riskDistribution['Critical'] || 0, 
-      color: 'bg-red-500', 
-      percentage: totalProjects > 0 ? Math.round((riskDistribution['Critical'] || 0) / totalProjects * 100) : 0 
-    },
-    { 
-      level: 'High', 
-      count: riskDistribution['High'] || 0, 
-      color: 'bg-orange-500', 
-      percentage: totalProjects > 0 ? Math.round((riskDistribution['High'] || 0) / totalProjects * 100) : 0 
-    },
-    { 
-      level: 'Medium', 
-      count: riskDistribution['Medium'] || 0, 
-      color: 'bg-yellow-500', 
-      percentage: totalProjects > 0 ? Math.round((riskDistribution['Medium'] || 0) / totalProjects * 100) : 0 
-    },
-    { 
-      level: 'Low', 
-      count: riskDistribution['Low'] || 0, 
-      color: 'bg-green-500', 
-      percentage: totalProjects > 0 ? Math.round((riskDistribution['Low'] || 0) / totalProjects * 100) : 0 
-    }
-  ];
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -819,7 +728,6 @@ export function AdminDashboardEnhanced({
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               onViewProject={onViewProject}
-              riskLevels={riskLevels}
               onCreateNew={() => setActiveTab('project-creation')}
               onDeleteProject={onDeleteProject}
             />
@@ -1060,7 +968,7 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
   );
 }
 
-function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProject, riskLevels, onCreateNew, onDeleteProject }: any) {
+function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProject, onCreateNew, onDeleteProject }: any) {
   return (
     <>
       <div className="bg-white border-b border-gray-200 px-8 py-6 flex-shrink-0">
@@ -1086,30 +994,6 @@ function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProj
             placeholder="Search projects..."
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-        </div>
-      </div>
-
-      <div className="px-8 py-6 bg-gray-50/50 border-b border-gray-200 flex-shrink-0">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center uppercase tracking-wider">
-          <AlertTriangle className="h-4 w-4 mr-2 text-orange-600" />
-          Risk Distribution
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {riskLevels.map((risk: any) => (
-            <div key={risk.level} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-600">{risk.level}</span>
-                <div className={`w-2 h-2 rounded-full ${risk.color}`} />
-              </div>
-              <div className="text-2xl font-bold text-gray-900 mb-2">{risk.count}</div>
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
-                <div
-                  className={`${risk.color} h-1.5 rounded-full`}
-                  style={{ width: `${risk.percentage}%` }}
-                />
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -1624,6 +1508,34 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     }
   };
 
+  // Delete report
+  const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent card click event
+    }
+    const confirmDelete = window.confirm(`Are you sure you want to delete the report "${reportTitle}"? This action cannot be undone.`);
+    if (!confirmDelete) return;
+
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}`), {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        alert('✅ Report deleted successfully');
+        fetchReports(); // Refresh reports list
+        if (selectedReport && (selectedReport._id === reportId || selectedReport.id === reportId)) {
+          setSelectedReport(null); // Close modal if deleted report is being viewed
+        }
+      } else {
+        const error = await response.json();
+        alert('❌ Error: ' + (error.error || 'Failed to delete report'));
+      }
+    } catch (error: any) {
+      console.error('Error deleting report:', error);
+      alert('❌ Error: ' + (error.message || 'Failed to delete report'));
+    }
+  };
+
   useEffect(() => {
     fetchReports();
   }, [filterProjectId]);
@@ -1703,6 +1615,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           <Download className="h-4 w-4" />
                           PDF
                         </button>
+                        <button
+                          onClick={(e) => handleDeleteReport(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Delete Report"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
                           report.status === 'final' ? 'bg-green-100 text-green-800' :
                           report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
@@ -1745,18 +1665,32 @@ function CreatedReportsTab({ projects, currentUser }: any) {
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-              <button
-                onClick={() => {
-                  if (selectedReport) {
-                    const reportId = selectedReport._id || selectedReport.id;
-                    handleDownloadPDF(reportId, selectedReport.title);
-                  }
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Download PDF
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadPDF(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDeleteReport(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Report
+                </button>
+              </div>
               <button
                 onClick={() => setSelectedReport(null)}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -1771,10 +1705,11 @@ function CreatedReportsTab({ projects, currentUser }: any) {
   );
 }
 
-function ReportsTab({ projects, riskLevels, currentUser }: any) {
+function ReportsTab({ projects, currentUser }: any) {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [showGeneratingMessage, setShowGeneratingMessage] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [filterProjectId, setFilterProjectId] = useState<string>('');
 
@@ -1801,6 +1736,7 @@ function ReportsTab({ projects, riskLevels, currentUser }: any) {
   const handleGenerateReport = async (projectId: string) => {
     try {
       setGenerating(projectId);
+      setShowGeneratingMessage(true);
       const response = await fetch(api('/api/reports/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1812,15 +1748,18 @@ function ReportsTab({ projects, riskLevels, currentUser }: any) {
 
       if (response.ok) {
         const result = await response.json();
-        alert('✅ Rapor başarıyla oluşturuldu!');
+        setShowGeneratingMessage(false);
+        alert('✅ Report generated successfully!');
         fetchReports(); // Refresh reports list
       } else {
         const error = await response.json();
-        alert('❌ Hata: ' + (error.error || 'Rapor oluşturulamadı'));
+        setShowGeneratingMessage(false);
+        alert('❌ Error: ' + (error.error || 'Failed to generate report'));
       }
     } catch (error: any) {
       console.error('Error generating report:', error);
-      alert('❌ Hata: ' + (error.message || 'Rapor oluşturulamadı'));
+      setShowGeneratingMessage(false);
+      alert('❌ Error: ' + (error.message || 'Failed to generate report'));
     } finally {
       setGenerating(null);
     }
@@ -1848,6 +1787,21 @@ function ReportsTab({ projects, riskLevels, currentUser }: any) {
 
   return (
     <>
+      {/* Generating Message Overlay */}
+      {showGeneratingMessage && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
+            <div className="flex items-center space-x-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Generating Report</h3>
+                <p className="text-sm text-gray-600 mt-1">Your report is being generated. Please wait...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="flex items-center justify-between">
           <div>
@@ -1933,11 +1887,13 @@ function ReportsTab({ projects, riskLevels, currentUser }: any) {
                 return (
                   <div
                     key={reportId}
-                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => handleViewReport(reportId)}
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleViewReport(reportId)}
+                      >
                         <h3 className="font-medium text-gray-900 mb-1">{report.title}</h3>
                         <p className="text-sm text-gray-600 mb-2">{projectTitle}</p>
                         <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -1952,14 +1908,32 @@ function ReportsTab({ projects, riskLevels, currentUser }: any) {
                           )}
                         </div>
                       </div>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        report.status === 'final' ? 'bg-green-100 text-green-800' :
-                        report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {report.status === 'final' ? 'Final' :
-                         report.status === 'archived' ? 'Archived' : 'Draft'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                          PDF
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteReport(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Delete Report"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {report.status === 'final' ? 'Final' :
+                           report.status === 'archived' ? 'Archived' : 'Draft'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1992,7 +1966,33 @@ function ReportsTab({ projects, riskLevels, currentUser }: any) {
                 {selectedReport.content}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadPDF(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDeleteReport(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Report
+                </button>
+              </div>
               <button
                 onClick={() => setSelectedReport(null)}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"

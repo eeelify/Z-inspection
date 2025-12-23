@@ -301,6 +301,49 @@ exports.deleteReport = async (req, res) => {
 };
 
 /**
+ * GET /api/reports/my-reports
+ * Get reports for projects assigned to the current user
+ */
+exports.getMyReports = async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const userIdObj = isValidObjectId(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+
+    // Find all projects where user is assigned
+    const projects = await Project.find({
+      assignedUsers: userIdObj
+    }).select('_id title').lean();
+
+    if (projects.length === 0) {
+      return res.json([]);
+    }
+
+    const projectIds = projects.map(p => p._id);
+
+    // Find all reports for these projects
+    const reports = await Report.find({
+      projectId: { $in: projectIds }
+    })
+      .populate('projectId', 'title')
+      .populate('generatedBy', 'name email')
+      .sort({ generatedAt: -1 })
+      .lean();
+
+    res.json(reports);
+  } catch (err) {
+    console.error('Error fetching user reports:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
  * GET /api/reports/:id/download
  * Download report as PDF
  */

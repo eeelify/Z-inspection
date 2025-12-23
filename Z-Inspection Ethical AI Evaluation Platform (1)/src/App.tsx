@@ -34,7 +34,7 @@ function App() {
   const [users, setUsers] = useState<User[]>([]);
   
   const [needsPrecondition, setNeedsPrecondition] = useState(false);
-  const [dashboardPreferredTab, setDashboardPreferredTab] = useState<"assigned" | "commented" | null>(null);
+  const [dashboardPreferredTab, setDashboardPreferredTab] = useState<"assigned" | "finished" | null>(null);
   const [assignmentsRefreshToken, setAssignmentsRefreshToken] = useState(0);
 
   // --- VERİ ÇEKME (FETCH) ---
@@ -231,7 +231,7 @@ function App() {
       }
 
       setAssignmentsRefreshToken((x) => x + 1);
-      setDashboardPreferredTab("commented");
+      setDashboardPreferredTab("finished");
       setCurrentView("dashboard");
       setSelectedProject(null);
       setSelectedTension(null);
