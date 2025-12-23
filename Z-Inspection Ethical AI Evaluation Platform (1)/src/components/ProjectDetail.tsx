@@ -622,7 +622,7 @@ export function ProjectDetail({
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {generating ? 'Oluşturuluyor...' : 'Report'}
+                {generating ? 'Creating...' : 'Report'}
               </button>
             )}
             {isAssigned && progressDisplay < 100 && (
@@ -748,13 +748,49 @@ export function ProjectDetail({
           </div>
 
           <div className="p-6">
-            {activeTab === 'evaluation' && (
-              <div className="text-center py-8 bg-gray-50 rounded-lg">
-                {userProgress === 0 ? (
-                  <div className="text-gray-500">
-                    Select 'Start Evaluation' to begin.
-                  </div>
-                ) : userProgress < 100 ? (
+            {activeTab === 'evaluation' && (() => {
+              // Calculate average progress for admin view
+              const calculateAverageProgress = () => {
+                const progressValues = Object.values(memberProgresses);
+                if (progressValues.length === 0) return 0;
+                const sum = progressValues.reduce((acc, val) => acc + val, 0);
+                return sum / progressValues.length;
+              };
+
+              const averageProgress = currentUser.role === 'admin' ? calculateAverageProgress() : userProgress;
+              const averageProgressDisplay = Math.max(0, Math.min(100, averageProgress));
+
+              return (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  {userProgress === 0 && currentUser.role === 'admin' ? (
+                    <div>
+                      <div className="text-gray-700 mb-2 font-medium">
+                        Team Average Progress
+                      </div>
+                      <div className="text-sm text-gray-500 mb-4">
+                        {Math.round(averageProgressDisplay)}%
+                      </div>
+                      <div className="max-w-md mx-auto">
+                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div
+                            className={
+                              averageProgressDisplay === 0
+                                ? 'bg-gray-400 h-1.5 rounded-full transition-all'
+                                : 'bg-gradient-to-r from-green-500 to-green-600 h-1.5 rounded-full transition-all'
+                            }
+                            style={{
+                              width: `${averageProgressDisplay}%`,
+                              minWidth: averageProgressDisplay > 0 ? '8px' : '0',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : userProgress === 0 ? (
+                    <div className="text-gray-500">
+                      Select 'Start Evaluation' to begin.
+                    </div>
+                  ) : userProgress < 100 ? (
                   <div>
                     <div className="text-gray-700 mb-2 font-medium">
                       Continue your evaluation
@@ -777,8 +813,9 @@ export function ProjectDetail({
                     </div>
                   </div>
                 )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {activeTab === 'tensions' && (
               <div>
