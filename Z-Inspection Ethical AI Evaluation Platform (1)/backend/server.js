@@ -3482,4 +3482,13 @@ app.use('/api/evaluations', evaluationRoutes);
 const reportRoutes = require('./routes/reportRoutes');
 app.use('/api/reports', reportRoutes);
 
+// Health check endpoint for deployment platforms
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
