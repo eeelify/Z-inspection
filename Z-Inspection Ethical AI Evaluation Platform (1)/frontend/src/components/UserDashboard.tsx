@@ -71,6 +71,20 @@ const stageLabels = {
   resolve: "Resolve",
 };
 
+// Progress'e göre stage belirle (rapor kontrolü ile)
+// 0% → Set-up (henüz sorular çözülmeye başlanmamış)
+// 1-99% → Assess (sorular çözülmeye başlanmış, değerlendirme aşamasında)
+// 100% + rapor varsa → Resolve (tüm sorular çözülmüş ve rapor oluşturulmuş)
+// 100% ama rapor yok → Assess (devam ediyor)
+const getStageFromProgress = (progress: number, hasReport: boolean = false): 'set-up' | 'assess' | 'resolve' => {
+  if (progress === 0) return 'set-up';
+  if (progress < 100) return 'assess';
+  // 100% ama rapor yoksa hala Assess
+  if (progress === 100 && !hasReport) return 'assess';
+  // 100% ve rapor varsa Resolve
+  return 'resolve';
+};
+
 export function UserDashboard({
   currentUser,
   projects,
@@ -102,6 +116,7 @@ export function UserDashboard({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [projectProgresses, setProjectProgresses] = useState<Record<string, number>>({});
+  const [projectReports, setProjectReports] = useState<Record<string, boolean>>({});
   const [assignmentByProjectId, setAssignmentByProjectId] = useState<Record<string, any>>({});
   const [reports, setReports] = useState<any[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
@@ -250,6 +265,50 @@ export function UserDashboard({
       setReportsLoading(false);
     }
   };
+
+  // Check if projects have reports (for stage calculation)
+  useEffect(() => {
+    const checkProjectReports = async () => {
+      const reportMap: Record<string, boolean> = {};
+      // Check reports for all assigned projects (both assigned and finished)
+      const myProjects = projects.filter(p => p.assignedUsers.includes(currentUser.id));
+      
+      // First, fetch all reports assigned to the user
+      try {
+        const response = await fetch(api(`/api/reports/assigned-to-me?userId=${currentUser.id}`));
+        if (response.ok) {
+          const allReports = await response.json();
+          // Create a map of projectId -> hasReport
+          const reportsByProjectId = new Map<string, boolean>();
+          allReports.forEach((report: any) => {
+            const projectId = String(report.projectId?._id || report.projectId || report.useCaseId || '');
+            reportsByProjectId.set(projectId, true);
+          });
+          
+          // Check each project
+          myProjects.forEach(project => {
+            const projectId = String(project.id || (project as any)._id);
+            reportMap[project.id] = reportsByProjectId.has(projectId);
+          });
+        }
+      } catch (error) {
+        console.error('Error checking reports:', error);
+        // Fallback: set all to false
+        myProjects.forEach(project => {
+          reportMap[project.id] = false;
+        });
+      }
+      
+      setProjectReports(prev => ({ ...prev, ...reportMap }));
+    };
+
+    if (projects.length > 0 && currentUser.id) {
+      checkProjectReports();
+      // Check reports periodically (every 10 seconds)
+      const interval = setInterval(checkProjectReports, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [projects, currentUser.id]);
 
   // Fetch reports when reports tab is shown
   useEffect(() => {
@@ -943,9 +1002,17 @@ export function UserDashboard({
                           {project.status.toUpperCase()}
                         </span>
 
-                        <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full">
-                          {stageLabels[project.stage]}
-                        </span>
+                        {(() => {
+                          const progress = projectProgresses[project.id] ?? project.progress ?? 0;
+                          const progressDisplay = Math.max(0, Math.min(100, progress));
+                          const hasReport = projectReports[project.id] ?? false;
+                          const currentStage = getStageFromProgress(progressDisplay, hasReport);
+                          return (
+                            <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full">
+                              {stageLabels[currentStage]}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -1021,7 +1088,7 @@ export function UserDashboard({
                               style={{ backgroundColor: roleColor }}
                             >
                               <Play className="h-3 w-3 mr-2" />
-                              Start Evaluation
+                              {progress > 0 ? 'Continue Evaluation' : 'Start Evaluation'}
                             </button>
                           );
                         }

@@ -510,9 +510,9 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-20">
+      <div className="bg-white shadow-sm border-b sticky top-0 z-50 flex-shrink-0">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -553,11 +553,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Questions Sidebar */}
         {sidebarOpen && (
-          <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-[calc(100vh-80px)] sticky top-[80px]">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 h-full">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h2 className="text-sm font-semibold text-gray-900">Questions</h2>
               <button
                 onClick={() => setSidebarOpen(false)}
@@ -567,7 +567,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 <X className="h-4 w-4 text-gray-500" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+            <div className="flex-1 overflow-y-auto min-h-0">
               <div className="p-2 space-y-1">
                 {generalQuestions.map((q, index) => {
                   const isCompleted = isQuestionCompleted(q);
@@ -627,9 +627,10 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           </button>
         )}
 
-        <div className="flex-1 px-4 py-8 max-w-5xl mx-auto w-full flex flex-col overflow-y-auto">
+        <div className="flex-1 px-4 py-8 max-w-5xl mx-auto w-full flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 pb-24">
           {/* Question Card */}
-          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1">
+          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col min-h-0">
             <div className="p-8 border-b border-gray-100 bg-white">
               <div className="flex flex-wrap items-center gap-3 mb-4">
               <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
@@ -663,7 +664,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             </p>
           </div>
 
-          <div className="p-8 flex-1 bg-gray-50/30">
+          <div className="p-8 bg-gray-50/30">
             {currentQuestion.type === 'multiple-choice' && (
               <div className="space-y-3 max-w-2xl">
                 {currentQuestion.options?.map((option, idx) => {
@@ -852,10 +853,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
               </div>
             </div>
           </div>
+          </div>
         </div>
 
         {/* Navigation Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 mt-8 flex justify-between items-center z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex justify-between items-center z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-shrink-0">
           <button
             onClick={handleBack}
             className="flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"

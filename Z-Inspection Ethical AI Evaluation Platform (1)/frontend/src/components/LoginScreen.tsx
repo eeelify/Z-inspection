@@ -163,12 +163,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       <div className="w-1/2 flex flex-col justify-center px-12 bg-white">
         <div className="max-w-md mx-auto w-full">
           <div className="mb-8">
-            <h1 className="text-4xl mb-2 text-gray-900 font-black">Z-Inspection Platform</h1>
+            <h1 className="text-4xl mb-2 text-gray-900 font-extrabold tracking-tight">Z-Inspection Platform</h1>
             <p className="text-base text-gray-600">Ethical AI Evaluation System</p>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-3xl mb-2 font-black">
+            <h2 className="text-3xl mb-2 font-extrabold tracking-tight">
               {isLogin 
                 ? 'Sign In' 
                 : step === 'email' 
@@ -423,7 +423,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
 
           {/* Tagline */}
-          <h2 className="text-4xl mb-4">Ethical AI Evaluation</h2>
+          <h2 className="text-4xl mb-4 font-extrabold tracking-tight">Ethical AI Evaluation</h2>
           <p className="text-xl opacity-90 mb-10 leading-relaxed">
             Comprehensive platform for conducting Z-Inspection methodology on AI systems.
           </p>

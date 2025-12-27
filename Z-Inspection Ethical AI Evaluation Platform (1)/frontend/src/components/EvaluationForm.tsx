@@ -62,11 +62,11 @@ const getScoreClasses = (value: number, selected: number | null | undefined) => 
     case 3:
       return 'border-blue-500 bg-blue-50 shadow-md';
     case 2:
-      return 'border-yellow-500 bg-yellow-50 shadow-md';
+      return 'border-yellow-600 bg-yellow-50 shadow-md';
     case 1:
-      return 'border-orange-500 bg-orange-200 shadow-md';
+      return 'border-orange-600 bg-orange-200 shadow-md';
     case 0:
-      return 'border-red-500 bg-red-200 shadow-md';
+      return 'border-red-700 bg-red-200 shadow-md';
     default:
       return '';
   }
@@ -1383,7 +1383,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   // Review screen'den resolve stage'ine geçiş
   const handleFinishAssess = async () => {
     // Enforce same validation as normal flow: all required answers + importance must be set
-    const missingRequired = assessQuestions.filter((q) => q.required && !hasProvidedAnswer(answers[q.id]));
+    const missingRequired = assessQuestions.filter((q) => q.required && (!answers[q.id] || answers[q.id] === ''));
     const missingImportance = assessQuestions.filter((q) => !questionPriorities[q.id]);
 
     if (missingRequired.length > 0 || missingImportance.length > 0) {
@@ -1501,7 +1501,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b sticky top-0 z-20">
+      <div className="bg-white shadow-sm border-b sticky top-0 z-[9999]">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -1553,9 +1553,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         </div>
       </div>
 
-      <div className="flex-1 px-4 py-8 max-w-5xl mx-auto w-full flex flex-col">
+      <div className="flex-1 px-4 py-8 pb-32 max-w-5xl mx-auto w-full flex flex-col">
         {/* Stage Navigation Tabs */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-2 mb-8 flex justify-between items-center sticky top-24 z-10 backdrop-blur-sm bg-white/90">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-2 mb-8 flex justify-between items-center sticky top-[88px] z-40 backdrop-blur-sm bg-white/90">
           <div className="flex space-x-1 bg-gray-100/50 p-1 rounded-xl">
              {stages.map((stage) => (
              <button
@@ -1799,7 +1799,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 </div>
             ) : currentStage === 'set-up' ? (
                 // Set-up Stage: Admin'in girdiği Project Context bilgilerini göster
-                <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 mb-24">
                     <div className="p-8 border-b border-gray-100 bg-white">
                         <div className="flex items-center gap-3 mb-4">
                             <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
@@ -1812,7 +1812,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         <p className="text-gray-600 mt-2">Review the project context and scope information provided by the administrator.</p>
                     </div>
 
-                    <div className="p-8 flex-1 bg-gray-50/30 space-y-6 overflow-y-auto">
+                    <div className="p-8 flex-1 bg-gray-50/30 space-y-6 overflow-y-auto pb-24">
                         {/* Project Context and Scope - Admin'in girdiği bilgiler */}
                         {project.inspectionContext ? (
                             <div className="space-y-6">
@@ -2023,7 +2023,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
                     {/* Desktop: left question list */}
                     <div className="hidden md:block md:w-56 lg:w-64 shrink-0">
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-40 max-h-[70vh] overflow-y-auto">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-[180px] max-h-[calc(100vh-200px)] overflow-y-auto">
                             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pb-2">
                                 Questions
                             </div>
@@ -2052,7 +2052,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                     </div>
 
                     {/* Right: Active question card */}
-                    <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0">
+                    <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0 mb-24">
                     <div className="p-8 border-b border-gray-100 bg-white">
                         <div className="flex flex-wrap items-center gap-3 mb-4">
                             <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
@@ -2330,11 +2330,11 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                     }
                                     
                                     const colorClasses = {
-                                        green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30',
-                                        blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
-                                        yellow: isSelected ? 'border-yellow-500 bg-yellow-50 shadow-md' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
-                                        orange: isSelected ? 'border-orange-500 bg-orange-200 shadow-md' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50',
-                                        red: isSelected ? 'border-red-500 bg-red-200 shadow-md' : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
+                                        green: isSelected ? 'border-2 border-green-500 bg-green-50 shadow-md' : 'border-2 border-gray-200 hover:border-green-300 hover:bg-green-50/30',
+                                        blue: isSelected ? 'border-2 border-blue-500 bg-blue-50 shadow-md' : 'border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
+                                        yellow: isSelected ? 'border-2 border-yellow-600 bg-yellow-50 shadow-md' : 'border-2 border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
+                                        orange: isSelected ? 'border-2 border-orange-600 bg-orange-200 shadow-md' : 'border-2 border-gray-200 hover:border-orange-300 hover:bg-orange-50',
+                                        red: isSelected ? 'border-2 border-red-700 bg-red-200 shadow-md' : 'border-2 border-gray-200 hover:border-red-300 hover:bg-red-50'
                                     };
                                     const bgColorClasses = {
                                         green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400',
@@ -2347,7 +2347,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                     return (
                                         <label
                                             key={value}
-                                            className={`relative flex flex-col items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
+                                            className={`relative flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
                                         >
                                             <input
                                                 type="radio"

@@ -667,9 +667,14 @@ export function ProjectDetail({
                 </button>
               );
             })()}
-            {isAssigned && progressDisplay < 100 && (
+            {isAssigned && progressDisplay === 0 && (
               <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
                 Start Evaluation
+              </button>
+            )}
+            {isAssigned && progressDisplay > 0 && progressDisplay < 100 && (
+              <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
+                Continue Evaluation
               </button>
             )}
             {isAssigned && progressDisplay >= 100 && !evolutionCompletedAt && (
