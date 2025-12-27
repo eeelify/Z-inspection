@@ -115,13 +115,19 @@ const Project = mongoose.model('Project', ProjectSchema);
 // UseCaseQuestion - Sorular ayrı collection'da
 const UseCaseQuestionSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
+  key: { type: String }, // Stable string identifier (e.g., "S0_Q1")
   questionEn: { type: String, required: true },
   questionTr: { type: String, required: true },
   type: { type: String, required: true }, // 'text' or 'multiple-choice'
   options: { type: [String], default: [] }, // For multiple-choice questions
-  order: { type: Number, default: 0 } // Sıralama için
+  order: { type: Number, default: 0 }, // Sıralama için
+  tag: { type: String, default: '' }, // AI Act reference (e.g., "AI Act Art. 6")
+  placeholder: { type: String, default: '' }, // Placeholder text for input
+  helper: { type: String, default: '' }, // Helper text/example
+  isActive: { type: Boolean, default: true } // Whether question is active
 });
 UseCaseQuestionSchema.index({ order: 1 }); // Sıralama için index
+UseCaseQuestionSchema.index({ key: 1 }); // Index for key lookups
 const UseCaseQuestion = mongoose.model('UseCaseQuestion', UseCaseQuestionSchema);
 
 // UseCase - Sadece cevapları tutar
@@ -141,7 +147,8 @@ const UseCaseSchema = new mongoose.Schema({
     url: String
   }],
   answers: [{ // Sadece cevaplar - questionId ve answer
-    questionId: { type: String, required: true },
+    questionId: { type: String, required: true }, // Can be _id string or key
+    questionKey: { type: String }, // Optional: stable key (e.g., "S0_Q1") for future-proofing
     answer: { type: String, default: '' }
   }],
   createdAt: { type: Date, default: Date.now },
@@ -263,8 +270,39 @@ const TensionSchema = new mongoose.Schema({
     fileName: String,
     fileData: String, // Base64 Data
     uploadedBy: String,
-    uploadedAt: { type: Date, default: Date.now }
-  }]
+    uploadedAt: { type: Date, default: Date.now },
+    type: { type: String, required: false }, // Evidence type: Policy, Test, User feedback, Log, Incident, Other (optional)
+    comments: [{
+      userId: String,
+      text: String,
+      createdAt: { type: Date, default: Date.now }
+    }]
+  }],
+
+  // Impact & Stakeholders
+  impact: {
+    areas: [String],
+    affectedGroups: [String],
+    description: String
+  },
+
+  // Mitigation & Resolution
+  mitigation: {
+    proposed: String,
+    tradeoff: {
+      decision: String,
+      rationale: String
+    },
+    action: {
+      ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      ownerName: String,
+      dueDate: Date,
+      status: { type: String, default: 'Open' }
+    }
+  },
+
+  // Evidence Type (optional, backward compatible)
+  evidenceType: String
 });
 const Tension = mongoose.model('Tension', TensionSchema);
 
@@ -360,8 +398,8 @@ app.get('/api/use-case-questions', async (req, res) => {
       return res.json(questionsCache);
     }
     
-    // Fetch from database
-    const questions = await UseCaseQuestion.find().sort({ order: 1 }).lean();
+    // Fetch from database - only active questions by default
+    const questions = await UseCaseQuestion.find({ isActive: { $ne: false } }).sort({ order: 1 }).lean();
     questionsCache = questions;
     questionsCacheTime = now;
     res.json(questions);
@@ -596,8 +634,9 @@ app.post('/api/tensions', async (req, res) => {
   try {
     const { 
       projectId, principle1, principle2, claimStatement, description, 
-      evidenceDescription, evidenceFileName, evidenceFileData,
-      severity, status, createdBy 
+      evidenceDescription, evidenceType, evidenceFileName, evidenceFileData,
+      severity, status, createdBy,
+      impact, mitigation
     } = req.body;
 
     const initialEvidences = [];
@@ -613,12 +652,44 @@ app.post('/api/tensions', async (req, res) => {
       });
     }
 
-    const tension = new Tension({
+    const tensionData = {
       projectId, principle1, principle2, claimStatement, description, 
       severity, status, createdBy,
       evidences: initialEvidences,
       comments: []
-    });
+    };
+
+    // Add evidenceType if provided (backward compatible)
+    if (evidenceType) {
+      tensionData.evidenceType = evidenceType;
+    }
+
+    // Add impact data if provided
+    if (impact) {
+      tensionData.impact = {
+        areas: impact.areas || [],
+        affectedGroups: impact.affectedGroups || [],
+        description: impact.description
+      };
+    }
+
+    // Add mitigation data if provided
+    if (mitigation) {
+      tensionData.mitigation = {
+        proposed: mitigation.proposed,
+        tradeoff: {
+          decision: mitigation.tradeoff?.decision,
+          rationale: mitigation.tradeoff?.rationale
+        },
+        action: {
+          ownerName: mitigation.action?.ownerName,
+          dueDate: mitigation.action?.dueDate ? new Date(mitigation.action.dueDate) : undefined,
+          status: mitigation.action?.status || 'Open'
+        }
+      };
+    }
+
+    const tension = new Tension(tensionData);
 
     await tension.save();
     console.log("⚡ Yeni Tension eklendi:", tension._id);
@@ -750,20 +821,95 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
 // EVIDENCE EKLEME (Sonradan ekleme)
 app.post('/api/tensions/:id/evidence', async (req, res) => {
   try {
-    const { title, description, fileName, fileData, uploadedBy } = req.body;
+    const { title, description, fileName, fileData, uploadedBy, type } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
 
     if (!tension.evidences) tension.evidences = [];
-    tension.evidences.push({
-      title, description, fileName, fileData, uploadedBy, uploadedAt: new Date()
-    });
+    
+    // Build evidence object - only include type if it's a non-empty string
+    const evidenceObj = {
+      title,
+      description,
+      fileName,
+      fileData,
+      uploadedBy,
+      uploadedAt: new Date(),
+      comments: []
+    };
+    
+    // Only add type if it's a valid string
+    if (type && typeof type === 'string' && type.trim().length > 0) {
+      evidenceObj.type = type.trim();
+    }
+
+    tension.evidences.push(evidenceObj);
 
     await tension.save();
     res.json(tension.evidences);
   } catch (err) { 
     console.error(err);
     res.status(500).json({ error: err.message }); 
+  }
+});
+
+// EVIDENCE COMMENT EKLEME
+app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, res) => {
+  try {
+    const { tensionId, evidenceId } = req.params;
+    const { text, userId } = req.body;
+
+    // Validation
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Comment text is required' });
+    }
+    if (text.length > 2000) {
+      return res.status(400).json({ error: 'Comment text must be 2000 characters or less' });
+    }
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const tension = await Tension.findById(tensionId);
+    if (!tension) return res.status(404).json({ error: 'Tension not found' });
+
+    if (!tension.evidences || !Array.isArray(tension.evidences)) {
+      return res.status(404).json({ error: 'Evidence array not found' });
+    }
+
+    // Find evidence by index (evidenceId is the array index as string)
+    const evidenceIndex = parseInt(evidenceId, 10);
+    
+    if (isNaN(evidenceIndex) || evidenceIndex < 0 || evidenceIndex >= tension.evidences.length) {
+      return res.status(404).json({ error: 'Evidence not found' });
+    }
+
+    const evidence = tension.evidences[evidenceIndex];
+
+    if (!evidence) {
+      return res.status(404).json({ error: 'Evidence not found' });
+    }
+
+    // Initialize comments array if not exists
+    if (!evidence.comments) {
+      evidence.comments = [];
+    }
+
+    // Add comment
+    evidence.comments.push({
+      userId,
+      text: text.trim(),
+      createdAt: new Date()
+    });
+
+    await tension.save();
+
+    // Return updated evidence
+    const updatedEvidence = tension.evidences[evidenceIndex];
+    res.json(updatedEvidence);
+  } catch (err) {
+    console.error('Error adding evidence comment:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
