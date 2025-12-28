@@ -33,6 +33,20 @@ const PORT = process.env.PORT || 5000;
 // Enable compression for faster responses
 app.use(compression());
 
+// Basic health endpoint (safe: does not expose secrets)
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    time: new Date().toISOString(),
+    mongo: {
+      readyState: mongoose.connection.readyState, // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+      connected: mongoose.connection.readyState === 1,
+      host: mongoose.connection.host || null,
+      name: mongoose.connection.name || null,
+    },
+  });
+});
+
 // --- GÜNCELLEME: Dosya yükleme limiti 300MB yapıldı ---
 app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ limit: '300mb', extended: true }));
@@ -3287,30 +3301,46 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    // Add timeout to prevent hanging
+    const reqId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const safeEmail = typeof req.body?.email === 'string' ? req.body.email : null;
+    const safeRole = typeof req.body?.role === 'string' ? req.body.role : null;
+    console.log(`[login:${reqId}] start`, { email: safeEmail, role: safeRole });
+
+    // Check MongoDB connection state
+    if (mongoose.connection.readyState !== 1) {
+      console.warn(`[login:${reqId}] mongo not ready`, { readyState: mongoose.connection.readyState });
+      return res.status(503).json({ 
+        error: 'Veritabanı bağlantısı hazır değil. Lütfen birkaç saniye bekleyip tekrar deneyin.' 
+      });
+    }
+
+    // Add timeout to prevent hanging - increased to 15 seconds for better reliability
     const loginPromise = User.findOne({ 
       email: req.body.email, 
       password: req.body.password, 
       role: req.body.role 
-    }).select('-profileImage').lean().maxTimeMS(5000); // Exclude large profileImage, add timeout
+    }).select('-profileImage').lean().maxTimeMS(15000); // Exclude large profileImage, add timeout
     
     const user = await Promise.race([
       loginPromise,
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Login timeout')), 5000)
+        setTimeout(() => reject(new Error('Login timeout')), 15000)
       )
     ]);
     
     if (user) {
+      console.log(`[login:${reqId}] success`, { userId: String(user._id || user.id || '') });
       res.json(user);
     } else {
-      res.status(401).json({ message: "Invalid credentials" });
+      console.log(`[login:${reqId}] invalid credentials`);
+      res.status(401).json({ message: "Geçersiz kullanıcı adı, şifre veya rol." });
     }
   } catch (err) {
     if (err.message === 'Login timeout') {
-      res.status(504).json({ error: 'Login request timed out. Please try again.' });
+      res.status(504).json({ error: 'Giriş isteği zaman aşımına uğradı. Lütfen tekrar deneyin.' });
     } else {
-      res.status(500).json({ error: err.message });
+      console.error('Login error:', err);
+      res.status(500).json({ error: 'Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.' });
     }
   }
 });

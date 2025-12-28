@@ -40,19 +40,22 @@ function App() {
   const [assignmentsRefreshToken, setAssignmentsRefreshToken] = useState(0);
 
   // --- VERİ ÇEKME (FETCH) ---
+  // Only fetch heavy dashboard data AFTER login to avoid stressing the backend while on the login screen.
   useEffect(() => {
+    if (!currentUser) return;
+
     // Paralel olarak tüm verileri çek - daha hızlı, timeout ile
     const fetchAllData = async () => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
         const [projectsRes, usersRes, useCasesRes] = await Promise.all([
           fetch(api('/api/projects'), { signal: controller.signal }),
           fetch(api('/api/users'), { signal: controller.signal }),
           fetch(api('/api/use-cases'), { signal: controller.signal })
         ]);
-        
+
         clearTimeout(timeoutId);
 
         if (projectsRes.ok) {
@@ -80,7 +83,7 @@ function App() {
     };
 
     fetchAllData();
-  }, []);
+  }, [currentUser]);
 
   // Minimal URL-based route support for report review screen: /reports/:reportId/review
   useEffect(() => {
@@ -105,18 +108,17 @@ function App() {
     role: string,
   ) => {
     try {
-      // Add timeout to login request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      const loginUrl = api('/api/login');
+      console.log('Login URL:', loginUrl);
+      console.log('Sending login request...');
       
-      const response = await fetch(api('/api/login'), {
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role }),
-        signal: controller.signal
       });
-      
-      clearTimeout(timeoutId);
+
+      console.log('Response status:', response.status, response.statusText);
 
       if (response.ok) {
         const userDB = await response.json();
@@ -151,15 +153,22 @@ function App() {
           setNeedsPrecondition(!Boolean(approved));
         }
       } else {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-        alert(errorData.message || "Giriş başarısız! Bilgileri kontrol edin.");
+        const errorData = await response.json().catch(() => ({ error: 'Bilinmeyen hata', message: 'Bilinmeyen hata' }));
+        const errorMessage = errorData.error || errorData.message || "Giriş başarısız! Bilgileri kontrol edin.";
+        alert(errorMessage);
       }
     } catch (error: any) {
       console.error("Login hatası:", error);
-      if (error.name === 'AbortError') {
-        alert("Giriş zaman aşımına uğradı. Lütfen tekrar deneyin.");
+      console.error("Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed to fetch'))) {
+        alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
       } else {
-        alert("Sunucuya bağlanılamadı. Backend'in çalıştığından emin olun.");
+        alert(`Giriş hatası: ${error.message || 'Bilinmeyen hata'}\n\nBackend'in çalıştığından emin olun.`);
       }
     }
   };
@@ -457,8 +466,7 @@ function App() {
           currentUser={currentUser}
           onBack={() => {
             try {
-              const isAdmin = String(currentUser.role || "").toLowerCase().includes("admin");
-              window.history.pushState({}, "", isAdmin ? "/?tab=created-reports" : "/");
+              window.history.pushState({}, "", "/");
             } catch {
               // ignore
             }

@@ -55,6 +55,9 @@ router.post('/:id/expert-comment', reportController.saveExpertComment);
 // GET /api/reports/:id/download - Download report as PDF (must be before /:id route)
 router.get('/:id/download', reportController.downloadReportPDF);
 
+// GET /api/reports/:id/download-docx - Download report as DOCX (Word) (must be before /:id route)
+router.get('/:id/download-docx', reportController.downloadReportDOCX);
+
 // GET /api/reports/:id - Get specific report
 router.get('/:id', reportController.getReportById);
 

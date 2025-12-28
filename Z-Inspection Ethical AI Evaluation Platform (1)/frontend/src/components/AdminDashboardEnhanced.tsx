@@ -1601,6 +1601,32 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     }
   };
 
+  // Download report as Word (DOCX)
+  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${currentUser.id}`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json().catch(() => ({} as any));
+        alert('Word indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) {
@@ -1662,6 +1688,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
               >
                 <Download className="h-4 w-4" />
                 PDF
+              </button>
+              <button
+                onClick={() => handleDownloadDOCX(reportId, detailsReport.title)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                title="Download Word"
+              >
+                <FileText className="h-4 w-4" />
+                Word
               </button>
             </div>
           </div>
@@ -1768,6 +1802,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           PDF
                         </button>
                         <button
+                          onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download Word"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Word
+                        </button>
+                        <button
                           onClick={() => handleViewDetails(reportId)}
                           className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                           title="View Details"
@@ -1782,14 +1824,17 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           <Trash2 className="h-4 w-4" />
                           Delete
                         </button>
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
-                          report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
-                        </span>
+                        {report.status !== 'draft' && (
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded ${
+                              report.status === 'final'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {report.status === 'final' ? 'Final' : 'Archived'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1903,6 +1948,32 @@ function ReportsTab({ projects, currentUser, users }: any) {
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
+  // Download report as Word (DOCX)
+  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${currentUser.id}`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json().catch(() => ({} as any));
+        alert('Word indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
     }
   };
 
@@ -2023,6 +2094,14 @@ function ReportsTab({ projects, currentUser, users }: any) {
               >
                 <Download className="h-4 w-4" />
                 PDF
+              </button>
+              <button
+                onClick={() => handleDownloadDOCX(reportId, detailsReport.title)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                title="Download Word"
+              >
+                <FileText className="h-4 w-4" />
+                Word
               </button>
               <button
                 onClick={() => handleDeleteReport(reportId, detailsReport.title)}
@@ -2211,6 +2290,14 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           PDF
                         </button>
                         <button
+                          onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download Word"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Word
+                        </button>
+                        <button
                           onClick={() => handleViewDetails(reportId)}
                           className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                           title="View Details"
@@ -2225,14 +2312,17 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           <Trash2 className="h-4 w-4" />
                           Delete
                         </button>
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
-                          report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
-                        </span>
+                        {report.status !== 'draft' && (
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded ${
+                              report.status === 'final'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {report.status === 'final' ? 'Final' : 'Archived'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

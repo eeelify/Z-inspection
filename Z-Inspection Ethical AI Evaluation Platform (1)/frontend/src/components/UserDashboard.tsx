@@ -361,6 +361,32 @@ export function UserDashboard({
     }
   };
 
+  // Download report as Word (DOCX)
+  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${currentUser.id}`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json().catch(() => ({} as any));
+        alert('Word could not be downloaded: ' + (error.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading Word:', error);
+      alert('Word could not be downloaded: ' + (error.message || 'Unknown error'));
+    }
+  };
+
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) {
@@ -548,8 +574,7 @@ export function UserDashboard({
   const assignedProjects = myProjects.filter((p) => !assignmentByProjectId[p.id]?.evolutionCompletedAt);
   const finishedProjects = myProjects.filter((p) => Boolean(assignmentByProjectId[p.id]?.evolutionCompletedAt));
 
-  const activeProjectList =
-    currentTab === "assigned" ? assignedProjects : finishedProjects;
+  const activeProjectList = currentTab === "assigned" ? assignedProjects : finishedProjects;
 
   const filteredProjects = activeProjectList.filter((p) => {
     const matchSearch =
@@ -950,31 +975,33 @@ export function UserDashboard({
           ) : (
             <>
               {/* TABS */}
-              <div className="border-b mb-6">
-                <nav className="flex space-x-8">
-                  <button
-                    onClick={() => setCurrentTab("assigned")}
-                    className={`py-2 px-1 border-b-2 text-sm ${
-                      currentTab === "assigned"
-                        ? "border-blue-600 text-blue-600"
-                        : "border-transparent text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    📂 Assigned ({assignedProjects.length})
-                  </button>
+              {currentTab !== "reports" && (
+                <div className="border-b mb-6">
+                  <nav className="flex space-x-8">
+                    <button
+                      onClick={() => setCurrentTab("assigned")}
+                      className={`py-2 px-1 border-b-2 text-sm ${
+                        currentTab === "assigned"
+                          ? "border-blue-600 text-blue-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      📂 Assigned ({assignedProjects.length})
+                    </button>
 
-                  <button
-                    onClick={() => setCurrentTab("finished")}
-                    className={`py-2 px-1 border-b-2 text-sm ${
-                      currentTab === "finished"
-                        ? "border-blue-600 text-blue-600"
-                        : "border-transparent text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    ✅ Finished Projects ({finishedProjects.length})
-                  </button>
-                </nav>
-              </div>
+                    <button
+                      onClick={() => setCurrentTab("finished")}
+                      className={`py-2 px-1 border-b-2 text-sm ${
+                        currentTab === "finished"
+                          ? "border-blue-600 text-blue-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      ✅ Finished Projects ({finishedProjects.length})
+                    </button>
+                  </nav>
+                </div>
+              )}
 
               {/* ===== PROJECT LIST ===== */}
               {currentTab !== "reports" && (
@@ -1237,6 +1264,14 @@ export function UserDashboard({
                                   <Download className="h-4 w-4" />
                                   PDF
                                 </button>
+                                <button
+                                  onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
+                                  className="px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-2"
+                                  title="Download Word"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  Word
+                                </button>
                                 {currentUser.role === "admin" && (
                                   <button
                                     onClick={(e) => handleDeleteReport(reportId, report.title, e)}
@@ -1247,14 +1282,17 @@ export function UserDashboard({
                                     Delete
                                   </button>
                                 )}
-                                <span className={`px-2 py-1 text-xs font-medium rounded ${
-                                  report.status === 'final' ? 'bg-green-100 text-green-800' :
-                                  report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {report.status === 'final' ? 'Final' :
-                                   report.status === 'archived' ? 'Archived' : 'Draft'}
-                                </span>
+                                {report.status !== 'draft' && (
+                                  <span
+                                    className={`px-2 py-1 text-xs font-medium rounded ${
+                                      report.status === 'final'
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                    }`}
+                                  >
+                                    {report.status === 'final' ? 'Final' : 'Archived'}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>

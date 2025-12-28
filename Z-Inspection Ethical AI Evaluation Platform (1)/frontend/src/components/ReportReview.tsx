@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Download, Loader2, Lock, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, Save } from "lucide-react";
 import { api } from "../api";
 import { User } from "../types";
 
@@ -131,28 +131,6 @@ export function ReportReview({
     }
   };
 
-  const handleDownloadPdf = async () => {
-    try {
-      const res = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({} as any));
-        throw new Error(err.error || "PDF could not be downloaded");
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const name = `${String(report?.title || "report").replace(/[^a-z0-9]/gi, "_")}_${reportId}.pdf`;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      alert(e?.message || "PDF could not be downloaded");
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
@@ -178,20 +156,6 @@ export function ReportReview({
                 Final & Locked
               </span>
             )}
-            {!isLocked && (
-              <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold">
-                Draft
-              </span>
-            )}
-
-            <button
-              onClick={handleDownloadPdf}
-              className="px-3 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center gap-2"
-              disabled={loading}
-            >
-              <Download className="h-4 w-4" />
-              PDF
-            </button>
 
             {roleCategory === "expert" && (
               <button
@@ -210,7 +174,7 @@ export function ReportReview({
                 }}
               >
                 {savingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {savingComment ? "Kaydediliyor..." : "Kaydet"}
+                {savingComment ? "Saving..." : "Save"}
               </button>
             )}
 

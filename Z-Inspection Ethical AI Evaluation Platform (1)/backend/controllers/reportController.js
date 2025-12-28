@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { generateReport } = require('../services/geminiService');
 const { generatePDFFromMarkdown } = require('../services/pdfService');
+const { generateDOCXFromMarkdown } = require('../services/docxService');
 
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
@@ -96,21 +97,20 @@ const isUserAssignedToProject = async ({ userIdObj, projectIdObj }) => {
 
 const buildExportMarkdownFromReport = (report) => {
   const title = report?.title || 'Report';
-  const expertComments = Array.isArray(report?.expertComments) ? report.expertComments : [];
+  const content = String(report?.content || '').trim();
 
-  let md = `# ${title}\n\n`;
+  // Prefer exporting the Gemini-generated report body (legacy `content` field).
+  // Export should NOT include expert comments (requested).
+  let md = '';
 
-  if (expertComments.length === 0) {
-    return md;
-  }
-
-  md += `## Expert Comments\n\n`;
-  for (const c of expertComments) {
-    const name = c?.expertName || 'Expert';
-    const updatedAt = c?.updatedAt ? new Date(c.updatedAt).toLocaleString() : '';
-    const text = String(c?.commentText || '').trim();
-    md += `### ${name}${updatedAt ? ` — ${updatedAt}` : ''}\n\n`;
-    md += `${text || '(no comment)'}\n\n`;
+  if (content) {
+    // If the content already looks like markdown with a top-level heading, keep it as-is.
+    // Otherwise prepend the report title for a consistent export.
+    const startsWithHeading = /^#\s+\S/.test(content);
+    md = startsWithHeading ? `${content}\n\n` : `# ${title}\n\n${content}\n\n`;
+  } else {
+    // Fallback when content is missing (older drafts or partial saves)
+    md = `# ${title}\n\n`;
   }
 
   return md;
@@ -562,7 +562,7 @@ exports.downloadReportPDF = async (req, res) => {
     const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     const report = await Report.findById(id)
-      .select('title projectId expertComments')
+      .select('title projectId content')
       .populate('projectId', 'title')
       .lean();
 
@@ -584,16 +584,6 @@ exports.downloadReportPDF = async (req, res) => {
 
     console.log('📄 Generating PDF for report:', id);
 
-    // Enforce visibility rules for expertComments in exports too
-    const comments = Array.isArray(report?.expertComments) ? report.expertComments : [];
-    if (roleCategory === 'admin') {
-      report.expertComments = comments;
-    } else if (roleCategory === 'expert') {
-      report.expertComments = comments.filter((c) => String(c?.expertId) === String(userIdObj));
-    } else {
-      report.expertComments = [];
-    }
-
     // Generate PDF from markdown content
     const pdfBuffer = await generatePDFFromMarkdown(
       buildExportMarkdownFromReport(report),
@@ -611,6 +601,59 @@ exports.downloadReportPDF = async (req, res) => {
   } catch (err) {
     console.error('Error generating PDF:', err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+};
+
+/**
+ * GET /api/reports/:id/download-docx
+ * Download report as DOCX (Word)
+ */
+exports.downloadReportDOCX = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
+
+    const report = await Report.findById(id)
+      .select('title projectId content')
+      .populate('projectId', 'title')
+      .lean();
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Authorization: admin can export all. Expert/Viewer can export assigned reports.
+    if (roleCategory !== 'admin') {
+      const projectIdObj = report?.projectId?._id || report?.projectId;
+      const ok = await isUserAssignedToProject({
+        userIdObj,
+        projectIdObj: toObjectIdOrValue(projectIdObj)
+      });
+      if (!ok) {
+        return res.status(403).json({ error: 'Not authorized to download this report.' });
+      }
+    }
+
+    console.log('📝 Generating DOCX for report:', id);
+
+    const docxBuffer = await generateDOCXFromMarkdown(
+      buildExportMarkdownFromReport(report),
+      report.title
+    );
+
+    const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', docxBuffer.length);
+
+    res.send(docxBuffer);
+  } catch (err) {
+    console.error('Error generating DOCX:', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to generate DOCX' });
   }
 };
 

@@ -4,32 +4,47 @@
  * API URL resolution strategy:
  * - DEV: use relative paths (Vite proxy handles forwarding to backend).
  * - PROD: prefer VITE_API_URL, fallback to same-origin.
+ *
+ * Notes:
+ * - In this codebase, `VITE_API_URL` is intended for production deployments.
+ * - For local development, we default to the Vite proxy (`/api` -> `http://localhost:5000`)
+ *   to avoid accidental calls to a remote environment.
+ * - If you really need an explicit dev base URL, set `VITE_DEV_API_URL`.
  */
 
 const normalizePath = (path: string) => (path.startsWith('/') ? path : `/${path}`);
 
-const rawApiUrl = import.meta.env.VITE_API_URL?.trim();
+const rawProdApiUrl = import.meta.env.VITE_API_URL?.trim();
+const rawDevApiUrl = import.meta.env.VITE_DEV_API_URL?.trim();
 
 const normalizeBaseUrl = (base: string) => base.replace(/\/+$/, '');
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
 export const API_BASE_URL = (() => {
-  // If VITE_API_URL is provided, always use it (dev or prod).
-  // This makes local dev deterministic and avoids relying on proxy configuration.
-  if (rawApiUrl) {
-    const normalized = normalizeBaseUrl(rawApiUrl);
+  // DEV: default to proxy/same-origin unless an explicit dev base is provided.
+  if (import.meta.env.DEV) {
+    if (rawDevApiUrl) {
+      const normalized = normalizeBaseUrl(rawDevApiUrl);
+      if (!isHttpUrl(normalized)) {
+        throw new Error(
+          `❌ VITE_DEV_API_URL geçersiz: "${rawDevApiUrl}". "http://..." veya "https://..." ile başlamalı.`
+        );
+      }
+      return normalized;
+    }
+    return '';
+  }
+
+  // PROD: If VITE_API_URL is provided, use it; otherwise fallback to same-origin.
+  if (rawProdApiUrl) {
+    const normalized = normalizeBaseUrl(rawProdApiUrl);
     if (!isHttpUrl(normalized)) {
       throw new Error(
-        `❌ VITE_API_URL geçersiz: "${rawApiUrl}". "http://..." veya "https://..." ile başlamalı.`
+        `❌ VITE_API_URL geçersiz: "${rawProdApiUrl}". "http://..." veya "https://..." ile başlamalı.`
       );
     }
     return normalized;
-  }
-
-  if (import.meta.env.DEV) {
-    // In dev, if no explicit base URL is set, rely on Vite proxy/same-origin.
-    return '';
   }
 
   // Production fallback: same origin (useful when frontend is served by backend)
