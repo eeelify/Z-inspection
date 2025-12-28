@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download, ArrowLeft } from 'lucide-react';
+import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
 import { fetchUserProgress } from '../utils/userProgress';
 import { ChatPanel } from './ChatPanel';
@@ -152,27 +152,6 @@ export function AdminDashboardEnhanced({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [allConversations, setAllConversations] = useState<any[]>([]);
   const [showProfile, setShowProfile] = useState(false);
-
-  // Allow deep-linking to a specific admin tab via URL query, e.g. /?tab=created-reports
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search || "");
-      const tab = params.get("tab");
-      const allowed = new Set([
-        "dashboard",
-        "use-case-assignments",
-        "project-creation",
-        "reports",
-        "chats",
-        "created-reports",
-      ]);
-      if (tab && allowed.has(tab)) {
-        setActiveTab(tab as any);
-      }
-    } catch {
-      // ignore URL parsing issues
-    }
-  }, []);
 
   // Fetch all conversations (chats)
   const fetchConversations = async () => {
@@ -1463,7 +1442,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
 function CreatedReportsTab({ projects, currentUser }: any) {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [detailsReport, setDetailsReport] = useState<any | null>(null);
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [filterProjectId, setFilterProjectId] = useState<string>('');
 
   // Fetch all reports
@@ -1486,12 +1465,12 @@ function CreatedReportsTab({ projects, currentUser }: any) {
   };
 
   // View report
-  const handleViewDetails = async (reportId: string) => {
+  const handleViewReport = async (reportId: string) => {
     try {
       const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`));
       if (response.ok) {
         const data = await response.json();
-        setDetailsReport(data);
+        setSelectedReport(data);
       } else {
         alert('Rapor yüklenemedi');
       }
@@ -1544,8 +1523,8 @@ function CreatedReportsTab({ projects, currentUser }: any) {
       if (response.ok) {
         alert('✅ Report deleted successfully');
         fetchReports(); // Refresh reports list
-        if (detailsReport && (detailsReport._id === reportId || detailsReport.id === reportId)) {
-          setDetailsReport(null); // Close details if deleted report is being viewed
+        if (selectedReport && (selectedReport._id === reportId || selectedReport.id === reportId)) {
+          setSelectedReport(null); // Close modal if deleted report is being viewed
         }
       } else {
         const error = await response.json();
@@ -1560,68 +1539,6 @@ function CreatedReportsTab({ projects, currentUser }: any) {
   useEffect(() => {
     fetchReports();
   }, [filterProjectId]);
-
-  if (detailsReport) {
-    const comments = Array.isArray(detailsReport?.expertComments) ? detailsReport.expertComments : [];
-    const reportId = detailsReport._id || detailsReport.id;
-    return (
-      <>
-        <div className="bg-white border-b border-gray-200 px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-start gap-3">
-              <button
-                type="button"
-                onClick={() => setDetailsReport(null)}
-                className="mt-1 inline-flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
-                aria-label="Back to created reports"
-                title="Back to created reports"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">Report Details</h1>
-                <p className="text-gray-600">{detailsReport.title}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDownloadPDF(reportId, detailsReport.title)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                PDF
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-8 py-6">
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Expert Comments</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              {comments.length > 0 ? (
-                comments.map((c: any, idx: number) => (
-                  <div key={idx} className="border border-gray-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="text-sm font-semibold text-gray-900">{c.expertName || "Expert"}</div>
-                      <div className="text-xs text-gray-500">
-                        {c.updatedAt ? new Date(c.updatedAt).toLocaleString("tr-TR") : ""}
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-800 whitespace-pre-wrap">{String(c.commentText || "")}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm text-gray-500">No expert comments yet.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -1671,7 +1588,10 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                     className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleViewReport(reportId)}
+                      >
                         <h3 className="font-medium text-gray-900 mb-1">{report.title}</h3>
                         <p className="text-sm text-gray-600 mb-2">{projectTitle}</p>
                         <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -1689,18 +1609,12 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download PDF"
+                          disabled={report.status !== 'FINALIZED'}
+                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent"
+                          title={report.status === 'FINALIZED' ? "Download FINAL PDF" : "PDF is available only after Finalize Report"}
                         >
                           <Download className="h-4 w-4" />
                           PDF
-                        </button>
-                        <button
-                          onClick={() => handleViewDetails(reportId)}
-                          className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          View Details
                         </button>
                         <button
                           onClick={(e) => handleDeleteReport(reportId, report.title, e)}
@@ -1711,12 +1625,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           Delete
                         </button>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          report.status === 'FINALIZED' ? 'bg-green-100 text-green-800' :
+                          report.status === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-800' :
                           report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
                           'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
+                          {report.status === 'FINALIZED' ? 'FINALIZED' :
+                           report.status === 'UNDER_REVIEW' ? 'UNDER REVIEW' :
+                           report.status === 'archived' ? 'ARCHIVED' : 'AI DRAFT'}
                         </span>
                       </div>
                     </div>
@@ -1727,6 +1643,78 @@ function CreatedReportsTab({ projects, currentUser }: any) {
           )}
         </div>
       </div>
+
+      {/* Report View Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{selectedReport.title}</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedReport.projectId?.title} • {new Date(selectedReport.generatedAt || selectedReport.createdAt).toLocaleString('tr-TR')}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
+                {(() => {
+                  const sections = (selectedReport as any).sections;
+                  if (Array.isArray(sections) && sections.length > 0) {
+                    const s = sections[0];
+                    // Show finalText if available, otherwise aiDraft/aiText
+                    const final = String(s?.finalText || "").trim();
+                    return final.length > 0 ? final : (s?.aiText || s?.aiDraft || "");
+                  }
+                  return (selectedReport as any).content || (selectedReport as any).aiDraft || "";
+                })()}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadPDF(reportId, selectedReport.title);
+                    }
+                  }}
+                  disabled={selectedReport?.status !== 'FINALIZED'}
+                  title={selectedReport?.status === 'FINALIZED' ? 'Download FINAL PDF' : 'PDF is available only after Finalize Report'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-blue-600"
+                >
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDeleteReport(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Report
+                </button>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1736,7 +1724,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
   const [showGeneratingMessage, setShowGeneratingMessage] = useState(false);
-  const [detailsReport, setDetailsReport] = useState<any | null>(null);
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [filterProjectId, setFilterProjectId] = useState<string>('');
   const [projectProgresses, setProjectProgresses] = useState<Record<string, number>>({});
 
@@ -1792,73 +1780,19 @@ function ReportsTab({ projects, currentUser, users }: any) {
     }
   };
 
-  // View details
-  const handleViewDetails = async (reportId: string) => {
+  // View report
+  const handleViewReport = async (reportId: string) => {
     try {
-      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`));
+      const response = await fetch(api(`/api/reports/${reportId}`));
       if (response.ok) {
         const data = await response.json();
-        setDetailsReport(data);
+        setSelectedReport(data);
       } else {
         alert('Rapor yüklenemedi');
       }
     } catch (error) {
       console.error('Error fetching report:', error);
       alert('Rapor yüklenemedi');
-    }
-  };
-
-  // Download report as PDF
-  const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    try {
-      const response = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } else {
-        const error = await response.json().catch(() => ({} as any));
-        alert('PDF indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
-      }
-    } catch (error: any) {
-      console.error('Error downloading PDF:', error);
-      alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
-    }
-  };
-
-  // Delete report
-  const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete the report "${reportTitle}"? This action cannot be undone.`
-    );
-    if (!confirmDelete) return;
-
-    try {
-      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`), {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        alert('✅ Report deleted successfully');
-        fetchReports();
-        if (detailsReport && (detailsReport._id === reportId || detailsReport.id === reportId)) {
-          setDetailsReport(null);
-        }
-      } else {
-        const error = await response.json().catch(() => ({} as any));
-        alert('❌ Error: ' + (error.error || 'Failed to delete report'));
-      }
-    } catch (error: any) {
-      console.error('Error deleting report:', error);
-      alert('❌ Error: ' + (error.message || 'Failed to delete report'));
     }
   };
 
@@ -1921,75 +1855,6 @@ function ReportsTab({ projects, currentUser, users }: any) {
   useEffect(() => {
     fetchReports();
   }, [filterProjectId]);
-
-  if (detailsReport) {
-    const comments = Array.isArray(detailsReport?.expertComments) ? detailsReport.expertComments : [];
-    const reportId = detailsReport._id || detailsReport.id;
-    return (
-      <>
-        <div className="bg-white border-b border-gray-200 px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-start gap-3">
-              <button
-                type="button"
-                onClick={() => setDetailsReport(null)}
-                className="mt-1 inline-flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
-                aria-label="Back to created reports"
-                title="Back to created reports"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">Report Details</h1>
-                <p className="text-gray-600">{detailsReport.title}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDownloadPDF(reportId, detailsReport.title)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                PDF
-              </button>
-              <button
-                onClick={() => handleDeleteReport(reportId, detailsReport.title)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-8 py-6">
-          <div className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Expert Comments</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              {comments.length > 0 ? (
-                comments.map((c: any, idx: number) => (
-                  <div key={idx} className="border border-gray-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="text-sm font-semibold text-gray-900">{c.expertName || "Expert"}</div>
-                      <div className="text-xs text-gray-500">
-                        {c.updatedAt ? new Date(c.updatedAt).toLocaleString("tr-TR") : ""}
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-800 whitespace-pre-wrap">{String(c.commentText || "")}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm text-gray-500">No expert comments yet.</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -2114,7 +1979,10 @@ function ReportsTab({ projects, currentUser, users }: any) {
                     className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleViewReport(reportId)}
+                      >
                         <h3 className="font-medium text-gray-900 mb-1">{report.title}</h3>
                         <p className="text-sm text-gray-600 mb-2">{projectTitle}</p>
                         <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -2132,18 +2000,12 @@ function ReportsTab({ projects, currentUser, users }: any) {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download PDF"
+                          disabled={report.status !== 'FINALIZED'}
+                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent"
+                          title={report.status === 'FINALIZED' ? "Download FINAL PDF" : "PDF is available only after Finalize Report"}
                         >
                           <Download className="h-4 w-4" />
                           PDF
-                        </button>
-                        <button
-                          onClick={() => handleViewDetails(reportId)}
-                          className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          View Details
                         </button>
                         <button
                           onClick={(e) => handleDeleteReport(reportId, report.title, e)}
@@ -2154,12 +2016,14 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           Delete
                         </button>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          report.status === 'FINALIZED' ? 'bg-green-100 text-green-800' :
+                          report.status === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-800' :
                           report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
                           'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
+                          {report.status === 'FINALIZED' ? 'FINALIZED' :
+                           report.status === 'UNDER_REVIEW' ? 'UNDER REVIEW' :
+                           report.status === 'archived' ? 'ARCHIVED' : 'AI DRAFT'}
                         </span>
                       </div>
                     </div>
@@ -2171,7 +2035,77 @@ function ReportsTab({ projects, currentUser, users }: any) {
         </div>
       </div>
 
-      {/* No modal: use View Details page instead */}
+      {/* Report View Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{selectedReport.title}</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedReport.projectId?.title} • {new Date(selectedReport.generatedAt || selectedReport.createdAt).toLocaleString('tr-TR')}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
+                {(() => {
+                  const sections = (selectedReport as any).sections;
+                  if (Array.isArray(sections) && sections.length > 0) {
+                    const s = sections[0];
+                    // Show finalText if available, otherwise aiDraft/aiText
+                    const final = String(s?.finalText || "").trim();
+                    return final.length > 0 ? final : (s?.aiText || s?.aiDraft || "");
+                  }
+                  return (selectedReport as any).content || (selectedReport as any).aiDraft || "";
+                })()}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadPDF(reportId, selectedReport.title);
+                    }
+                  }}
+                  disabled={selectedReport?.status !== 'FINALIZED'}
+                  title={selectedReport?.status === 'FINALIZED' ? 'Download FINAL PDF' : 'PDF is available only after Finalize Report'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-blue-600"
+                >
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDeleteReport(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Report
+                </button>
+              </div>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

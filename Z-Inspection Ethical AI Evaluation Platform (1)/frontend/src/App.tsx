@@ -457,7 +457,8 @@ function App() {
           currentUser={currentUser}
           onBack={() => {
             try {
-              window.history.pushState({}, "", "/");
+              const isAdmin = String(currentUser.role || "").toLowerCase().includes("admin");
+              window.history.pushState({}, "", isAdmin ? "/?tab=created-reports" : "/");
             } catch {
               // ignore
             }

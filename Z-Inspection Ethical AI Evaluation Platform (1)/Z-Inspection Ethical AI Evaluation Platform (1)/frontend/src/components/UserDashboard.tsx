@@ -1123,16 +1123,7 @@ export function UserDashboard({
                             <div className="flex items-start justify-between">
                               <div 
                                 className="flex-1 cursor-pointer"
-                                onClick={() => {
-                                  // Experts/viewers should not open the report modal by clicking the card.
-                                  // Prefer navigating to the full review screen when available.
-                                  if (onReviewReport) {
-                                    onReviewReport(reportId);
-                                    return;
-                                  }
-                                  // Fallback for older flows (should be rare)
-                                  handleViewReport(reportId);
-                                }}
+                                onClick={() => handleViewReport(reportId)}
                               >
                                 <h3 className="font-medium text-gray-900 mb-1">{report.title}</h3>
                                 <p className="text-sm text-gray-600 mb-2">{projectTitle}</p>
@@ -1164,8 +1155,9 @@ export function UserDashboard({
                                 )}
                                 <button
                                   onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
-                                  className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-                                  title="Download PDF"
+                                  disabled={report.status !== 'FINALIZED'}
+                                  className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent"
+                                  title={report.status === 'FINALIZED' ? "Download FINAL PDF" : "PDF is available only after Finalize Report"}
                                 >
                                   <Download className="h-4 w-4" />
                                   PDF
@@ -1181,12 +1173,14 @@ export function UserDashboard({
                                   </button>
                                 )}
                                 <span className={`px-2 py-1 text-xs font-medium rounded ${
-                                  report.status === 'final' ? 'bg-green-100 text-green-800' :
+                                  report.status === 'FINALIZED' ? 'bg-green-100 text-green-800' :
+                                  report.status === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-800' :
                                   report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
                                   'bg-yellow-100 text-yellow-800'
                                 }`}>
-                                  {report.status === 'final' ? 'Final' :
-                                   report.status === 'archived' ? 'Archived' : 'Draft'}
+                                  {report.status === 'FINALIZED' ? 'FINALIZED' :
+                                   report.status === 'UNDER_REVIEW' ? 'UNDER REVIEW' :
+                                   report.status === 'archived' ? 'ARCHIVED' : 'AI DRAFT'}
                                 </span>
                               </div>
                             </div>
@@ -1275,7 +1269,7 @@ export function UserDashboard({
       )}
 
       {/* REPORT VIEW MODAL */}
-      {selectedReport && currentUser.role === "admin" && (
+      {selectedReport && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -1295,11 +1289,14 @@ export function UserDashboard({
             <div className="flex-1 overflow-y-auto p-6">
               <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
                 {(() => {
-                  const comments = (selectedReport as any)?.expertComments;
-                  if (Array.isArray(comments) && comments.length > 0) {
-                    return String(comments[0]?.commentText || "");
+                  const sections = (selectedReport as any).sections;
+                  if (Array.isArray(sections) && sections.length > 0) {
+                    const s = sections[0];
+                    // Show finalText if available, otherwise aiDraft/aiText
+                    const final = String(s?.finalText || "").trim();
+                    return final.length > 0 ? final : (s?.aiText || s?.aiDraft || "");
                   }
-                  return "";
+                  return (selectedReport as any).content || (selectedReport as any).aiDraft || "";
                 })()}
               </div>
             </div>
@@ -1312,7 +1309,9 @@ export function UserDashboard({
                       handleDownloadPDF(reportId, selectedReport.title);
                     }
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  disabled={selectedReport?.status !== 'FINALIZED'}
+                  title={selectedReport?.status === 'FINALIZED' ? 'Download FINAL PDF' : 'PDF is available only after Finalize Report'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-blue-600"
                 >
                   <Download className="h-4 w-4" />
                   Download PDF

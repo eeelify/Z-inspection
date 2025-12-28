@@ -94,38 +94,26 @@ const isUserAssignedToProject = async ({ userIdObj, projectIdObj }) => {
   return Boolean(project);
 };
 
-const chooseSectionContentForExport = (section) => {
-  const expert = (section?.expertEdit || '').trim();
-  if (expert.length > 0) return expert;
-  return section?.aiDraft || '';
-};
-
 const buildExportMarkdownFromReport = (report) => {
-  // New workflow: sections[]
-  if (Array.isArray(report?.sections) && report.sections.length > 0) {
-    let md = '';
-    md += `> **Note:** This report contains AI-generated draft content and has been reviewed/edited by human experts.\n\n`;
+  const title = report?.title || 'Report';
+  const expertComments = Array.isArray(report?.expertComments) ? report.expertComments : [];
 
-    // If there is a single FULL_REPORT section, export it directly (plus the note above)
-    const single = report.sections.length === 1 ? report.sections[0] : null;
-    if (single && String(single.principle || '').toUpperCase() === 'FULL_REPORT') {
-      md += `${chooseSectionContentForExport(single)}\n`;
-      return md;
-    }
+  let md = `# ${title}\n\n`;
 
-    for (const section of report.sections) {
-      const principle = section?.principle || 'Section';
-      md += `## ${principle}\n\n`;
-      md += `${chooseSectionContentForExport(section)}\n\n`;
-    }
-
+  if (expertComments.length === 0) {
     return md;
   }
 
-  // Legacy fallback: content
-  const legacy = report?.content || '';
-  if (!legacy) return '';
-  return `> **Note:** This report contains AI-generated draft content and has been reviewed/edited by human experts.\n\n${legacy}\n`;
+  md += `## Expert Comments\n\n`;
+  for (const c of expertComments) {
+    const name = c?.expertName || 'Expert';
+    const updatedAt = c?.updatedAt ? new Date(c.updatedAt).toLocaleString() : '';
+    const text = String(c?.commentText || '').trim();
+    md += `### ${name}${updatedAt ? ` — ${updatedAt}` : ''}\n\n`;
+    md += `${text || '(no comment)'}\n\n`;
+  }
+
+  return md;
 };
 
 /**
@@ -260,13 +248,6 @@ exports.generateReport = async (req, res) => {
       title: `Analysis Report - ${analysisData.project.title || 'Project'}`,
       // Legacy compatibility
       content: reportContent,
-      // New workflow payload
-      sections: [{
-        principle: 'FULL_REPORT',
-        aiDraft: reportContent,
-        expertEdit: '',
-        comments: []
-      }],
       generatedBy: userIdObj,
       metadata,
       status: 'draft'
@@ -333,8 +314,6 @@ exports.generateReport = async (req, res) => {
       report: {
         id: report._id,
         title: report.title,
-        content: report.content, // legacy
-        sections: report.sections,
         generatedAt: report.generatedAt,
         metadata: report.metadata,
         status: report.status
@@ -392,6 +371,7 @@ exports.getAllReports = async (req, res) => {
     }
 
     const reports = await Report.find(query)
+      .select('-content -sections')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
@@ -414,6 +394,7 @@ exports.getReportById = async (req, res) => {
     const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     const report = await Report.findById(id)
+      .select('-content -sections')
       .populate('projectId', 'title description')
       .populate('generatedBy', 'name email role')
       .lean();
@@ -432,6 +413,16 @@ exports.getReportById = async (req, res) => {
       if (!ok) {
         return res.status(403).json({ error: 'Not authorized to view this report.' });
       }
+    }
+
+    // Enforce visibility rules for expertComments
+    const comments = Array.isArray(report?.expertComments) ? report.expertComments : [];
+    if (roleCategory === 'admin') {
+      report.expertComments = comments;
+    } else if (roleCategory === 'expert') {
+      report.expertComments = comments.filter((c) => String(c?.expertId) === String(userIdObj));
+    } else {
+      report.expertComments = [];
     }
 
     res.json(report);
@@ -463,7 +454,9 @@ exports.updateReport = async (req, res) => {
       id,
       update,
       { new: true }
-    ).lean();
+    )
+      .select('-content -sections')
+      .lean();
 
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
@@ -508,7 +501,7 @@ exports.deleteReport = async (req, res) => {
  */
 exports.getMyReports = async (req, res) => {
   try {
-    const { userIdObj } = await loadRequestUser(req);
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     // Find all projects where user is assigned (ProjectAssignment is the primary source)
     let projectIds = [];
@@ -538,12 +531,21 @@ exports.getMyReports = async (req, res) => {
     const reports = await Report.find({
       projectId: { $in: projectIds }
     })
+      .select('-content -sections')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
       .lean();
 
-    res.json(reports);
+    // Enforce visibility rules for expertComments in list endpoints too
+    const safe = reports.map((r) => {
+      const comments = Array.isArray(r?.expertComments) ? r.expertComments : [];
+      if (roleCategory === 'admin') return r;
+      if (roleCategory === 'expert') return { ...r, expertComments: comments.filter((c) => String(c?.expertId) === String(userIdObj)) };
+      return { ...r, expertComments: [] };
+    });
+
+    res.json(safe);
   } catch (err) {
     console.error('Error fetching user reports:', err);
     res.status(500).json({ error: err.message });
@@ -560,6 +562,7 @@ exports.downloadReportPDF = async (req, res) => {
     const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     const report = await Report.findById(id)
+      .select('title projectId expertComments')
       .populate('projectId', 'title')
       .lean();
 
@@ -580,6 +583,16 @@ exports.downloadReportPDF = async (req, res) => {
     }
 
     console.log('📄 Generating PDF for report:', id);
+
+    // Enforce visibility rules for expertComments in exports too
+    const comments = Array.isArray(report?.expertComments) ? report.expertComments : [];
+    if (roleCategory === 'admin') {
+      report.expertComments = comments;
+    } else if (roleCategory === 'expert') {
+      report.expertComments = comments.filter((c) => String(c?.expertId) === String(userIdObj));
+    } else {
+      report.expertComments = [];
+    }
 
     // Generate PDF from markdown content
     const pdfBuffer = await generatePDFFromMarkdown(
@@ -607,7 +620,7 @@ exports.downloadReportPDF = async (req, res) => {
  */
 exports.getAssignedToMe = async (req, res) => {
   try {
-    const { userIdObj } = await loadRequestUser(req);
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     let projectIds = [];
     try {
@@ -629,12 +642,21 @@ exports.getAssignedToMe = async (req, res) => {
     if (projectIds.length === 0) return res.json([]);
 
     const reports = await Report.find({ projectId: { $in: projectIds } })
+      .select('-content -sections')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
       .lean();
 
-    res.json(reports);
+    // Enforce visibility rules for expertComments in list endpoints too
+    const safe = reports.map((r) => {
+      const comments = Array.isArray(r?.expertComments) ? r.expertComments : [];
+      if (roleCategory === 'admin') return r;
+      if (roleCategory === 'expert') return { ...r, expertComments: comments.filter((c) => String(c?.expertId) === String(userIdObj)) };
+      return { ...r, expertComments: [] };
+    });
+
+    res.json(safe);
   } catch (err) {
     console.error('Error fetching assigned reports:', err);
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -642,72 +664,17 @@ exports.getAssignedToMe = async (req, res) => {
 };
 
 /**
- * PATCH /api/reports/:id/sections/:principle/expert-edit
- * Expert (and Admin) can update expertEdit on a draft report.
+ * POST /api/reports/:id/expert-comment
+ * Expert (and Admin) can upsert their own comment on a draft report.
  */
-exports.updateSectionExpertEdit = async (req, res) => {
+exports.saveExpertComment = async (req, res) => {
   try {
-    const { id, principle } = req.params;
-    const { expertEdit } = req.body;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
-
-    if (roleCategory === 'viewer') {
-      return res.status(403).json({ error: 'Viewer cannot edit reports.' });
-    }
-
-    const report = await Report.findById(id);
-    if (!report) return res.status(404).json({ error: 'Report not found' });
-
-    // Locked after finalize
-    if (report.status === 'final') {
-      return res.status(409).json({ error: 'Report is finalized and locked.' });
-    }
-
-    if (roleCategory !== 'admin') {
-      const ok = await isUserAssignedToProject({
-        userIdObj,
-        projectIdObj: toObjectIdOrValue(report.projectId)
-      });
-      if (!ok) {
-        return res.status(403).json({ error: 'Not authorized to edit this report.' });
-      }
-    }
-
-    const targetPrinciple = decodeURIComponent(principle || '');
-    report.sections = Array.isArray(report.sections) ? report.sections : [];
-
-    let section = report.sections.find(s => s.principle === targetPrinciple);
-    if (!section) {
-      section = { principle: targetPrinciple, aiDraft: '', expertEdit: '', comments: [] };
-      report.sections.push(section);
-    }
-
-    section.expertEdit = String(expertEdit || '');
-
-    await report.save();
-    res.json({ success: true, report: report.toObject() });
-  } catch (err) {
-    console.error('Error updating expert edit:', err);
-    res.status(err.statusCode || 500).json({ error: err.message });
-  }
-};
-
-/**
- * POST /api/reports/:id/sections/:principle/comments
- * Expert (and Admin) can comment on a draft report.
- */
-exports.addSectionComment = async (req, res) => {
-  try {
-    const { id, principle } = req.params;
-    const { text } = req.body;
+    const { id } = req.params;
+    const { commentText } = req.body;
     const { user, userIdObj, roleCategory } = await loadRequestUser(req);
 
     if (roleCategory === 'viewer') {
       return res.status(403).json({ error: 'Viewer cannot comment on reports.' });
-    }
-
-    if (!text || !String(text).trim()) {
-      return res.status(400).json({ error: 'Comment text is required' });
     }
 
     const report = await Report.findById(id);
@@ -727,27 +694,27 @@ exports.addSectionComment = async (req, res) => {
       }
     }
 
-    const targetPrinciple = decodeURIComponent(principle || '');
-    report.sections = Array.isArray(report.sections) ? report.sections : [];
+    report.expertComments = Array.isArray(report.expertComments) ? report.expertComments : [];
+    const idx = report.expertComments.findIndex((c) => String(c?.expertId) === String(userIdObj));
 
-    let section = report.sections.find(s => s.principle === targetPrinciple);
-    if (!section) {
-      section = { principle: targetPrinciple, aiDraft: '', expertEdit: '', comments: [] };
-      report.sections.push(section);
+    const next = {
+      expertId: userIdObj,
+      expertName: user?.name || 'Expert',
+      commentText: String(commentText || ''),
+      updatedAt: new Date()
+    };
+
+    if (idx >= 0) {
+      report.expertComments[idx] = { ...report.expertComments[idx], ...next };
+    } else {
+      report.expertComments.push(next);
     }
 
-    section.comments = Array.isArray(section.comments) ? section.comments : [];
-    section.comments.push({
-      userId: userIdObj,
-      userName: user?.name || 'User',
-      text: String(text).trim(),
-      createdAt: new Date()
-    });
-
     await report.save();
-    res.json({ success: true, report: report.toObject() });
+
+    res.json({ success: true, expertComment: next });
   } catch (err) {
-    console.error('Error adding comment:', err);
+    console.error('Error saving expert comment:', err);
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 };

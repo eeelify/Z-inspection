@@ -4,9 +4,9 @@ const cors = require('cors');
 const nodemailer = require('nodemailer');
 const compression = require('compression');
 const path = require('path');
-// Load environment variables:
-// - Prefer `.env` (common convention)
-// - Fallback to `env` (some Windows setups omit dotfiles)
+// Load env vars:
+// - Prefer `.env`
+// - Fallback to `env` (some Windows setups avoid dotfiles)
 const dotenv = require('dotenv');
 const envPathDot = path.resolve(__dirname, '.env');
 const envPathNoDot = path.resolve(__dirname, 'env');
@@ -14,7 +14,6 @@ const dotResult = dotenv.config({ path: envPathDot });
 if (dotResult.error) {
   const noDotResult = dotenv.config({ path: envPathNoDot });
   if (noDotResult.error) {
-    // Keep running; platform env vars (Railway/Render) may still be present.
     console.warn(`⚠️  dotenv could not load ${envPathDot} or ${envPathNoDot}:`, noDotResult.error.message);
   }
 }
@@ -295,12 +294,29 @@ const MessageSchema = new mongoose.Schema({
 MessageSchema.index({ projectId: 1, fromUserId: 1, toUserId: 1, createdAt: -1 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// Report - Analysis Reports (expert comment workflow)
-const ExpertCommentSchema = new mongoose.Schema({
-  expertId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  expertName: { type: String, default: '' },
-  commentText: { type: String, default: '' },
-  updatedAt: { type: Date, default: Date.now }
+// Report - AI Generated Analysis Reports (with expert review workflow)
+const ReportSectionSchema = new mongoose.Schema({
+  // Legacy fields (do not remove)
+  principle: { type: String, required: true },
+  aiDraft: { type: String, default: '' },
+  expertEdit: { type: String, default: '' },
+  comments: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userName: { type: String },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
+  // New single-final-report workflow fields
+  sectionKey: { type: String, index: true },
+  aiText: { type: String, default: '' },
+  expertEdits: [{
+    expertId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    editedText: { type: String, default: '' },
+    comment: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  finalText: { type: String, default: '' }
 }, { _id: false });
 
 const ReportSchema = new mongoose.Schema({
@@ -314,13 +330,17 @@ const ReportSchema = new mongoose.Schema({
   // Legacy single-body content (kept for backward compatibility)
   content: { type: String },
 
-  // Expert comments (one per expert)
-  expertComments: { type: [ExpertCommentSchema], default: [] },
+  // Raw AI output (draft; never authoritative)
+  aiDraft: { type: String, default: '' },
+
+  // New section-based workflow
+  sections: { type: [ReportSectionSchema], default: [] },
 
   generatedAt: { type: Date, default: Date.now, index: true },
   generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
-  status: { type: String, enum: ['draft', 'final', 'archived'], default: 'draft', index: true },
+  status: { type: String, enum: ['draft', 'final', 'archived', 'AI_DRAFT', 'UNDER_REVIEW', 'FINALIZED'], default: 'draft', index: true },
+  finalizedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   finalizedAt: { type: Date },
 
   metadata: {

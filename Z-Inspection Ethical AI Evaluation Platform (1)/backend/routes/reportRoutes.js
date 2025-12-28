@@ -49,11 +49,8 @@ router.get('/', reportController.getAllReports);
 // POST /api/reports/:id/finalize - Finalize & lock report (admin only)
 router.post('/:id/finalize', reportController.finalizeReport);
 
-// PATCH /api/reports/:id/sections/:principle/expert-edit - Update expert edit for a section (expert/admin)
-router.patch('/:id/sections/:principle/expert-edit', reportController.updateSectionExpertEdit);
-
-// POST /api/reports/:id/sections/:principle/comments - Add comment to a section (expert/admin)
-router.post('/:id/sections/:principle/comments', reportController.addSectionComment);
+// POST /api/reports/:id/expert-comment - Upsert expert comment (expert/admin)
+router.post('/:id/expert-comment', reportController.saveExpertComment);
 
 // GET /api/reports/:id/download - Download report as PDF (must be before /:id route)
 router.get('/:id/download', reportController.downloadReportPDF);
