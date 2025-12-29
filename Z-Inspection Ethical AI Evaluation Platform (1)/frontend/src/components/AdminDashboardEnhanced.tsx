@@ -2832,7 +2832,7 @@ function AssignExpertsModal({ useCase, users, projects = [], onClose, onAssign }
 
           <div>
             <label className="block text-sm font-medium mb-3 text-gray-700">Select Experts</label>
-            <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-2 bg-gray-50">
+            <div className="space-y-2 max-h-96 overflow-y-auto border border-gray-100 rounded-lg p-2 bg-gray-50">
               {experts.length === 0 ? (
                 <div className="text-sm text-gray-500 text-center py-2">No experts available to assign.</div>
               ) : (
