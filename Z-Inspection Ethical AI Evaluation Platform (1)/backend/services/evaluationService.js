@@ -15,7 +15,7 @@ const isValidObjectId = (id) => {
 /**
  * Create or update a project assignment
  */
-async function createAssignment(projectId, userId, role, questionnaires) {
+async function createAssignment(projectId, userId, role, questionnaires, actorId = null, actorRole = 'admin') {
   try {
     const assignment = await ProjectAssignment.findOneAndUpdate(
       { projectId, userId },
@@ -32,6 +32,22 @@ async function createAssignment(projectId, userId, role, questionnaires) {
     
     // Initialize responses for all assigned questionnaires
     await initializeResponses(projectId, userId, role, questionnaires || []);
+    
+    // Notify assigned expert (non-blocking)
+    try {
+      const { notifyProjectAssigned } = require('./notificationService');
+      await notifyProjectAssigned(
+        projectId,
+        userId,
+        assignment._id,
+        role,
+        actorId,
+        actorRole
+      );
+    } catch (notifError) {
+      console.error('Error sending project assignment notification:', notifError);
+      // Don't fail assignment creation if notification fails
+    }
     
     return assignment;
   } catch (error) {
@@ -227,6 +243,32 @@ async function submitResponse(projectId, userId, questionnaireKey) {
 
     // Compute and save scores
     await computeScores(projectId, userId, questionnaireKey);
+
+    // Notify admins that evaluation is completed (non-blocking)
+    try {
+      const User = require('../models/User');
+      const user = await User.findById(userId);
+      const { notifyEvaluationCompleted, checkAndNotifyAllExpertsCompleted } = require('./notificationService');
+      
+      await notifyEvaluationCompleted(
+        projectId,
+        userId,
+        questionnaireKey,
+        response.questionnaireVersion || 1,
+        assignment?.role || user?.role || 'expert',
+        user?.name || user?.email || 'User'
+      );
+
+      // Check if all experts have completed and notify
+      await checkAndNotifyAllExpertsCompleted(
+        projectId,
+        questionnaireKey,
+        response.questionnaireVersion || 1
+      );
+    } catch (notifError) {
+      console.error('Error sending evaluation completed notification:', notifError);
+      // Don't fail submission if notification fails
+    }
 
     return response;
   } catch (error) {

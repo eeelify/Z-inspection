@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { Project, User, UseCase } from "../types";
 import { ChatPanel } from "./ChatPanel";
+import { NotificationDetailPanel } from "./NotificationDetailPanel";
+import { NotificationBell } from "./NotificationBell";
 import { formatRoleName } from "../utils/helpers";
 import { ProfileModal } from "./ProfileModal";
 import { api } from "../api";
@@ -109,6 +111,7 @@ export function UserDashboard({
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const [expandedNotification, setExpandedNotification] = useState<any | null>(null);
   const [showChats, setShowChats] = useState(false);
   const [allConversations, setAllConversations] = useState<any[]>([]);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
@@ -189,13 +192,20 @@ export function UserDashboard({
         const data = await response.json();
         console.log('Unread count fetched:', data);
         const conversations = data.conversations || [];
-        // Calculate actual unread count from conversations to ensure consistency
-        // Backend uses 'count' field, not 'unreadCount'
-        const actualUnreadCount = conversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
+        
+        // Filter out notification-only messages - chat bubble should only show real user messages
+        const realConversations = conversations.filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
+          return !isNotification;
+        });
+        
+        // Calculate actual unread count from real conversations only
+        const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         // Only show badge if there are actual conversations with unread messages
         // This prevents showing badge when conversations array is empty but totalCount > 0
         setUnreadCount(actualUnreadCount);
-        setUnreadConversations(conversations);
+        setUnreadConversations(realConversations);
       } else {
         console.error('Failed to fetch unread count:', response.status, response.statusText);
         setUnreadCount(0);
@@ -214,7 +224,13 @@ export function UserDashboard({
       const response = await fetch(api(`/api/messages/conversations?userId=${currentUser.id}`));
       if (response.ok) {
         const data = await response.json();
-        setAllConversations(data || []);
+        // Filter out notification-only messages - chat should only show real user messages
+        const realConversations = (data || []).filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          // Exclude conversations where last message is a notification
+          return !lastMsg.startsWith('[NOTIFICATION]');
+        });
+        setAllConversations(realConversations);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -531,41 +547,50 @@ export function UserDashboard({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle notification click - open chat panel
+  // Handle notification click - expand notification panel or open chat
   const handleNotificationClick = async (conversation: any) => {
-    const project = projects.find(p => p.id === conversation.projectId) ||
-      ({
-        id: conversation.projectId,
-        title: conversation.projectTitle || 'Project',
-      } as any);
-    const otherUser = users.find(u => u.id === conversation.fromUserId) ||
-      ({
-        id: conversation.fromUserId,
-        name: conversation.fromUserName || 'User',
-      } as any);
+    // Check if this is a notification-only message (starts with [NOTIFICATION])
+    const isNotificationOnly = String(conversation.lastMessage || '').startsWith('[NOTIFICATION]');
     
-    if (project && otherUser) {
-      // Mark messages as read
-      try {
-        await fetch(api('/api/messages/mark-read'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: conversation.projectId,
-            userId: currentUser.id,
-            otherUserId: conversation.fromUserId,
-          }),
-        });
-        fetchUnreadCount(); // Refresh count
-      } catch (error) {
-        console.error('Error marking messages as read:', error);
-      }
+    // Mark messages as read
+    try {
+      await fetch(api('/api/messages/mark-read'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: conversation.projectId,
+          userId: currentUser.id,
+          otherUserId: conversation.fromUserId,
+        }),
+      });
+      fetchUnreadCount(); // Refresh count
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
 
-      // Open chat panel (also for notification-only messages)
-      setChatProject(project);
-      setChatOtherUser(otherUser);
-      setChatPanelOpen(true);
+    if (isNotificationOnly) {
+      // If it's a notification-only message, expand notification panel
+      setExpandedNotification(conversation);
       setShowNotifications(false);
+    } else {
+      // If it's a regular message, open chat
+      const project = projects.find(p => p.id === conversation.projectId) ||
+        ({
+          id: conversation.projectId,
+          title: conversation.projectTitle || 'Project',
+        } as any);
+      const otherUser = users.find(u => u.id === conversation.fromUserId) ||
+        ({
+          id: conversation.fromUserId,
+          name: conversation.fromUserName || 'User',
+        } as any);
+      
+      if (project && otherUser) {
+        setChatProject(project);
+        setChatOtherUser(otherUser);
+        setChatPanelOpen(true);
+        setShowNotifications(false);
+      }
     }
   };
 
@@ -725,12 +750,36 @@ export function UserDashboard({
                 />
               </div>
 
+              {/* In-app Notifications Bell */}
+              <NotificationBell 
+                currentUser={currentUser}
+                onNavigate={(view, params) => {
+                  // Handle navigation using App's state system
+                  if (view === 'project-detail' && params?.projectId) {
+                    const project = projects.find(p => {
+                      const pid = p.id || (p as any)._id;
+                      const targetId = params.projectId;
+                      return String(pid) === String(targetId);
+                    });
+                    if (project) {
+                      // Set openTensionsTab if tab is tensions-related
+                      if (params.tab === 'discussion' || params.tab === 'evidence') {
+                        (project as any).openTensionsTab = true;
+                        (project as any).openTensionId = params.tensionId; // Store tension ID to open drawer
+                      }
+                      onViewProject(project, params.tensionId ? undefined : undefined);
+                    }
+                  }
+                }}
+              />
+              
+              {/* Legacy Message Notifications */}
               <div className="relative" ref={notificationRef}>
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="relative p-2 text-gray-600 hover:text-gray-900"
                 >
-                  <Bell className="h-5 w-5" />
+                  <MessageSquare className="h-5 w-5" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -769,7 +818,11 @@ export function UserDashboard({
                           {unreadConversations.map((conv, idx) => (
                             <button
                               key={idx}
-                              onClick={() => handleNotificationClick(conv)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleNotificationClick(conv);
+                              }}
                               className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
                             >
                               <div className="flex items-start justify-between">
@@ -1306,6 +1359,37 @@ export function UserDashboard({
           )}
         </div>
       </div>
+
+      {/* Expanded Notification Panel - Drawer style */}
+      {expandedNotification && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 z-[60]"
+            onClick={() => {
+              setExpandedNotification(null);
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Right drawer */}
+          <div className="fixed inset-y-0 right-0 z-[70] w-full max-w-2xl bg-white shadow-2xl flex flex-col">
+            <NotificationDetailPanel
+              conversation={expandedNotification}
+              currentUser={currentUser}
+              users={users}
+              projects={projects}
+              onClose={() => setExpandedNotification(null)}
+              onOpenChat={(project, otherUser) => {
+                setExpandedNotification(null);
+                setChatProject(project);
+                setChatOtherUser(otherUser);
+                setChatPanelOpen(true);
+              }}
+            />
+          </div>
+        </>
+      )}
 
       {/* Chat Panel - Same style as ProjectDetail contact */}
       {chatPanelOpen && chatOtherUser && chatProject && (

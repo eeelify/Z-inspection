@@ -61,9 +61,10 @@ export function TensionCard({ tension, currentUser, users = [], onVote, onCommen
   const isUnderReview = reviewState.state === 'Under review';
 
   const canDelete = currentUser.role === 'admin' || tension.createdBy === currentUser.id;
-  // Tension sahibi vote butonlarını kullanamaz
+  // Tension sahibi ve adminler vote butonlarını kullanamaz
   const isOwner = tension.createdBy === currentUser.id;
-  const canVote = !disableVoting && !isOwner;
+  const isAdmin = currentUser.role === 'admin';
+  const canVote = !disableVoting && !isOwner && !isAdmin;
   
   // Yüzdelik Hesaplama
   // Eğer tüm oylar agree ise, kesinlikle %100 olmalı (yuvarlama hatasını önlemek için)

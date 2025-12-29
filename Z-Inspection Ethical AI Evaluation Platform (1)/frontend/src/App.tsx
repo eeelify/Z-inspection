@@ -72,8 +72,11 @@ function App() {
 
         if (useCasesRes.ok) {
           const data = await useCasesRes.json();
+          console.log('✅ Use cases fetched:', data.length);
           const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
           setUseCases(formattedUseCases);
+        } else {
+          console.error('❌ Failed to fetch use cases:', useCasesRes.status, useCasesRes.statusText);
         }
       } catch (error: any) {
         if (error.name !== 'AbortError') {
@@ -83,6 +86,33 @@ function App() {
     };
 
     fetchAllData();
+    
+    // Listen for projects update events (e.g., after assignment)
+    const handleProjectsUpdate = (event: CustomEvent) => {
+      setProjects(event.detail);
+    };
+    
+    window.addEventListener('projects-updated', handleProjectsUpdate as EventListener);
+    
+    // Periodically refresh projects (every 10 seconds) to catch assignment updates
+    const refreshInterval = setInterval(() => {
+      if (currentUser) {
+        fetch(api('/api/projects'))
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) {
+              const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+              setProjects(formattedProjects);
+            }
+          })
+          .catch(err => console.error('Error refreshing projects:', err));
+      }
+    }, 10000); // Refresh every 10 seconds
+    
+    return () => {
+      window.removeEventListener('projects-updated', handleProjectsUpdate as EventListener);
+      clearInterval(refreshInterval);
+    };
   }, [currentUser]);
 
   // Minimal URL-based route support for report review screen: /reports/:reportId/review

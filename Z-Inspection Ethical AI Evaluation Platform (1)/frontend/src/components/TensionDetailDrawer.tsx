@@ -33,6 +33,7 @@ export function TensionDetailDrawer({
   const creator = users.find(u => u.id === tension.createdBy || u.id === (tension as any).uploadedBy);
   const evidenceCount = (tension as any).evidences ? (tension as any).evidences.length : 0;
   const discussionCount = tension.comments ? tension.comments.length : 0;
+  const isAdmin = currentUser.role === 'admin';
 
   // Fetch latest tension when drawer opens
   useEffect(() => {
@@ -102,6 +103,13 @@ export function TensionDetailDrawer({
 
   // Add evidence
   const handleAddEvidence = async (newEvidence: any) => {
+    // Prevent admins from adding evidence
+    if (isAdmin) {
+      alert('Admins cannot add evidence to tensions.');
+      setShowAddEvidence(false);
+      return;
+    }
+    
     try {
       const response = await fetch(api(`/api/tensions/${tension.id || (tension as any)._id}/evidence`), {
         method: 'POST',
@@ -230,13 +238,15 @@ export function TensionDetailDrawer({
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Evidence Library</h3>
-                  <button
-                    onClick={() => setShowAddEvidence(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center text-sm"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Evidence
-                  </button>
+                  {!isAdmin && (
+                    <button
+                      onClick={() => setShowAddEvidence(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center text-sm"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Evidence
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -418,36 +428,39 @@ export function TensionDetailDrawer({
                   )}
                 </div>
 
-                <div className="flex items-start space-x-3 pt-4 border-t">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 flex-shrink-0">
-                    {currentUser.name.charAt(0)}
+                {/* Comment Input - Hidden for admins */}
+                {!isAdmin && (
+                  <div className="flex items-start space-x-3 pt-4 border-t">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 flex-shrink-0">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                    <div className="flex-1">
+                      <textarea
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        placeholder="Explain your reasoning; reference evidence if possible."
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-2"
+                      />
+                      <button 
+                        onClick={handlePostComment}
+                        disabled={!commentText.trim()}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 float-right flex items-center"
+                      >
+                        <Send className="h-3 w-3 mr-2" />
+                        Post Comment
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <textarea
-                      value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      placeholder="Explain your reasoning; reference evidence if possible."
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mb-2"
-                    />
-                    <button 
-                      onClick={handlePostComment}
-                      disabled={!commentText.trim()}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 float-right flex items-center"
-                    >
-                      <Send className="h-3 w-3 mr-2" />
-                      Post Comment
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
             )}
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Add Evidence Modal */}
-      {showAddEvidence && (
+      {/* Add Evidence Modal - Hidden for admins */}
+      {showAddEvidence && !isAdmin && (
         <AddEvidenceModal
           onClose={() => setShowAddEvidence(false)}
           onAdd={handleAddEvidence}
