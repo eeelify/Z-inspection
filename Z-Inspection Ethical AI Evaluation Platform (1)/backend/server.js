@@ -937,6 +937,7 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
     const { assignedExperts = [], adminNotes = '' } = req.body;
     const useCaseId = req.params.id;
     
+<<<<<<< HEAD
     // Validate useCaseId
     if (!isValidObjectId(useCaseId)) {
       return res.status(400).json({ error: 'Invalid use case ID' });
@@ -1307,6 +1308,17 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
     const { userId, voteType } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
+    
+    // Prevent users from voting on their own tensions
+    const tensionCreatorId = tension.createdBy ? String(tension.createdBy) : null;
+    const userIdStr = String(userId);
+    if (tensionCreatorId === userIdStr) {
+      return res.status(403).json({ 
+        error: 'CANNOT_VOTE_OWN_TENSION',
+        message: 'You cannot vote on your own tension.'
+      });
+    }
+    
     if (!tension.votes) tension.votes = [];
     const existingVoteIndex = tension.votes.findIndex(v => v.userId === userId);
     if (existingVoteIndex > -1) {
@@ -1563,18 +1575,29 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     // Check tension votes
-    const tensions = await Tension.find({ projectId: projectIdObj }).select('votes').lean();
-    const totalTensions = tensions.length;
-    const votedTensions = tensions.filter((t) => {
+    // IMPORTANT: User cannot vote on their own tensions, so we exclude them from the requirement
+    const tensions = await Tension.find({ projectId: projectIdObj }).select('votes createdBy').lean();
+    
+    // Filter out tensions created by the current user (they can't vote on their own tensions)
+    const votableTensions = tensions.filter((t) => {
+      const createdBy = t.createdBy ? String(t.createdBy) : null;
+      return createdBy !== userIdStr;
+    });
+    
+    const totalVotableTensions = votableTensions.length;
+    const votedTensions = votableTensions.filter((t) => {
       const votes = Array.isArray(t.votes) ? t.votes : [];
       return votes.some((v) => String(v.userId) === userIdStr);
     }).length;
 
-    if (totalTensions > 0 && votedTensions < totalTensions) {
+    // User must vote on all tensions they CAN vote on (excluding their own)
+    if (totalVotableTensions > 0 && votedTensions < totalVotableTensions) {
       return res.status(400).json({
         error: 'NOT_ALL_TENSIONS_VOTED',
-        totalTensions,
+        totalTensions: tensions.length,
+        totalVotableTensions,
         votedTensions,
+        message: `You must vote on all tensions you can vote on (excluding your own tensions). You have voted on ${votedTensions} out of ${totalVotableTensions} votable tensions.`
       });
     }
 
@@ -1638,7 +1661,8 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     res.json({
       success: true,
       alreadyCompleted: false,
-      totalTensions,
+      totalTensions: tensions.length,
+      totalVotableTensions,
       votedTensions,
       evolutionCompletedAt: assignment.evolutionCompletedAt,
     });
@@ -2824,9 +2848,15 @@ app.get('/api/user-progress', async (req, res) => {
       assignedQuestionnaireKeys = roleKey ? ['general-v1', roleKey] : ['general-v1'];
     }
 
-    const totalQuestions = await Question.countDocuments({
+    // Get all assigned questions - count ALL questions (not just required)
+    // This ensures progress reaches 100% when all questions are answered
+    const assignedQuestions = await Question.find({
       questionnaireKey: { $in: assignedQuestionnaireKeys }
-    });
+    }).select('_id code questionnaireKey required').lean();
+
+    // Use question _id as the unique key for consistency
+    const totalQuestionsSet = new Set(assignedQuestions.map(q => String(q._id)).filter(Boolean));
+    const totalQuestions = totalQuestionsSet.size;
 
     if (totalQuestions === 0) {
       return res.json({ progress: 0, answered: 0, total: 0, questionnaires: assignedQuestionnaireKeys, responseCount: 0 });
@@ -2838,17 +2868,27 @@ app.get('/api/user-progress', async (req, res) => {
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey answers').lean();
 
+    // Use questionId as the primary key for matching (more reliable than questionCode)
     const answeredKeys = new Set();
+    const assignedQuestionIds = new Set(assignedQuestions.map(q => String(q._id)));
 
     for (const r of (responses || [])) {
-      const qKey = r.questionnaireKey;
       const arr = Array.isArray(r.answers) ? r.answers : [];
       for (const a of arr) {
-        const idKey = a?.questionId ? String(a.questionId) : '';
-        const codeKey = a?.questionCode !== undefined && a?.questionCode !== null ? String(a.questionCode).trim() : '';
-        const key = idKey.length > 0 ? idKey : (codeKey.length > 0 ? `${qKey}:${codeKey}` : '');
-        if (!key || answeredKeys.has(key)) continue;
+        // Prefer questionId for matching (most reliable)
+        const questionId = a?.questionId ? String(a.questionId) : null;
+        
+        // Only count if this question is in the assigned questions list
+        if (!questionId || !assignedQuestionIds.has(questionId)) {
+          continue;
+        }
 
+        // Skip if already counted
+        if (answeredKeys.has(questionId)) {
+          continue;
+        }
+
+        // Check if answer exists - be more lenient with answer validation
         let hasAnswer = false;
         if (a?.answer) {
           if (a.answer.choiceKey !== null && a.answer.choiceKey !== undefined && a.answer.choiceKey !== '') hasAnswer = true;
@@ -2859,13 +2899,36 @@ app.get('/api/user-progress', async (req, res) => {
           // Backward compatibility: direct fields
           hasAnswer = true;
         }
+        
+        // Also check if score exists (some answers might only have score without answer object)
+        if (!hasAnswer && a?.score !== null && a?.score !== undefined) {
+          hasAnswer = true;
+        }
 
-        if (hasAnswer) answeredKeys.add(key);
+        if (hasAnswer) {
+          answeredKeys.add(questionId);
+        }
       }
     }
 
     const answeredCount = answeredKeys.size;
     const progress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+
+    // Debug logging for troubleshooting
+    if (progress < 100 && answeredCount > 0) {
+      console.log(`📊 Progress calculation: ${answeredCount}/${totalQuestions} = ${progress}%`);
+      console.log(`   Questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
+      console.log(`   Response documents: ${responses.length}`);
+      
+      // Find unanswered questions
+      const unansweredQuestionIds = Array.from(assignedQuestionIds).filter(id => !answeredKeys.has(id));
+      if (unansweredQuestionIds.length > 0 && unansweredQuestionIds.length <= 10) {
+        const unansweredQuestions = await Question.find({
+          _id: { $in: unansweredQuestionIds.map(id => new mongoose.Types.ObjectId(id)) }
+        }).select('code questionnaireKey').lean();
+        console.log(`   Unanswered questions: ${unansweredQuestions.map(q => `${q.code} (${q.questionnaireKey})`).join(', ')}`);
+      }
+    }
 
     return res.json({
       progress: Math.max(0, Math.min(100, progress)),
