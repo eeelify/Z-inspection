@@ -937,7 +937,6 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
     const { assignedExperts = [], adminNotes = '' } = req.body;
     const useCaseId = req.params.id;
     
-<<<<<<< HEAD
     // Validate useCaseId
     if (!isValidObjectId(useCaseId)) {
       return res.status(400).json({ error: 'Invalid use case ID' });
