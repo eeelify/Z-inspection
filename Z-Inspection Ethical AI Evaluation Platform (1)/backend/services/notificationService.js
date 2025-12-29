@@ -2,6 +2,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const Project = require('../models/Project');
 const Tension = require('../models/Tension');
+const ProjectAssignment = require('../models/projectAssignment');
 
 /**
  * Create notifications for multiple recipients with deduplication
@@ -44,6 +45,17 @@ async function createNotifications(recipients, payload, options = {}) {
       }
     }
 
+    // Check dedupeKey if provided
+    if (payload.dedupeKey) {
+      const existingByKey = await Notification.findOne({
+        recipientId,
+        dedupeKey: payload.dedupeKey
+      });
+      if (existingByKey) {
+        continue; // Skip duplicate
+      }
+    }
+
     const notification = new Notification({
       recipientId,
       projectId: payload.projectId,
@@ -56,6 +68,7 @@ async function createNotifications(recipients, payload, options = {}) {
       actorRole: payload.actorRole,
       metadata: payload.metadata || {},
       url: payload.url,
+      dedupeKey: payload.dedupeKey,
       isRead: false
     });
 
@@ -70,21 +83,49 @@ async function createNotifications(recipients, payload, options = {}) {
 }
 
 /**
- * Get assigned experts for a project
+ * Get assigned experts for a project (excludes admins)
  * @param {ObjectId} projectId
- * @returns {Array} Array of user IDs
+ * @returns {Array} Array of user IDs (experts only, no admins)
  */
 async function getAssignedExperts(projectId) {
   try {
+    // First try ProjectAssignment collection (preferred)
+    const assignments = await ProjectAssignment.find({ 
+      projectId,
+      status: { $in: ['assigned', 'in_progress', 'submitted'] }
+    }).select('userId').lean();
+    
+    if (assignments && assignments.length > 0) {
+      // Get all user IDs from assignments
+      const userIds = assignments.map(a => a.userId).filter(Boolean);
+      
+      // Check user roles in bulk to exclude admins
+      const users = await User.find({ 
+        _id: { $in: userIds },
+        role: { $ne: 'admin' } // Exclude admins
+      }).select('_id').lean();
+      
+      return users.map(u => u._id);
+    }
+
+    // Fallback to Project.assignedUsers (but filter out admins)
     const project = await Project.findById(projectId).populate('assignedUsers');
     if (!project) return [];
 
-    // Get assigned users (experts)
-    const expertIds = (project.assignedUsers || [])
+    // Get assigned user IDs
+    const userIds = (project.assignedUsers || [])
       .map(u => u._id || u.id || u)
       .filter(Boolean);
 
-    return expertIds;
+    if (userIds.length === 0) return [];
+
+    // Check user roles in bulk to exclude admins
+    const users = await User.find({ 
+      _id: { $in: userIds },
+      role: { $ne: 'admin' } // Exclude admins
+    }).select('_id').lean();
+
+    return users.map(u => u._id);
   } catch (error) {
     console.error('Error getting assigned experts:', error);
     return [];
@@ -198,7 +239,8 @@ async function notifyTensionCreated(tension, actorId, actorRole) {
 async function notifyTensionCommented(tension, actorId, actorRole) {
   try {
     const projectId = tension.projectId;
-    const participants = await getTensionParticipants(tension._id);
+    // Only notify assigned experts (not admins)
+    const assignedExperts = await getAssignedExperts(projectId);
 
     const payload = {
       projectId,
@@ -216,7 +258,7 @@ async function notifyTensionCommented(tension, actorId, actorRole) {
       url: `/projects/${projectId}/tensions/${tension._id}?tab=discussion`
     };
 
-    await createNotifications(participants, payload);
+    await createNotifications(assignedExperts, payload);
   } catch (error) {
     console.error('Error notifying tension commented:', error);
   }
@@ -228,7 +270,8 @@ async function notifyTensionCommented(tension, actorId, actorRole) {
 async function notifyTensionEvidenceAdded(tension, evidence, actorId, actorRole) {
   try {
     const projectId = tension.projectId;
-    const participants = await getTensionParticipants(tension._id);
+    // Only notify assigned experts (not admins)
+    const assignedExperts = await getAssignedExperts(projectId);
 
     const payload = {
       projectId,
@@ -247,7 +290,7 @@ async function notifyTensionEvidenceAdded(tension, evidence, actorId, actorRole)
       url: `/projects/${projectId}/tensions/${tension._id}?tab=evidence`
     };
 
-    await createNotifications(participants, payload);
+    await createNotifications(assignedExperts, payload);
   } catch (error) {
     console.error('Error notifying tension evidence added:', error);
   }
@@ -259,7 +302,8 @@ async function notifyTensionEvidenceAdded(tension, evidence, actorId, actorRole)
 async function notifyTensionVoted(tension, voteType, actorId, actorRole) {
   try {
     const projectId = tension.projectId;
-    const participants = await getTensionParticipants(tension._id);
+    // Only notify assigned experts (not admins)
+    const assignedExperts = await getAssignedExperts(projectId);
 
     const payload = {
       projectId,
@@ -278,7 +322,7 @@ async function notifyTensionVoted(tension, voteType, actorId, actorRole) {
       url: `/projects/${projectId}/tensions/${tension._id}?tab=discussion`
     };
 
-    await createNotifications(participants, payload, { dedupeWindow: 60000 }); // 60 second dedupe
+    await createNotifications(assignedExperts, payload, { dedupeWindow: 60000 }); // 60 second dedupe
   } catch (error) {
     console.error('Error notifying tension voted:', error);
   }
@@ -287,15 +331,13 @@ async function notifyTensionVoted(tension, voteType, actorId, actorRole) {
 /**
  * Notify admins when evaluation is started (once per project+user+questionnaireKey)
  */
-async function notifyEvaluationStarted(projectId, userId, questionnaireKey, actorRole, userName) {
+async function notifyEvaluationStarted(projectId, userId, questionnaireKey, questionnaireVersion, actorRole, userName) {
   try {
-    // Check if already notified for this combination
+    const dedupeKey = `evaluation_started_${projectId}_${userId}_${questionnaireKey}_${questionnaireVersion || 1}`;
+    
+    // Check if already notified for this combination using dedupeKey
     const existing = await Notification.findOne({
-      type: 'evaluation_started',
-      projectId,
-      'metadata.questionnaireKey': questionnaireKey,
-      actorId: userId,
-      createdAt: { $gte: new Date(Date.now() - 86400000) } // Check last 24 hours
+      dedupeKey
     });
 
     if (existing) {
@@ -315,18 +357,242 @@ async function notifyEvaluationStarted(projectId, userId, questionnaireKey, acto
       entityId: userId, // Using userId as entityId for evaluation_started
       type: 'evaluation_started',
       title: 'Evaluation started',
-      message: `${actorRole || 'Expert'} (${userName || 'User'}) started evaluation for project ${projectTitle}.`,
+      message: `${actorRole || 'Expert'} (${userName || 'User'}) has started evaluation for project "${projectTitle}".`,
       actorId: userId,
       actorRole,
       metadata: {
-        questionnaireKey
+        questionnaireKey,
+        questionnaireVersion: questionnaireVersion || 1
       },
-      url: `/admin/projects/${projectId}/evaluations`
+      url: `/admin/projects/${projectId}/evaluations`,
+      dedupeKey
     };
 
     await createNotifications(admins, payload);
   } catch (error) {
     console.error('Error notifying evaluation started:', error);
+  }
+}
+
+/**
+ * Notify experts when a new project is created and they are assigned
+ */
+async function notifyProjectCreated(projectId, userIds, actorId, actorRole) {
+  try {
+    if (!userIds || userIds.length === 0) return;
+
+    const project = await Project.findById(projectId);
+    if (!project) return;
+
+    const projectTitle = project.title || 'Project';
+
+    // Create notifications for all assigned experts (exclude admins)
+    const notifications = [];
+    for (const userId of userIds) {
+      // Check if user is admin, skip if so
+      const user = await User.findById(userId).select('role').lean();
+      if (user && user.role === 'admin') {
+        continue; // Skip admins
+      }
+
+      const dedupeKey = `project_created_${projectId}_${userId}`;
+      
+      // Check if already notified
+      const existing = await Notification.findOne({ dedupeKey });
+      if (existing) continue;
+
+      const payload = {
+        projectId,
+        entityType: 'evaluation',
+        entityId: projectId,
+        type: 'project_assigned',
+        title: 'New project created',
+        message: `A new project "${projectTitle}" has been created and you have been assigned to it.`,
+        actorId: typeof actorId === 'string' ? actorId : actorId?._id || actorId || projectId,
+        actorRole: actorRole || 'admin',
+        metadata: {
+          projectTitle
+        },
+        url: `/projects/${projectId}`,
+        dedupeKey
+      };
+
+      notifications.push(new Notification(payload));
+    }
+
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
+    }
+  } catch (error) {
+    console.error('Error notifying project created:', error);
+  }
+}
+
+/**
+ * Notify expert when assigned to a project
+ */
+async function notifyProjectAssigned(projectId, userId, assignmentId, role, actorId, actorRole) {
+  try {
+    const dedupeKey = `project_assigned_${projectId}_${userId}_${assignmentId}`;
+    
+    // Check if already notified
+    const existing = await Notification.findOne({
+      dedupeKey
+    });
+
+    if (existing) {
+      return; // Already notified
+    }
+
+    const project = await Project.findById(projectId);
+    const projectTitle = project?.title || 'Project';
+
+    const payload = {
+      projectId,
+      entityType: 'evaluation',
+      entityId: assignmentId,
+      type: 'project_assigned',
+      title: 'New project created',
+      message: `A new project "${projectTitle}" has been created and you have been assigned to it.`,
+      actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
+      actorRole: actorRole || 'admin',
+      metadata: {
+        assignmentId,
+        role,
+        projectTitle
+      },
+      url: `/projects/${projectId}`,
+      dedupeKey
+    };
+
+    await createNotifications([userId], payload);
+  } catch (error) {
+    console.error('Error notifying project assigned:', error);
+  }
+}
+
+/**
+ * Notify admins when expert completes evaluation (submits all answers)
+ */
+async function notifyEvaluationCompleted(projectId, userId, questionnaireKey, questionnaireVersion, actorRole, userName) {
+  try {
+    const dedupeKey = `evaluation_completed_${projectId}_${userId}_${questionnaireKey}_${questionnaireVersion || 1}`;
+    
+    // Check if already notified
+    const existing = await Notification.findOne({
+      dedupeKey
+    });
+
+    if (existing) {
+      return; // Already notified
+    }
+
+    const admins = await getAllAdmins();
+    if (admins.length === 0) return;
+
+    const project = await Project.findById(projectId);
+    const projectTitle = project?.title || 'Project';
+
+    const payload = {
+      projectId,
+      entityType: 'evaluation',
+      entityId: userId,
+      type: 'evaluation_completed',
+      title: 'Evaluation completed',
+      message: `${actorRole || 'Expert'} (${userName || 'User'}) has completed all questions for project "${projectTitle}".`,
+      actorId: userId,
+      actorRole,
+      metadata: {
+        questionnaireKey,
+        questionnaireVersion: questionnaireVersion || 1,
+        role: actorRole,
+        submittedAt: new Date()
+      },
+      url: `/admin/projects/${projectId}/evaluations`,
+      dedupeKey
+    };
+
+    await createNotifications(admins, payload);
+  } catch (error) {
+    console.error('Error notifying evaluation completed:', error);
+  }
+}
+
+/**
+ * Check if all assigned experts have completed and notify admins
+ */
+async function checkAndNotifyAllExpertsCompleted(projectId, questionnaireKey, questionnaireVersion) {
+  try {
+    const dedupeKey = `project_all_completed_${projectId}_${questionnaireKey}_${questionnaireVersion || 1}`;
+    
+    // Check if already notified
+    const existing = await Notification.findOne({
+      dedupeKey
+    });
+
+    if (existing) {
+      return; // Already notified
+    }
+
+    // Get all assigned experts for this project
+    const assignments = await ProjectAssignment.find({ 
+      projectId,
+      status: { $in: ['assigned', 'in_progress', 'submitted'] }
+    }).select('userId role questionnaires').lean();
+
+    if (!assignments || assignments.length === 0) {
+      return; // No assignments
+    }
+
+    // Get all responses for this project and questionnaire
+    const Response = require('../models/response');
+    const responses = await Response.find({
+      projectId,
+      questionnaireKey,
+      status: 'submitted'
+    }).select('userId').lean();
+
+    const submittedUserIds = new Set(
+      responses.map(r => r.userId.toString())
+    );
+
+    // Check if all assigned experts have submitted
+    const allAssignedIds = assignments.map(a => a.userId.toString());
+    const allSubmitted = allAssignedIds.every(id => submittedUserIds.has(id));
+
+    if (!allSubmitted) {
+      return; // Not all experts have submitted yet
+    }
+
+    // All experts have submitted - notify admins
+    const admins = await getAllAdmins();
+    if (admins.length === 0) return;
+
+    const project = await Project.findById(projectId);
+    const projectTitle = project?.title || 'Project';
+
+    const payload = {
+      projectId,
+      entityType: 'evaluation',
+      entityId: projectId, // Using projectId as entityId
+      type: 'project_all_completed',
+      title: 'All evaluations completed',
+      message: `All assigned experts have completed their evaluations for project "${projectTitle}". Report generation is ready.`,
+      actorId: projectId, // No specific actor
+      actorRole: 'system',
+      metadata: {
+        questionnaireKey,
+        questionnaireVersion: questionnaireVersion || 1,
+        assignedCount: assignments.length,
+        submittedCount: submittedUserIds.size
+      },
+      url: `/admin/projects/${projectId}/reports`,
+      dedupeKey
+    };
+
+    await createNotifications(admins, payload);
+  } catch (error) {
+    console.error('Error checking and notifying all experts completed:', error);
   }
 }
 
@@ -339,6 +605,10 @@ module.exports = {
   notifyTensionCommented,
   notifyTensionEvidenceAdded,
   notifyTensionVoted,
-  notifyEvaluationStarted
+  notifyEvaluationStarted,
+  notifyProjectCreated,
+  notifyProjectAssigned,
+  notifyEvaluationCompleted,
+  checkAndNotifyAllExpertsCompleted
 };
 

@@ -192,13 +192,20 @@ export function UserDashboard({
         const data = await response.json();
         console.log('Unread count fetched:', data);
         const conversations = data.conversations || [];
-        // Calculate actual unread count from conversations to ensure consistency
-        // Backend uses 'count' field, not 'unreadCount'
-        const actualUnreadCount = conversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
+        
+        // Filter out notification-only messages - chat bubble should only show real user messages
+        const realConversations = conversations.filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
+          return !isNotification;
+        });
+        
+        // Calculate actual unread count from real conversations only
+        const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         // Only show badge if there are actual conversations with unread messages
         // This prevents showing badge when conversations array is empty but totalCount > 0
         setUnreadCount(actualUnreadCount);
-        setUnreadConversations(conversations);
+        setUnreadConversations(realConversations);
       } else {
         console.error('Failed to fetch unread count:', response.status, response.statusText);
         setUnreadCount(0);
@@ -217,7 +224,13 @@ export function UserDashboard({
       const response = await fetch(api(`/api/messages/conversations?userId=${currentUser.id}`));
       if (response.ok) {
         const data = await response.json();
-        setAllConversations(data || []);
+        // Filter out notification-only messages - chat should only show real user messages
+        const realConversations = (data || []).filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          // Exclude conversations where last message is a notification
+          return !lastMsg.startsWith('[NOTIFICATION]');
+        });
+        setAllConversations(realConversations);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);

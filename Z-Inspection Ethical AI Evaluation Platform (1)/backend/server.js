@@ -335,48 +335,8 @@ const TensionSchema = new mongoose.Schema({
 });
 const Tension = mongoose.model('Tension', TensionSchema);
 
-// Notification Schema
-const NotificationSchema = new mongoose.Schema({
-  recipientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-  entityType: { type: String, enum: ['tension', 'evaluation', 'response'], required: true },
-  entityId: { type: mongoose.Schema.Types.ObjectId, required: true },
-  type: {
-    type: String,
-    enum: [
-      'tension_created',
-      'tension_commented',
-      'tension_evidence_added',
-      'tension_voted',
-      'evaluation_started',
-      'evaluation_submitted'
-    ],
-    required: true
-  },
-  title: { type: String, required: true },
-  message: { type: String, required: true },
-  actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  actorRole: { type: String },
-  metadata: {
-    tensionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tension' },
-    tensionTitle: String,
-    voteType: { type: String, enum: ['agree', 'disagree'] },
-    evidenceType: String,
-    questionId: String,
-    questionnaireKey: String
-  },
-  url: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now, index: true },
-  readAt: { type: Date },
-  isRead: { type: Boolean, default: false, index: true }
-});
-
-// Indexes for performance
-NotificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
-NotificationSchema.index({ projectId: 1, createdAt: -1 });
-NotificationSchema.index({ recipientId: 1, type: 1, entityId: 1, 'metadata.voteType': 1, createdAt: -1 });
-
-const Notification = mongoose.model('Notification', NotificationSchema);
+// Notification Schema - using model file
+const Notification = require('./models/Notification');
 
 // Notification Service Functions (defined after models are created)
 const notificationService = {
@@ -442,14 +402,44 @@ const notificationService = {
 
   async getAssignedExperts(projectId) {
     try {
+      // Use ProjectAssignment to get experts (excludes admins)
+      const ProjectAssignment = require('./models/projectAssignment');
+      const assignments = await ProjectAssignment.find({ 
+        projectId,
+        status: { $in: ['assigned', 'in_progress', 'submitted'] }
+      }).select('userId').lean();
+      
+      if (assignments && assignments.length > 0) {
+        // Get all user IDs from assignments
+        const userIds = assignments.map(a => a.userId).filter(Boolean);
+        
+        // Check user roles in bulk to exclude admins
+        const users = await User.find({ 
+          _id: { $in: userIds },
+          role: { $ne: 'admin' } // Exclude admins
+        }).select('_id').lean();
+        
+        return users.map(u => u._id);
+      }
+
+      // Fallback to Project.assignedUsers (but filter out admins)
       const project = await Project.findById(projectId).populate('assignedUsers');
       if (!project) return [];
 
-      const expertIds = (project.assignedUsers || [])
+      // Get assigned user IDs
+      const userIds = (project.assignedUsers || [])
         .map(u => u._id || u.id || u)
         .filter(Boolean);
 
-      return expertIds;
+      if (userIds.length === 0) return [];
+
+      // Check user roles in bulk to exclude admins
+      const users = await User.find({ 
+        _id: { $in: userIds },
+        role: { $ne: 'admin' } // Exclude admins
+      }).select('_id').lean();
+
+      return users.map(u => u._id);
     } catch (error) {
       console.error('Error getting assigned experts:', error);
       return [];
@@ -822,9 +812,111 @@ app.get('/api/use-cases', async (req, res) => {
       .lean()
       .limit(1000) // Limit results for performance
       .sort({ createdAt: -1 }); // Sort by newest first
-    res.json(useCases);
+    
+    // Compute assignedExpertsCount for each use case (for table display)
+    // But do NOT change stored status - status is controlled by assignment action
+    const ProjectAssignment = require('./models/projectAssignment');
+    const User = require('./models/User');
+    
+    const useCasesWithCount = await Promise.all(useCases.map(async (useCase) => {
+      try {
+        // Get all projects linked to this use case
+        const linkedProjects = await Project.find({ useCase: useCase._id.toString() }).lean();
+        
+        // Collect all assigned expert IDs
+        const assignedExpertIds = new Set();
+        
+        // Add experts from useCase.assignedExperts
+        if (useCase.assignedExperts && Array.isArray(useCase.assignedExperts)) {
+          useCase.assignedExperts.forEach(id => {
+            assignedExpertIds.add(id.toString());
+          });
+        }
+        
+        // Add experts from linked projects' assignedUsers
+        for (const project of linkedProjects) {
+          if (project.assignedUsers && Array.isArray(project.assignedUsers)) {
+            project.assignedUsers.forEach(id => {
+              assignedExpertIds.add(id.toString());
+            });
+          }
+        }
+        
+        // Also check ProjectAssignment collection for all assignments
+        const projectIds = linkedProjects.map(p => p._id);
+        if (projectIds.length > 0) {
+          const assignments = await ProjectAssignment.find({
+            projectId: { $in: projectIds }
+          }).lean();
+          
+          assignments.forEach(assignment => {
+            assignedExpertIds.add(assignment.userId.toString());
+          });
+        }
+        
+        // Filter out admins
+        const expertIdsArray = Array.from(assignedExpertIds);
+        let assignedExpertsCount = 0;
+        if (expertIdsArray.length > 0) {
+          const experts = await User.find({
+            _id: { $in: expertIdsArray },
+            role: { $ne: 'admin' }
+          }).select('_id').lean();
+          
+          assignedExpertsCount = experts.length;
+        }
+        
+        return {
+          ...useCase,
+          // Return stored status (do NOT override)
+          status: useCase.status === 'ASSIGNED' || useCase.status === 'UNASSIGNED' || useCase.status === 'COMPLETED' 
+            ? useCase.status 
+            : (useCase.status || 'UNASSIGNED'),
+          // Include assignedExpertsCount for frontend to use
+          assignedExpertsCount
+        };
+      } catch (err) {
+        console.error(`Error computing assignedExpertsCount for use case ${useCase._id}:`, err);
+        // Return use case with default values if computation fails
+        return {
+          ...useCase,
+          status: useCase.status || 'UNASSIGNED',
+          assignedExpertsCount: 0
+        };
+      }
+    }));
+    
+    res.json(useCasesWithCount);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error in GET /api/use-cases:', err);
+    // Even if status computation fails, try to return basic use cases
+    try {
+      const { ownerId } = req.query;
+      let query = UseCase.find();
+      if (ownerId) {
+        query = query.where('ownerId').equals(ownerId);
+      }
+      const basicUseCases = await query
+        .select('-answers -extendedInfo -supportingFiles.data')
+        .lean()
+        .limit(1000)
+        .sort({ createdAt: -1 });
+      
+      // Return basic use cases with default status
+      const fallbackUseCases = basicUseCases.map(uc => ({
+        ...uc,
+        status: uc.status || 'UNASSIGNED',
+        assignedExpertsCount: 0,
+        startedCount: 0,
+        completedCount: 0,
+        hasProjects: false
+      }));
+      
+      res.json(fallbackUseCases);
+    } catch (fallbackErr) {
+      console.error('Fallback also failed:', fallbackErr);
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
@@ -875,12 +967,56 @@ app.delete('/api/use-cases/:id', async (req, res) => {
 app.put('/api/use-cases/:id/assign', async (req, res) => {
   try {
     const { assignedExperts = [], adminNotes = '' } = req.body;
+    const useCaseId = req.params.id;
+    
+    // Count assigned experts (excluding admins)
+    const User = require('./models/User');
+    let assignedExpertsCount = 0;
+    if (assignedExperts && Array.isArray(assignedExperts) && assignedExperts.length > 0) {
+      const expertIds = assignedExperts.map(id => id.toString()).filter(Boolean);
+      if (expertIds.length > 0) {
+        const experts = await User.find({
+          _id: { $in: expertIds },
+          role: { $ne: 'admin' }
+        }).select('_id').lean();
+        assignedExpertsCount = experts.length;
+      }
+    }
+    
+    // Set status based on assignment count
+    const newStatus = assignedExpertsCount > 0 ? 'ASSIGNED' : 'UNASSIGNED';
+    
     const updated = await UseCase.findByIdAndUpdate(
-      req.params.id,
-      { assignedExperts, adminNotes },
+      useCaseId,
+      { assignedExperts, adminNotes, status: newStatus },
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: 'Not found' });
+    
+    // Update all projects linked to this use case: add assigned experts to project.assignedUsers
+    try {
+      const linkedProjects = await Project.find({ useCase: useCaseId });
+      
+      for (const project of linkedProjects) {
+        if (!project.assignedUsers) {
+          project.assignedUsers = [];
+        }
+        
+        // Add new experts to project.assignedUsers (avoid duplicates)
+        const currentAssigned = project.assignedUsers.map((id) => id.toString());
+        const newExpertIds = assignedExperts.map((id) => id.toString());
+        
+        // Combine and deduplicate
+        const allAssigned = Array.from(new Set([...currentAssigned, ...newExpertIds]));
+        project.assignedUsers = allAssigned;
+        
+        await project.save();
+      }
+    } catch (projectUpdateError) {
+      console.error('Error updating linked projects:', projectUpdateError);
+      // Don't fail the assignment if project update fails, but log it
+    }
+    
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1194,6 +1330,17 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
 app.post('/api/tensions/:id/comment', async (req, res) => {
   try {
     const { text, authorId, authorName } = req.body;
+    
+    // Check if user is admin - admins cannot add comments
+    try {
+      const user = await User.findById(authorId);
+      if (user && user.role === 'admin') {
+        return res.status(403).json({ error: 'Admins cannot add comments to tensions.' });
+      }
+    } catch (e) {
+      // If user lookup fails, continue (but should not happen)
+    }
+    
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
     
@@ -1226,6 +1373,17 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
 app.post('/api/tensions/:id/evidence', async (req, res) => {
   try {
     const { title, description, fileName, fileData, uploadedBy, type } = req.body;
+    
+    // Check if user is admin - admins cannot add evidence
+    try {
+      const user = await User.findById(uploadedBy);
+      if (user && user.role === 'admin') {
+        return res.status(403).json({ error: 'Admins cannot add evidence to tensions.' });
+      }
+    } catch (e) {
+      // If user lookup fails, continue (but should not happen)
+    }
+    
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
 
@@ -1277,6 +1435,16 @@ app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, r
   try {
     const { tensionId, evidenceId } = req.params;
     const { text, userId } = req.body;
+    
+    // Check if user is admin - admins cannot add evidence comments
+    try {
+      const user = await User.findById(userId);
+      if (user && user.role === 'admin') {
+        return res.status(403).json({ error: 'Admins cannot add comments to evidence.' });
+      }
+    } catch (e) {
+      // If user lookup fails, continue (but should not happen)
+    }
 
     // Validation
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -1949,26 +2117,64 @@ app.post('/api/evaluations', async (req, res) => {
             
             // Check if any responses were just created (first time answering)
             // This indicates evaluation started
-            if (Object.keys(flatAnswers).length > 0 || Object.keys(roleSpecificAnswersMap).length > 0) {
+            if (Object.keys(generalAnswersMap).length > 0 || Object.keys(roleSpecificAnswersMap).length > 0) {
               // Check if this is the first time user is answering for this project
               const Response = require('./models/response');
-              const existingResponses = await Response.find({
-                projectId: projectIdObj,
-                userId: userIdObj
-              });
               
-              // If this is the first response or first answer, notify admins
-              if (existingResponses.length === 0 || existingResponses.every(r => !r.answers || Object.keys(r.answers).length === 0)) {
-                // This is the first time answering - notify admins
-                notificationService.notifyEvaluationStarted(
-                  projectIdObj,
-                  userIdObj,
-                  roleQuestionnaireKey || 'general-v1',
-                  actorRole,
-                  userName
-                ).catch(err => {
-                  console.error('Error sending evaluation started notification:', err);
+              // Check for general-v1 first answer
+              if (Object.keys(generalAnswersMap).length > 0) {
+                const generalResponse = await Response.findOne({
+                  projectId: projectIdObj,
+                  userId: userIdObj,
+                  questionnaireKey: 'general-v1'
                 });
+                
+                // If response exists and has answers, check if this is the first time (answers.length was 0 before)
+                // We check by looking at the response before save - if it had 0 answers, this is the first
+                const wasFirstAnswer = !generalResponse || !generalResponse.answers || generalResponse.answers.length === 0;
+                
+                if (wasFirstAnswer) {
+                  // This is the first time answering general-v1 - notify admins
+                  const { notifyEvaluationStarted } = require('./services/notificationService');
+                  const generalQuestionnaire = await Questionnaire.findOne({ key: 'general-v1', isActive: true });
+                  notifyEvaluationStarted(
+                    projectIdObj,
+                    userIdObj,
+                    'general-v1',
+                    generalQuestionnaire?.version || 1,
+                    actorRole,
+                    userName
+                  ).catch(err => {
+                    console.error('Error sending evaluation started notification:', err);
+                  });
+                }
+              }
+              
+              // Check for role-specific first answer
+              if (roleQuestionnaireKey !== 'general-v1' && Object.keys(roleSpecificAnswersMap).length > 0) {
+                const roleResponse = await Response.findOne({
+                  projectId: projectIdObj,
+                  userId: userIdObj,
+                  questionnaireKey: roleQuestionnaireKey
+                });
+                
+                const wasFirstAnswer = !roleResponse || !roleResponse.answers || roleResponse.answers.length === 0;
+                
+                if (wasFirstAnswer) {
+                  // This is the first time answering role-specific questionnaire - notify admins
+                  const { notifyEvaluationStarted } = require('./services/notificationService');
+                  const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
+                  notifyEvaluationStarted(
+                    projectIdObj,
+                    userIdObj,
+                    roleQuestionnaireKey,
+                    roleQuestionnaire?.version || 1,
+                    actorRole,
+                    userName
+                  ).catch(err => {
+                    console.error('Error sending evaluation started notification:', err);
+                  });
+                }
               }
             }
           } catch (saveError) {
@@ -3857,6 +4063,32 @@ app.post('/api/projects', async (req, res) => {
 
     const project = new Project(req.body);
     await project.save();
+
+    // Notify assigned users about the new project (non-blocking)
+    if (req.body.assignedUsers && Array.isArray(req.body.assignedUsers) && req.body.assignedUsers.length > 0) {
+      try {
+        const { notifyProjectCreated } = require('./services/notificationService');
+        const actorId = req.body.createdBy || req.body.ownerId || null;
+        const actorRole = 'admin'; // Project creator is typically admin
+        
+        // Get assigned user IDs (exclude admins)
+        const userIds = req.body.assignedUsers.map(String).filter(Boolean);
+        const users = await User.find({ 
+          _id: { $in: userIds },
+          role: { $ne: 'admin' } // Exclude admins
+        }).select('_id').lean();
+        
+        const expertIds = users.map(u => u._id);
+        
+        if (expertIds.length > 0) {
+          await notifyProjectCreated(project._id, expertIds, actorId, actorRole);
+        }
+      } catch (notifError) {
+        console.error('Error sending project created notification:', notifError);
+        // Don't fail project creation if notification fails
+      }
+    }
+
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4083,19 +4315,27 @@ app.get('/api/messages/unread-count', async (req, res) => {
     // Get unread messages grouped by project and sender.
     // IMPORTANT: Avoid populate() here because missing/deleted refs (project/user) can break the entire endpoint.
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    // Only get real user messages, exclude notifications (isNotification: true or [NOTIFICATION] prefix)
     const unreadMessages = await Message.find({
       toUserId: userIdObj,
-      readAt: null
+      readAt: null,
+      isNotification: { $ne: true } // Exclude notification messages
     })
     .populate('projectId', 'title')
     .populate('fromUserId', 'name email')
     .sort({ createdAt: -1 })
     .lean();
     
+    // Also filter out messages with [NOTIFICATION] prefix in text
+    const realMessages = unreadMessages.filter(msg => {
+      const text = String(msg.text || '');
+      return !text.startsWith('[NOTIFICATION]');
+    });
+    
     // Group by projectId and fromUserId
     const conversations = {};
     let skippedCount = 0;
-    unreadMessages.forEach(msg => {
+    realMessages.forEach(msg => {
       // Skip messages with missing or null populated fields
       if (!msg || !msg.projectId || !msg.fromUserId) {
         skippedCount++;
@@ -4140,10 +4380,10 @@ app.get('/api/messages/unread-count', async (req, res) => {
     
     // Log skipped messages only if there are many (to avoid spam)
     if (skippedCount > 0) {
-      console.warn(`⚠️ Skipped ${skippedCount} message(s) with missing/invalid projectId or fromUserId (out of ${unreadMessages.length} total)`);
+      console.warn(`⚠️ Skipped ${skippedCount} message(s) with missing/invalid projectId or fromUserId (out of ${realMessages.length} total)`);
     }
     
-    const totalCount = unreadMessages.length;
+    const totalCount = realMessages.length;
     const conversationList = Object.values(conversations);
 
     // Hydrate titles/names (best-effort)

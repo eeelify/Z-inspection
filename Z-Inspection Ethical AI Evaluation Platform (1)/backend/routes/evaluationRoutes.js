@@ -28,8 +28,17 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
  */
 router.post('/assignments', async (req, res) => {
   try {
-    const { projectId, userId, role, questionnaires } = req.body;
-    const assignment = await createAssignment(projectId, userId, role, questionnaires);
+    const { projectId, userId, role, questionnaires, actorId, actorRole } = req.body;
+    // actorId and actorRole are optional - if not provided, assume it's an admin action
+    // In a real scenario, you'd get this from req.user (authentication middleware)
+    const assignment = await createAssignment(
+      projectId, 
+      userId, 
+      role, 
+      questionnaires,
+      actorId || null,
+      actorRole || 'admin'
+    );
     res.json(assignment);
   } catch (error) {
     res.status(400).json({ error: error.message });

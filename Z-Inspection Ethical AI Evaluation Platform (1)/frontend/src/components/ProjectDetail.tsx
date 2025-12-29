@@ -310,38 +310,10 @@ export function ProjectDetail({
       setUserProgress(computed);
       previousProgressRef.current = computed;
       
-      // If progress just reached 100%, notify admin (notification only, no chat message)
-      if (computed === 100 && previousProgress < 100 && currentUser.role !== 'admin') {
-        try {
-          const adminUser = users.find(u => u.role === 'admin');
-          if (adminUser) {
-            const adminId = adminUser.id || (adminUser as any)._id;
-            const currentUserId = currentUser.id || (currentUser as any)._id;
-            const projectId = project.id || (project as any)._id;
-            
-            // Send a silent notification message (will show in bell but not in chat)
-            // Using a special prefix to identify notification-only messages
-            const notificationText = `[NOTIFICATION] Evaluation completed for project "${project.title}" by ${currentUser.name}`;
-            
-            await fetch(api('/api/messages'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                projectId,
-                fromUserId: currentUserId,
-                toUserId: adminId,
-                text: notificationText,
-                isNotification: true, // Flag to indicate this is a notification, not a regular message
-              }),
-            });
-            
-            // Trigger notification update event
-            window.dispatchEvent(new Event('message-sent'));
-          }
-        } catch (error) {
-          console.error('Error notifying admin:', error);
-        }
-      }
+      // If progress just reached 100%, notification is already sent by backend notificationService
+      // No need to send chat message - notifications go to bell icon only
+      // Chat messages should only be for actual user-to-user communication
+      // Backend notificationService.notifyEvaluationCompleted handles this automatically
     };
     loadUserProgress();
     // Progress'i periyodik olarak güncelle (her 3 saniyede bir)
@@ -489,7 +461,8 @@ export function ProjectDetail({
   
   const canViewOwners = currentUser.role === 'admin';
   const isCommentedProjectForUser = currentUser.role !== 'admin' && Boolean(evolutionCompletedAt);
-  const canManageTensions = !isCommentedProjectForUser;
+  // Admins cannot manage tensions (add, vote, comment, add evidence)
+  const canManageTensions = !isCommentedProjectForUser && currentUser.role !== 'admin';
 
   // Use Case Owner ismini bulma
   const useCaseOwnerName = linkedUseCase ? users.find(u => u.id === linkedUseCase.ownerId)?.name : 'Unknown';

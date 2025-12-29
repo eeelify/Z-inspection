@@ -34,6 +34,13 @@ const stageLabels = {
   resolve: 'Resolve / Results'
 };
 
+// Stage renkleri: Resolve/Results yeşil, Assess sarı, Set-up turuncu
+const stageColors = {
+  'set-up': { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200' },
+  'assess': { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
+  'resolve': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' }
+};
+
 // Progress'e göre stage belirle
 // 0% → Set-up (henüz sorular çözülmeye başlanmamış)
 // 1-99% → Assess (sorular çözülmeye başlanmış, değerlendirme aşamasında)
@@ -49,9 +56,16 @@ const getStageFromProgress = (progress: number, hasReport: boolean = false): 'se
 };
 
 const useCaseStatusColors = {
+  'UNASSIGNED': { bg: 'bg-gray-100', text: 'text-gray-800' },
+  'ASSIGNED': { bg: 'bg-blue-100', text: 'text-blue-800' },
+  'COMPLETED': { bg: 'bg-green-100', text: 'text-green-800' },
+  // Legacy statuses for backward compatibility
   'assigned': { bg: 'bg-blue-100', text: 'text-blue-800' },
-  'in-review': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
-  'completed': { bg: 'bg-green-100', text: 'text-green-800' }
+  'completed': { bg: 'bg-green-100', text: 'text-green-800' },
+  // IN_REVIEW removed from this page - only ASSIGNED/UNASSIGNED shown
+  // Keep IN_REVIEW mapping for other pages if needed
+  'in-review': { bg: 'bg-amber-100', text: 'text-amber-800' },
+  'IN_REVIEW': { bg: 'bg-amber-100', text: 'text-amber-800' }
 };
 
 const ProjectCard: React.FC<{
@@ -144,7 +158,7 @@ const ProjectCard: React.FC<{
       </div>
 
       <div className="mb-4">
-        <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
+        <span className={`px-3 py-1 text-xs font-medium rounded-full ${stageColors[currentStage].bg} ${stageColors[currentStage].text}`}>
           {project.status.toUpperCase()} {stageLabels[currentStage]}
         </span>
       </div>
@@ -224,7 +238,13 @@ export function AdminDashboardEnhanced({
       const response = await fetch(api(`/api/messages/conversations?userId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
-        setAllConversations(data || []);
+        // Filter out notification-only messages - chat should only show real user messages
+        const realConversations = (data || []).filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          // Exclude conversations where last message is a notification
+          return !lastMsg.startsWith('[NOTIFICATION]');
+        });
+        setAllConversations(realConversations);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -373,12 +393,19 @@ export function AdminDashboardEnhanced({
         const data = await response.json();
         console.log('Admin unread count fetched:', data);
         const conversations = data.conversations || [];
-        // Calculate actual unread count from conversations to ensure consistency
-        // Backend uses 'count' field, not 'unreadCount'
-        const actualUnreadCount = conversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
+        
+        // Filter out notification-only messages - chat bubble should only show real user messages
+        const realConversations = conversations.filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
+          return !isNotification;
+        });
+        
+        // Calculate actual unread count from real conversations only
+        const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         // Only show badge if there are actual conversations with unread messages
         setUnreadCount(actualUnreadCount);
-        setUnreadConversations(conversations);
+        setUnreadConversations(realConversations);
       } else {
         console.error('Admin failed to fetch unread count:', response.status, response.statusText);
       }
@@ -859,6 +886,7 @@ export function AdminDashboardEnhanced({
             <UseCaseAssignmentsTab
               useCases={useCases}
               users={users}
+              projects={projects}
               onAssignExperts={(useCase: UseCase) => {
                 setSelectedUseCaseForAssignment(useCase);
                 setShowAssignExpertsModal(true);
@@ -889,6 +917,7 @@ export function AdminDashboardEnhanced({
         <AssignExpertsModal
           useCase={selectedUseCaseForAssignment}
           users={users}
+          projects={projects}
           onClose={() => {
             setShowAssignExpertsModal(false);
             setSelectedUseCaseForAssignment(null);
@@ -905,6 +934,19 @@ export function AdminDashboardEnhanced({
                });
 
                if (response.ok) {
+                 // Reload projects to reflect updated assignments
+                 try {
+                   const projectsRes = await fetch(api('/api/projects'));
+                   if (projectsRes.ok) {
+                     const data = await projectsRes.json();
+                     const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+                     // Update projects in parent component via window event
+                     window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
+                   }
+                 } catch (reloadError) {
+                   console.error("Error reloading projects:", reloadError);
+                 }
+                 
                  alert("Experts assigned successfully!");
                }
              } catch (error) {
@@ -1091,7 +1133,7 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject, c
       </div>
 
       <div className="mb-4">
-        <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
+        <span className={`px-3 py-1 text-xs font-medium rounded-full ${stageColors[currentStage].bg} ${stageColors[currentStage].text}`}>
           {project.status.toUpperCase()} {stageLabels[currentStage]}
         </span>
       </div>
@@ -1166,7 +1208,10 @@ function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProj
   );
 }
 
-function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
+function UseCaseAssignmentsTab({ useCases, users, projects, onAssignExperts }: any) {
+  // Debug: Log use cases
+  console.log('UseCaseAssignmentsTab - useCases:', useCases?.length || 0, useCases);
+  
   return (
     <>
       <div className="bg-white border-b border-gray-200 px-8 py-6">
@@ -1196,7 +1241,49 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
               ) : (
                 useCases.map((useCase: UseCase) => {
                   const owner = users.find((u: User) => u.id === useCase.ownerId);
-                  const assignedExperts = users.filter((u: User) => useCase.assignedExperts?.includes(u.id));
+                  
+                  // Get assigned experts from use case directly
+                  const useCaseAssignedExperts = useCase.assignedExperts || [];
+                  
+                  // Also get assigned experts from projects linked to this use case
+                  const linkedProjects = projects.filter((p: Project) => {
+                    const projectUseCaseId = p.useCase?.toString() || (p as any).useCaseId?.toString();
+                    return projectUseCaseId === useCase.id?.toString() || projectUseCaseId === (useCase as any)._id?.toString();
+                  });
+                  
+                  // Collect all assigned user IDs from linked projects
+                  const projectAssignedUserIds = new Set<string>();
+                  linkedProjects.forEach((project: Project) => {
+                    if (project.assignedUsers && Array.isArray(project.assignedUsers)) {
+                      project.assignedUsers.forEach((userId: string) => {
+                        projectAssignedUserIds.add(userId.toString());
+                      });
+                    }
+                  });
+                  
+                  // Combine use case assigned experts and project assigned users
+                  const allAssignedUserIds = new Set([
+                    ...useCaseAssignedExperts.map((id: string) => id.toString()),
+                    ...Array.from(projectAssignedUserIds)
+                  ]);
+                  
+                  // Filter users to get assigned experts (exclude admins)
+                  // Note: Backend computes assignedExpertsCount from useCase.assignedExperts + project.assignedUsers + ProjectAssignment
+                  // So we show all users that match any of these sources
+                  const assignedExperts = users.filter((u: User) => {
+                    const userId = u.id?.toString() || (u as any)._id?.toString();
+                    return allAssignedUserIds.has(userId) && u.role !== 'admin';
+                  });
+                  
+                  // Calculate assignedExpertsCount (use backend value if available, otherwise use frontend calculation)
+                  const assignedExpertsCount = useCase.assignedExpertsCount !== undefined 
+                    ? useCase.assignedExpertsCount 
+                    : assignedExperts.length;
+                  
+                  // Override status display based on assignedExpertsCount (table-level rule)
+                  // If at least one expert is assigned, status must be ASSIGNED
+                  // Do NOT trust stored status for this page
+                  const displayStatus = assignedExpertsCount > 0 ? 'ASSIGNED' : 'UNASSIGNED';
 
                   return (
                     <tr key={useCase.id} className="hover:bg-gray-50">
@@ -1206,24 +1293,35 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Unknown'}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status]?.text || 'text-gray-800'}`}>
-                          {useCase.status.replace('-', ' ').toUpperCase()}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[displayStatus]?.bg || 'bg-gray-100'} ${useCaseStatusColors[displayStatus]?.text || 'text-gray-800'}`}>
+                            {displayStatus.replace(/_/g, ' ').replace('-', ' ').toUpperCase()}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex -space-x-2">
-                          {assignedExperts.length === 0 ? (
-                            <span className="text-xs text-gray-400 italic">None</span>
-                          ) : (
-                            assignedExperts.map((expert: User) => (
-                              <div
-                                key={expert.id}
-                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                title={`${expert.name} (${expert.role})`}
-                              >
-                                {expert.name.charAt(0)}
-                              </div>
-                            ))
+                        <div className="flex items-center gap-2">
+                          <div className="flex -space-x-2">
+                            {assignedExperts.length === 0 ? (
+                              <span className="text-xs text-gray-400 italic">None</span>
+                            ) : (
+                              assignedExperts.map((expert: User) => (
+                                <div
+                                  key={expert.id}
+                                  className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                  title={`${expert.name} (${expert.role})`}
+                                >
+                                  {expert.name.charAt(0).toUpperCase()}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          {/* Show count if backend has more assignments than we can display (from ProjectAssignment) */}
+                          {useCase.assignedExpertsCount !== undefined && 
+                           useCase.assignedExpertsCount > assignedExperts.length && (
+                            <span className="text-xs text-gray-500" title="Additional assignments from ProjectAssignment collection">
+                              (+{useCase.assignedExpertsCount - assignedExperts.length})
+                            </span>
                           )}
                         </div>
                       </td>
@@ -2660,12 +2758,38 @@ function ReportsTab({ projects, currentUser, users }: any) {
 interface AssignExpertsModalProps {
   useCase: UseCase;
   users: User[];
+  projects?: Project[];
   onClose: () => void;
   onAssign: (expertIds: string[], notes: string) => void;
 }
 
-function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExpertsModalProps) {
-  const [selectedExperts, setSelectedExperts] = useState<string[]>(useCase.assignedExperts || []);
+function AssignExpertsModal({ useCase, users, projects = [], onClose, onAssign }: AssignExpertsModalProps) {
+  // Get assigned experts from use case directly
+  const useCaseAssignedExperts = useCase.assignedExperts || [];
+  
+  // Also get assigned experts from projects linked to this use case
+  const linkedProjects = projects.filter((p: Project) => {
+    const projectUseCaseId = p.useCase?.toString() || (p as any).useCaseId?.toString();
+    return projectUseCaseId === useCase.id?.toString() || projectUseCaseId === (useCase as any)._id?.toString();
+  });
+  
+  // Collect all assigned user IDs from linked projects
+  const projectAssignedUserIds = new Set<string>();
+  linkedProjects.forEach((project: Project) => {
+    if (project.assignedUsers && Array.isArray(project.assignedUsers)) {
+      project.assignedUsers.forEach((userId: string) => {
+        projectAssignedUserIds.add(userId.toString());
+      });
+    }
+  });
+  
+  // Combine use case assigned experts and project assigned users
+  const allAssignedUserIds = new Set([
+    ...useCaseAssignedExperts.map((id: string) => id.toString()),
+    ...Array.from(projectAssignedUserIds)
+  ]);
+  
+  const [selectedExperts, setSelectedExperts] = useState<string[]>(Array.from(allAssignedUserIds));
   const [adminNotes, setAdminNotes] = useState(useCase.adminNotes || '');
 
   const experts = users.filter(u => u.role !== 'admin' && u.role !== 'use-case-owner');
