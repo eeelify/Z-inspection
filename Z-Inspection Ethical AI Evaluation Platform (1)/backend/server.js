@@ -19,6 +19,8 @@ if (dotResult.error) {
   }
 }
 
+// Notification service is defined inline after Notification model (see below)
+
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
   if (typeof mongoose.isValidObjectId === 'function') {
@@ -332,6 +334,339 @@ const TensionSchema = new mongoose.Schema({
   evidenceType: String
 });
 const Tension = mongoose.model('Tension', TensionSchema);
+
+// Notification Schema
+const NotificationSchema = new mongoose.Schema({
+  recipientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
+  entityType: { type: String, enum: ['tension', 'evaluation', 'response'], required: true },
+  entityId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  type: {
+    type: String,
+    enum: [
+      'tension_created',
+      'tension_commented',
+      'tension_evidence_added',
+      'tension_voted',
+      'evaluation_started',
+      'evaluation_submitted'
+    ],
+    required: true
+  },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  actorRole: { type: String },
+  metadata: {
+    tensionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tension' },
+    tensionTitle: String,
+    voteType: { type: String, enum: ['agree', 'disagree'] },
+    evidenceType: String,
+    questionId: String,
+    questionnaireKey: String
+  },
+  url: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now, index: true },
+  readAt: { type: Date },
+  isRead: { type: Boolean, default: false, index: true }
+});
+
+// Indexes for performance
+NotificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
+NotificationSchema.index({ projectId: 1, createdAt: -1 });
+NotificationSchema.index({ recipientId: 1, type: 1, entityId: 1, 'metadata.voteType': 1, createdAt: -1 });
+
+const Notification = mongoose.model('Notification', NotificationSchema);
+
+// Notification Service Functions (defined after models are created)
+const notificationService = {
+  async createNotifications(recipients, payload, options = {}) {
+    const {
+      dedupeWindow = 60000, // 60 seconds default
+      mergeSimilar = false
+    } = options;
+
+    if (!recipients || recipients.length === 0) {
+      return [];
+    }
+
+    const notifications = [];
+    const now = Date.now();
+
+    for (const recipientId of recipients) {
+      // Skip if recipient is the actor
+      if (recipientId.toString() === payload.actorId.toString()) {
+        continue;
+      }
+
+      // Deduplication check: same recipient, type, entityId within time window
+      if (dedupeWindow > 0) {
+        const existing = await Notification.findOne({
+          recipientId,
+          type: payload.type,
+          entityId: payload.entityId,
+          createdAt: { $gte: new Date(now - dedupeWindow) },
+          ...(payload.metadata?.voteType ? { 'metadata.voteType': payload.metadata.voteType } : {})
+        });
+
+        if (existing) {
+          // Skip duplicate notification
+          continue;
+        }
+      }
+
+      const notification = new Notification({
+        recipientId,
+        projectId: payload.projectId,
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+        type: payload.type,
+        title: payload.title,
+        message: payload.message,
+        actorId: payload.actorId,
+        actorRole: payload.actorRole,
+        metadata: payload.metadata || {},
+        url: payload.url,
+        isRead: false
+      });
+
+      notifications.push(notification);
+    }
+
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
+    }
+
+    return notifications;
+  },
+
+  async getAssignedExperts(projectId) {
+    try {
+      const project = await Project.findById(projectId).populate('assignedUsers');
+      if (!project) return [];
+
+      const expertIds = (project.assignedUsers || [])
+        .map(u => u._id || u.id || u)
+        .filter(Boolean);
+
+      return expertIds;
+    } catch (error) {
+      console.error('Error getting assigned experts:', error);
+      return [];
+    }
+  },
+
+  async getAllAdmins() {
+    try {
+      const admins = await User.find({ role: 'admin' }).select('_id');
+      return admins.map(u => u._id);
+    } catch (error) {
+      console.error('Error getting admins:', error);
+      return [];
+    }
+  },
+
+  async getTensionParticipants(tensionId) {
+    try {
+      const tension = await Tension.findById(tensionId);
+      if (!tension) return [];
+
+      const participants = new Set();
+
+      if (tension.createdBy) {
+        participants.add(tension.createdBy.toString());
+      }
+
+      if (tension.comments && Array.isArray(tension.comments)) {
+        tension.comments.forEach(comment => {
+          if (comment.authorId) {
+            participants.add(comment.authorId.toString());
+          }
+        });
+      }
+
+      if (tension.votes && Array.isArray(tension.votes)) {
+        tension.votes.forEach(vote => {
+          if (vote.userId) {
+            participants.add(vote.userId.toString());
+          }
+        });
+      }
+
+      if (tension.evidences && Array.isArray(tension.evidences)) {
+        tension.evidences.forEach(evidence => {
+          if (evidence.uploadedBy) {
+            participants.add(evidence.uploadedBy.toString());
+          }
+        });
+      }
+
+      return Array.from(participants).map(id => {
+        try {
+          return mongoose.Types.ObjectId(id);
+        } catch {
+          return id;
+        }
+      });
+    } catch (error) {
+      console.error('Error getting tension participants:', error);
+      return [];
+    }
+  },
+
+  async notifyTensionCreated(tension, actorId, actorRole) {
+    try {
+      const projectId = tension.projectId;
+      const assignedExperts = await this.getAssignedExperts(projectId);
+
+      const payload = {
+        projectId,
+        entityType: 'tension',
+        entityId: tension._id,
+        type: 'tension_created',
+        title: 'New ethical tension added',
+        message: `${actorRole || 'User'} added a tension: ${tension.claimStatement || tension.description || 'Untitled'} (Conflict: ${tension.principle1 || 'P1'} ↔ ${tension.principle2 || 'P2'})`,
+        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
+        actorRole,
+        metadata: {
+          tensionId: tension._id,
+          tensionTitle: tension.claimStatement || tension.description || 'Untitled'
+        },
+        url: `/projects/${projectId}/tensions/${tension._id}?tab=evidence`
+      };
+
+      await this.createNotifications(assignedExperts, payload);
+    } catch (error) {
+      console.error('Error notifying tension created:', error);
+    }
+  },
+
+  async notifyTensionCommented(tension, actorId, actorRole) {
+    try {
+      const projectId = tension.projectId;
+      const participants = await this.getTensionParticipants(tension._id);
+
+      const payload = {
+        projectId,
+        entityType: 'tension',
+        entityId: tension._id,
+        type: 'tension_commented',
+        title: 'New comment on tension',
+        message: `${actorRole || 'User'} commented on ${tension.claimStatement || tension.description || 'Untitled'}`,
+        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
+        actorRole,
+        metadata: {
+          tensionId: tension._id,
+          tensionTitle: tension.claimStatement || tension.description || 'Untitled'
+        },
+        url: `/projects/${projectId}/tensions/${tension._id}?tab=discussion`
+      };
+
+      await this.createNotifications(participants, payload);
+    } catch (error) {
+      console.error('Error notifying tension commented:', error);
+    }
+  },
+
+  async notifyTensionEvidenceAdded(tension, evidence, actorId, actorRole) {
+    try {
+      const projectId = tension.projectId;
+      const participants = await this.getTensionParticipants(tension._id);
+
+      const payload = {
+        projectId,
+        entityType: 'tension',
+        entityId: tension._id,
+        type: 'tension_evidence_added',
+        title: 'New evidence added',
+        message: `${actorRole || 'User'} added evidence${evidence.type ? ` (${evidence.type})` : ''} to ${tension.claimStatement || tension.description || 'Untitled'}`,
+        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
+        actorRole,
+        metadata: {
+          tensionId: tension._id,
+          tensionTitle: tension.claimStatement || tension.description || 'Untitled',
+          evidenceType: evidence.type
+        },
+        url: `/projects/${projectId}/tensions/${tension._id}?tab=evidence`
+      };
+
+      await this.createNotifications(participants, payload);
+    } catch (error) {
+      console.error('Error notifying tension evidence added:', error);
+    }
+  },
+
+  async notifyTensionVoted(tension, voteType, actorId, actorRole) {
+    try {
+      const projectId = tension.projectId;
+      const participants = await this.getTensionParticipants(tension._id);
+
+      const payload = {
+        projectId,
+        entityType: 'tension',
+        entityId: tension._id,
+        type: 'tension_voted',
+        title: 'New vote on tension',
+        message: `${actorRole || 'User'} voted ${voteType} on ${tension.claimStatement || tension.description || 'Untitled'}`,
+        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
+        actorRole,
+        metadata: {
+          tensionId: tension._id,
+          tensionTitle: tension.claimStatement || tension.description || 'Untitled',
+          voteType
+        },
+        url: `/projects/${projectId}/tensions/${tension._id}?tab=discussion`
+      };
+
+      await this.createNotifications(participants, payload, { dedupeWindow: 60000 }); // 60 second dedupe
+    } catch (error) {
+      console.error('Error notifying tension voted:', error);
+    }
+  },
+
+  async notifyEvaluationStarted(projectId, userId, questionnaireKey, actorRole, userName) {
+    try {
+      // Check if already notified for this combination
+      const existing = await Notification.findOne({
+        type: 'evaluation_started',
+        projectId,
+        'metadata.questionnaireKey': questionnaireKey,
+        actorId: userId,
+        createdAt: { $gte: new Date(Date.now() - 86400000) } // Check last 24 hours
+      });
+
+      if (existing) {
+        // Already notified, skip
+        return;
+      }
+
+      const admins = await this.getAllAdmins();
+      if (admins.length === 0) return;
+
+      const project = await Project.findById(projectId);
+      const projectTitle = project?.title || 'Project';
+
+      const payload = {
+        projectId,
+        entityType: 'evaluation',
+        entityId: userId, // Using userId as entityId for evaluation_started
+        type: 'evaluation_started',
+        title: 'Evaluation started',
+        message: `${actorRole || 'Expert'} (${userName || 'User'}) started evaluation for project ${projectTitle}.`,
+        actorId: userId,
+        actorRole,
+        metadata: {
+          questionnaireKey
+        },
+        url: `/admin/projects/${projectId}/evaluations`
+      };
+
+      await this.createNotifications(admins, payload);
+    } catch (error) {
+      console.error('Error notifying evaluation started:', error);
+    }
+  }
+};
 
 // Message
 const MessageSchema = new mongoose.Schema({
@@ -715,6 +1050,21 @@ app.post('/api/tensions', async (req, res) => {
 
     await tension.save();
     console.log("⚡ Yeni Tension eklendi:", tension._id);
+    
+    // Get actor info for notification
+    let actorRole = 'User';
+    try {
+      const actor = await User.findById(createdBy);
+      if (actor) actorRole = actor.role || 'User';
+    } catch (e) {
+      // Ignore error
+    }
+    
+    // Notify assigned experts (async, don't block response)
+    notificationService.notifyTensionCreated(tension, createdBy, actorRole).catch(err => {
+      console.error('Error sending tension created notification:', err);
+    });
+    
     res.json(tension);
   } catch (err) {
     console.error("❌ Tension Ekleme Hatası:", err);
@@ -817,6 +1167,23 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
       tension.votes.push({ userId, voteType });
     }
     await tension.save();
+    
+    // Get actor info for notification
+    let actorRole = 'User';
+    try {
+      const actor = await User.findById(userId);
+      if (actor) actorRole = actor.role || 'User';
+    } catch (e) {
+      // Ignore error
+    }
+    
+    // Notify participants (async, don't block response) - only if vote was added/changed
+    if (voteType) {
+      notificationService.notifyTensionVoted(tension, voteType, userId, actorRole).catch(err => {
+        console.error('Error sending tension voted notification:', err);
+      });
+    }
+    
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -834,6 +1201,21 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
     tension.comments.push({ text, authorId, authorName, date: new Date() });
     
     await tension.save();
+    
+    // Get actor info for notification
+    let actorRole = 'User';
+    try {
+      const actor = await User.findById(authorId);
+      if (actor) actorRole = actor.role || 'User';
+    } catch (e) {
+      // Ignore error
+    }
+    
+    // Notify participants (async, don't block response)
+    notificationService.notifyTensionCommented(tension, authorId, actorRole).catch(err => {
+      console.error('Error sending tension commented notification:', err);
+    });
+    
     res.json(tension.comments);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -868,6 +1250,21 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
     tension.evidences.push(evidenceObj);
 
     await tension.save();
+    
+    // Get actor info for notification
+    let actorRole = 'User';
+    try {
+      const actor = await User.findById(uploadedBy);
+      if (actor) actorRole = actor.role || 'User';
+    } catch (e) {
+      // Ignore error
+    }
+    
+    // Notify participants (async, don't block response)
+    notificationService.notifyTensionEvidenceAdded(tension, evidenceObj, uploadedBy, actorRole).catch(err => {
+      console.error('Error sending tension evidence added notification:', err);
+    });
+    
     res.json(tension.evidences);
   } catch (err) { 
     console.error(err);
@@ -1535,6 +1932,45 @@ app.post('/api/evaluations', async (req, res) => {
           try {
             await Promise.all(saveTasks.map(task => task()));
             console.log(`✅ All save tasks completed successfully`);
+            
+            // Check if this is the first answer (evaluation started)
+            // Get user info for notification
+            let actorRole = userRole || 'unknown';
+            let userName = 'User';
+            try {
+              const user = await User.findById(userIdObj);
+              if (user) {
+                actorRole = user.role || actorRole;
+                userName = user.name || user.email || userName;
+              }
+            } catch (e) {
+              // Ignore error
+            }
+            
+            // Check if any responses were just created (first time answering)
+            // This indicates evaluation started
+            if (Object.keys(flatAnswers).length > 0 || Object.keys(roleSpecificAnswersMap).length > 0) {
+              // Check if this is the first time user is answering for this project
+              const Response = require('./models/response');
+              const existingResponses = await Response.find({
+                projectId: projectIdObj,
+                userId: userIdObj
+              });
+              
+              // If this is the first response or first answer, notify admins
+              if (existingResponses.length === 0 || existingResponses.every(r => !r.answers || Object.keys(r.answers).length === 0)) {
+                // This is the first time answering - notify admins
+                notificationService.notifyEvaluationStarted(
+                  projectIdObj,
+                  userIdObj,
+                  roleQuestionnaireKey || 'general-v1',
+                  actorRole,
+                  userName
+                ).catch(err => {
+                  console.error('Error sending evaluation started notification:', err);
+                });
+              }
+            }
           } catch (saveError) {
             console.error(`❌ Error in save tasks:`, saveError);
             console.error(`❌ Save error stack:`, saveError.stack);
@@ -3736,6 +4172,98 @@ app.get('/api/messages/unread-count', async (req, res) => {
 });
 
 // GET /api/messages/conversations?userId=
+// ========== NOTIFICATION API ENDPOINTS ==========
+
+// GET /api/notifications - Get notifications for current user
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { userId, unreadOnly, limit = 50 } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const userIdObj = isValidObjectId(userId) 
+      ? new mongoose.Types.ObjectId(userId) 
+      : userId;
+
+    const query = { recipientId: userIdObj };
+    if (unreadOnly === 'true') {
+      query.isRead = false;
+    }
+
+    const notifications = await Notification.find(query)
+      .populate('actorId', 'name email role')
+      .populate('projectId', 'title')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    // Get unread count
+    const unreadCount = await Notification.countDocuments({
+      recipientId: userIdObj,
+      isRead: false
+    });
+
+    res.json({
+      notifications,
+      unreadCount
+    });
+  } catch (err) {
+    console.error('Error fetching notifications:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notifications/:id/read - Mark notification as read
+app.post('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notification = await Notification.findByIdAndUpdate(
+      id,
+      { isRead: true, readAt: new Date() },
+      { new: true }
+    );
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    res.json({ success: true, notification });
+  } catch (err) {
+    console.error('Error marking notification as read:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notifications/read-all - Mark all notifications as read for user
+app.post('/api/notifications/read-all', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const userIdObj = isValidObjectId(userId) 
+      ? new mongoose.Types.ObjectId(userId) 
+      : userId;
+
+    const result = await Notification.updateMany(
+      { recipientId: userIdObj, isRead: false },
+      { isRead: true, readAt: new Date() }
+    );
+
+    res.json({ 
+      success: true, 
+      updatedCount: result.modifiedCount 
+    });
+  } catch (err) {
+    console.error('Error marking all notifications as read:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== END NOTIFICATION API ==========
+
 app.get('/api/messages/conversations', async (req, res) => {
   try {
     const { userId } = req.query;

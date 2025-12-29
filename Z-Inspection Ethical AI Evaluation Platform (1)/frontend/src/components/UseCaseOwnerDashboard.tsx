@@ -4,6 +4,8 @@ import { User, UseCase, Project } from '../types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { ChatPanel } from './ChatPanel';
+import { NotificationDetailPanel } from './NotificationDetailPanel';
+import { NotificationBell } from './NotificationBell';
 import { ProfileModal } from './ProfileModal';
 import { api } from '../api';
 
@@ -50,6 +52,7 @@ export function UseCaseOwnerDashboard({
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const [expandedNotification, setExpandedNotification] = useState<any | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [myUseCases, setMyUseCases] = useState<UseCase[]>([]);
   const [loadingUseCases, setLoadingUseCases] = useState(true);
@@ -206,41 +209,50 @@ export function UseCaseOwnerDashboard({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle notification click
+  // Handle notification click - expand notification panel or open chat
   const handleNotificationClick = async (conversation: any) => {
-    const project =
-      projects.find(p => p.id === conversation.projectId) ||
-      ({
-        id: conversation.projectId,
-        title: conversation.projectTitle || 'Project',
-      } as any);
-    const otherUser =
-      users.find(u => u.id === conversation.fromUserId) ||
-      ({
-        id: conversation.fromUserId,
-        name: conversation.fromUserName || 'User',
-      } as any);
+    // Check if this is a notification-only message (starts with [NOTIFICATION])
+    const isNotificationOnly = String(conversation.lastMessage || '').startsWith('[NOTIFICATION]');
     
-    if (project && otherUser) {
-      try {
-        await fetch(api('/api/messages/mark-read'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: conversation.projectId,
-            userId: currentUser.id,
-            otherUserId: conversation.fromUserId,
-          }),
-        });
-        fetchUnreadCount();
-      } catch (error) {
-        console.error('Error marking messages as read:', error);
-      }
-      
-      setChatAdmin(otherUser);
-      setChatProject(project);
-      setChatPanelOpen(true);
+    // Mark messages as read
+    try {
+      await fetch(api('/api/messages/mark-read'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: conversation.projectId,
+          userId: currentUser.id,
+          otherUserId: conversation.fromUserId,
+        }),
+      });
+      fetchUnreadCount();
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+
+    if (isNotificationOnly) {
+      // If it's a notification-only message, expand notification panel
+      setExpandedNotification(conversation);
       setShowNotifications(false);
+    } else {
+      // If it's a regular message, open chat
+      const project = projects.find(p => p.id === conversation.projectId) ||
+        ({
+          id: conversation.projectId,
+          title: conversation.projectTitle || 'Project',
+        } as any);
+      const otherUser = users.find(u => u.id === conversation.fromUserId) ||
+        ({
+          id: conversation.fromUserId,
+          name: conversation.fromUserName || 'User',
+        } as any);
+      
+      if (project && otherUser) {
+        setChatAdmin(otherUser);
+        setChatProject(project);
+        setChatPanelOpen(true);
+        setShowNotifications(false);
+      }
     }
   };
   
@@ -383,12 +395,23 @@ export function UseCaseOwnerDashboard({
               <p className="text-gray-600">Upload and monitor your AI system use cases</p>
             </div>
             <div className="flex items-center space-x-4">
+              {/* In-app Notifications Bell */}
+              <NotificationBell 
+                currentUser={currentUser}
+                onNavigate={(view, params) => {
+                  // Use case owner might not have project detail view
+                  // Just log for now, can be extended later
+                  console.log('Notification navigation:', view, params);
+                }}
+              />
+              
+              {/* Legacy Message Notifications */}
               <div className="relative" ref={notificationRef}>
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="relative p-2 text-gray-600 hover:text-gray-900"
                 >
-                  <Bell className="h-5 w-5" />
+                  <MessageSquare className="h-5 w-5" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -631,6 +654,37 @@ export function UseCaseOwnerDashboard({
       )}
       
       {/* CHAT PANEL - Modal in center */}
+      {/* Expanded Notification Panel - Drawer style */}
+      {expandedNotification && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => {
+              setExpandedNotification(null);
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Right drawer */}
+          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white shadow-2xl flex flex-col">
+            <NotificationDetailPanel
+              conversation={expandedNotification}
+              currentUser={currentUser}
+              users={users}
+              projects={projects}
+              onClose={() => setExpandedNotification(null)}
+              onOpenChat={(project, otherUser) => {
+                setExpandedNotification(null);
+                setChatAdmin(otherUser);
+                setChatProject(project);
+                setChatPanelOpen(true);
+              }}
+            />
+          </div>
+        </>
+      )}
+
       {chatPanelOpen && chatAdmin && chatProject && (
         <>
           {/* Backdrop */}
