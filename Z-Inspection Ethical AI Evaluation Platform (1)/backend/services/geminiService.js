@@ -16,6 +16,7 @@ if (dotResult.error) {
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const { riskLabel: getRiskLabel } = require('../utils/riskLabel');
 /* ============================================================
    1. API KEY KONTROLÜ
 ============================================================ */
@@ -106,9 +107,52 @@ You are an expert AI Ethics Evaluator and Auditor specializing in the Z-Inspecti
 Your task is to analyze raw AI ethics assessment data and generate a comprehensive, professional,
 and actionable evaluation report for stakeholders. This report will be converted to PDF format.
 
-Requirements:
+==============================
+NON-NEGOTIABLE RULES
+==============================
+
+1. SCORES ARE CANONICAL - DO NOT COMPUTE THEM
+   - All scores are pre-computed in MongoDB scores collection
+   - You MUST use ONLY the numbers provided in the data
+   - NEVER calculate, recalculate, infer, or modify any score
+   - Scores are deterministic and traceable to MongoDB
+   - RISK LABELS ARE PROVIDED - DO NOT INFER THRESHOLDS
+   - Risk labels (Low, Moderate, High, Critical) are pre-computed and provided
+   - You MUST use the provided riskLabel values - NEVER infer or calculate risk labels
+   - Risk scores are 0–4 where 4 is highest risk and 0 is lowest risk
+   - Scoring interpretation: 0 = lowest risk (no/negligible risk), 4 = highest risk (high risk requiring immediate mitigation)
+   - Higher score = Higher risk (e.g., score 4 = high likelihood of harm / major ethical concern)
+   - Lower score = Lower risk (e.g., score 0 = no meaningful ethical risk identified)
+
+2. CHARTS ARE GENERATED PROGRAMMATICALLY
+   - Charts are generated server-side and embedded as images
+   - DO NOT create, describe, or invent charts in your output
+   - DO NOT include chart descriptions or visualizations in text
+   - Charts will be added automatically to the final document
+
+3. USE ACTUAL EVALUATORS - NO PLACEHOLDERS
+   - Use ONLY evaluators who actually submitted responses
+   - If only 1 technical expert submitted, show 1 (never show 2)
+   - Use actual evaluator names from the provided data
+   - Never use generic labels like "Expert 1", "Expert 2", or assumed roles
+
+4. TENSION EVIDENCE - BE EXPLICIT
+   - If a tension has no evidence (evidence.count = 0), explicitly state "No evidence attached"
+   - DO NOT fabricate or assume evidence exists
+   - Only reference evidence that is explicitly provided in the data
+
+5. ROLE-SPECIFIC QUESTIONS - DO NOT COMPARE ACROSS ROLES
+   - First 12 questions are COMMON CORE across all roles
+   - Remaining questions are ROLE-SPECIFIC
+   - DO NOT compare role-specific answer sets across different roles
+   - Only compare answers for the common core questions (first 12)
+
+==============================
+REPORT REQUIREMENTS
+==============================
+
 - Clear structure and headings (use # for main title, ## for sections, ### for subsections)
-- Evidence-based analysis
+- Evidence-based analysis (using only provided data)
 - Identification of risks and strengths
 - Actionable recommendations
 - Professional Markdown formatting suitable for PDF conversion
@@ -199,6 +243,17 @@ function buildUserPrompt(data) {
   const generalAnswers = data.generalAnswers || [];
   const tensions = data.tensions || [];
   const evaluations = data.evaluations || [];
+  const users = data.users || [];
+
+  // Build user map for lookup
+  const userMap = new Map();
+  if (Array.isArray(users)) {
+    users.forEach(u => {
+      if (u._id) {
+        userMap.set(u._id.toString(), u);
+      }
+    });
+  }
 
   let prompt = `# AI ETHICS EVALUATION DATA\n\n`;
   prompt += `Analyze the following data using the Z-Inspection methodology.\n\n`;
@@ -216,13 +271,24 @@ function buildUserPrompt(data) {
     prompt += `No score data available.\n\n`;
   } else {
     scores.forEach((s, i) => {
-      prompt += `### Evaluator ${i + 1}${s.role ? ` (${s.role})` : ""}\n`;
-      prompt += `Average Score: ${s.totals?.avg?.toFixed(2) || "N/A"} / 4.0\n`;
+      // Use actual evaluator name if available, otherwise use role
+      const userId = s.userId ? s.userId.toString() : null;
+      const user = userId ? userMap.get(userId) : null;
+      const evaluatorLabel = user?.name 
+        ? `${user.name}${s.role ? ` (${s.role})` : ""}`
+        : (s.role ? `${s.role} Evaluator` : `Evaluator ${i + 1}`);
+      
+      prompt += `### ${evaluatorLabel}\n`;
+      const totalAvg = s.totals?.avg;
+      const totalRiskLabel = totalAvg !== undefined ? getRiskLabel(totalAvg) : "N/A";
+      prompt += `Average Score: ${totalAvg?.toFixed(2) || "N/A"} / 4.0 (Risk Label: ${totalRiskLabel})\n`;
+      prompt += `**IMPORTANT:** Risk scores are 0–4 where 4 is highest risk and 0 is lowest risk. Higher score = Higher risk.\n`;
 
       if (s.byPrinciple) {
         Object.entries(s.byPrinciple).forEach(([p, v]) => {
           if (v?.avg !== undefined) {
-            prompt += `- ${p}: ${v.avg.toFixed(2)} / 4.0\n`;
+            const riskLabel = getRiskLabel(v.avg);
+            prompt += `- ${p}: ${v.avg.toFixed(2)} / 4.0 (Risk Label: ${riskLabel})\n`;
           }
         });
       }
@@ -247,7 +313,23 @@ function buildUserPrompt(data) {
       prompt += `### Tension ${i + 1}: ${t.principle1} vs ${t.principle2}\n`;
       prompt += `- Description: ${t.claimStatement}\n`;
       prompt += `- Severity: ${t.severity}\n`;
-      prompt += `- Status: ${t.status}\n\n`;
+      prompt += `- Status: ${t.status}\n`;
+      
+      // CRITICAL: Include evidence information
+      const evidence = t.evidences || t.evidence || [];
+      const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
+      if (evidenceCount === 0) {
+        prompt += `- Evidence: No evidence attached\n`;
+      } else {
+        prompt += `- Evidence: ${evidenceCount} item(s) attached\n`;
+        if (Array.isArray(evidence)) {
+          evidence.forEach((e, idx) => {
+            const type = e.type || e.evidenceType || 'Unknown';
+            prompt += `  ${idx + 1}. [${type}] ${e.title || e.description || 'Evidence item'}\n`;
+          });
+        }
+      }
+      prompt += `\n`;
     });
   }
 
@@ -270,6 +352,31 @@ function buildUserPrompt(data) {
 
   /* OUTPUT INSTRUCTIONS */
   prompt += `
+---
+# CRITICAL RULES FOR REPORT GENERATION
+
+0) SCORES ARE CANONICAL - DO NOT COMPUTE THEM
+   - All scores shown above are pre-computed in MongoDB scores collection
+   - Use ONLY the numbers provided - NEVER calculate or modify them
+
+1) CHARTS ARE GENERATED PROGRAMMATICALLY
+   - Charts will be generated server-side and embedded as images
+   - DO NOT create, describe, or invent charts in your output
+
+2) USE ACTUAL EVALUATORS - NO PLACEHOLDERS
+   - Use the actual evaluator count from the scores data above
+   - If only 1 evaluator of a role submitted, show 1 (never show 2)
+   - Never use generic labels like "Expert 1", "Expert 2"
+
+3) TENSION EVIDENCE - BE EXPLICIT
+   - If a tension shows "No evidence attached", explicitly state this in the report
+   - DO NOT fabricate or assume evidence exists
+
+4) ROLE-SPECIFIC QUESTIONS
+   - First 12 questions are COMMON CORE across all roles
+   - Remaining questions are ROLE-SPECIFIC
+   - DO NOT compare role-specific answers across different roles
+
 ---
 # REPORT STRUCTURE
 Generate a comprehensive PDF-ready report with the following structure:
@@ -574,15 +681,63 @@ async function generateDashboardNarrative(inputData) {
   } = inputData;
 
   // Build the input JSON string for the prompt
+  // CRITICAL: Only pass dashboardMetrics (deterministic JSON) + selected excerpts + tension summaries
   const inputJson = JSON.stringify({
     dashboardMetrics: dashboardMetrics || {},
-    topRiskyQuestions: topRiskyQuestions || [],
-    responseExcerpts: responseExcerpts || [],
-    tensionSummaries: tensionSummaries || []
+    selectedAnswerExcerpts: responseExcerpts || [], // Selected excerpts only
+    selectedTensionSummaries: tensionSummaries || [] // Selected tension summaries (short)
   }, null, 2);
 
   const systemInstruction = `You are an AI assistant used STRICTLY as a narrative synthesis and explanation tool
 within an Ethical AI Evaluation Platform based on the Z-Inspection methodology.
+
+==============================
+NON-NEGOTIABLE RULES
+==============================
+
+0) SCORES ARE CANONICAL - DO NOT COMPUTE THEM
+   - Scores are pre-computed in MongoDB scores collection
+   - You MUST use ONLY the numbers provided in dashboardMetrics
+   - NEVER calculate, recalculate, infer, normalize, or modify any score
+   - Scores are deterministic and traceable to MongoDB
+   - If a number is not in dashboardMetrics, DO NOT use it
+   - RISK LABELS ARE PROVIDED - DO NOT INFER THRESHOLDS
+   - Risk labels (Low, Moderate, High, Critical) are pre-computed in dashboardMetrics
+   - You MUST use the provided riskLabel values from dashboardMetrics - NEVER infer or calculate risk labels
+   - Risk scores are 0–4 where 4 is highest risk and 0 is lowest risk
+   - Scoring interpretation: 0 = lowest risk (no/negligible risk), 4 = highest risk (high risk requiring immediate mitigation)
+   - Higher score = Higher risk
+
+1) CHARTS ARE GENERATED PROGRAMMATICALLY
+   - Charts are generated server-side and embedded as images
+   - DO NOT create, describe, or invent charts in your output
+   - DO NOT include chart descriptions or visualizations in text
+
+2) USE ACTUAL EVALUATORS - NO PLACEHOLDERS
+   - Use ONLY evaluators who actually submitted responses
+   - If only 1 technical expert submitted, show 1 (never show 2)
+   - Use actual evaluator names/roles from the provided data
+   - Never use generic labels like "Expert 1", "Expert 2", or assumed roles
+
+3) TENSION EVIDENCE - BE EXPLICIT
+   - If a tension has no evidence (evidenceCount = 0 or evidenceCoverage.tensionsWithoutEvidence > 0), 
+     explicitly state "No evidence attached"
+   - DO NOT fabricate or assume evidence exists
+   - Only reference evidence that is explicitly provided in selectedTensionSummaries
+   - If evidence is missing, say "No evidence attached" - do not invent or infer
+
+4) ROLE-SPECIFIC QUESTIONS - DO NOT COMPARE ACROSS ROLES
+   - First 12 questions are COMMON CORE across all roles
+   - Remaining questions are ROLE-SPECIFIC
+   - DO NOT compare role-specific answer sets across different roles
+   - Only compare answers for the common core questions (first 12)
+
+5) NO TABLES WITH NUMERIC VALUES
+   - DO NOT produce tables with numeric values in your output
+   - Tables are rendered server-side from dashboardMetrics JSON
+   - Your output should be PURE NARRATIVE TEXT ONLY
+   - If you need to reference numbers, do so in narrative form (e.g., "The overall average score is 2.3")
+   - DO NOT create markdown tables, HTML tables, or any structured data tables
 
 ==============================
 ABSOLUTE CONSTRAINTS
@@ -600,51 +755,52 @@ All ethical judgments remain human-controlled.
 Your role is explanatory, interpretative, and supportive only.
 
 ==============================
-AUTHORITATIVE DATA SOURCES
+AUTHORITATIVE DATA SOURCES (MongoDB Collections)
 ==============================
 
 You MUST assume the following MongoDB collections as the ONLY sources of truth:
 
-1) scores collection (CANONICAL SCORING SOURCE)
-- Source of ALL quantitative metrics used in the dashboard.
-- Fields:
-  - projectId, userId, role, questionnaireKey
-  - byPrinciple: object (aggregated per ethical principle)
-  - totals: object (overall aggregates: avg, min, max, n)
-  - computedAt
-- Scores reflect expert answers to risk-scaled questions (0–4 scale).
-- The dashboard and reports MUST rely on scores.
-- You MUST NOT recompute or reinterpret scores.
+(1) responses collection (answers)
+   - Source of ALL question answers (text)
+   - Fields: projectId, userId, role, questionnaireKey, questionnaireVersion
+   - answers: Array (contains questionId, answerText/selectedOption/etc.)
+   - status, submittedAt, createdAt, updatedAt
+   - NOTE: First 12 questions are common across all expert roles; remaining are role-specific
+   - Use ONLY short excerpts if provided in responseExcerpts
+   - DO NOT extrapolate beyond given excerpts
 
-2) responses collection
-- Source of ALL expert answers and qualitative context.
-- Fields:
-  - projectId, userId, role
-  - questionnaireKey, questionnaireVersion
-  - answers[]: { questionId, questionCode, answerText / selectedOption / value, score }
-  - status, submittedAt
-- NOTE:
-  - The first 12 questions are COMMON CORE across all roles.
-  - Remaining questions are ROLE-SPECIFIC and MUST NOT be compared across roles.
-- Use ONLY short excerpts if provided in responseExcerpts.
-- DO NOT extrapolate beyond given excerpts.
+(2) scores collection (risk scoring) — CANONICAL METRICS
+   - Source of computed scoring per expert submission
+   - Fields: projectId, userId, role, questionnaireKey
+   - byPrinciple: Object (per ethical principle scores/aggregates)
+   - totals: Object (overall aggregates)
+   - computedAt, createdAt, updatedAt
+   - The dashboard/report MUST treat these as source-of-truth numeric metrics
+   - You MUST NOT recompute or reinterpret scores
 
-3) tensions collection
-- Source of ethical tensions, claims, mitigations, and evidence.
-- Fields:
-  - principle1, principle2 (conflicting principles)
-  - claim, claimStatement, description, argument
-  - evidence[] / evidences[]: { title, description, fileName, type, uploadedBy }
-  - severity / severityLevel
-  - mitigation / tradeOffDecision / rationale
-  - votes[]: { userId, voteType: 'agree' | 'disagree' }
-  - reviewState (Proposed, Under Review, Accepted, Disputed)
-- If no evidence exists, you MUST explicitly state: "No evidence attached".
-- If evidence is missing, you MUST explicitly state this.
+(3) tensions collection (claims + mitigations + trade-offs + impact + evidence)
+   - Fields used:
+     * createdBy, createdAt
+     * principle1, principle2 (conflict)
+     * claim, argument
+     * evidence (text), evidenceType (Policy/Test/User feedback/Logs/Incident/Other) [optional]
+     * attachments (files) if present
+     * severityLevel
+     * impactArea[], affectedGroups[]
+     * mitigation/resolution fields: proposedMitigations, tradeOffDecision, tradeOffRationale
+     * votes/consensus (agree/disagree counts) and computed reviewState (Proposed/Under Review/Accepted/Disputed)
+   - Dashboard/report computes:
+     * counts by reviewState (underReview, disputed, accepted, etc.)
+     * evidence coverage: evidence count + evidenceType distribution
+     * mitigation maturity signals (accepted ratio, evidence count)
+   - If no evidence exists, you MUST explicitly state: "No evidence attached"
+   - You may summarize tension texts, but MUST NOT invent evidence or numbers
 
-4) Optional discussion/comments collections
-- Used ONLY to indicate discussion activity or review intensity.
-- Do NOT infer risk or severity from discussion volume alone.
+(4) Discussions/comments (optional)
+   - If stored separately (e.g., shareddiscussions): use it to count discussion activity per tension
+   - If embedded under tensions, use tensions.comments and/or tensions.evidence[].comments
+   - Used ONLY to indicate discussion activity or review intensity
+   - Do NOT infer risk or severity from discussion volume alone
 
 ==============================
 INPUT YOU WILL RECEIVE
@@ -678,6 +834,7 @@ You will be given a structured JSON object that may include:
   - principle1, principle2 (conflicting principles)
   - severity / severityLevel
   - reviewState: "Proposed" | "Under Review" | "Accepted" | "Disputed"
+- IMPORTANT: Do NOT write sentences like "This tension is in 'Proposed' review state" - the reviewState is already displayed in the table/template. Only reference it if needed for context, but do not create separate sentences about review state.
   - evidenceCount, evidenceTypes: []
   - votes: { agree: count, disagree: count } (if provided)
 
@@ -698,147 +855,114 @@ If grounding is NOT possible, explicitly state:
 Do NOT make unsupported assertions. Every insight must trace back to the provided data.
 
 ==============================
-YOUR TASK
+YOUR TASK - NARRATIVE OUTPUT ONLY
 ==============================
 
-Using ONLY the provided input:
+You MUST output ONLY narrative text sections. DO NOT produce tables, JSON, or structured data.
 
-1) Explain WHY the overall ethical risk level is what it is (grounded in principle scores and risky questions).
+Using ONLY the provided dashboardMetrics JSON + selected answer excerpts + selected tension summaries:
 
-2) Identify WHICH principles are driving the risk and WHY (with specific question-level and role-level evidence).
+Generate the following narrative sections:
 
-3) Analyze response excerpts to understand expert reasoning:
-   - What concerns do experts express in their answers?
-   - How do qualitative comments relate to quantitative scores?
-   - Are there patterns in how different roles express concerns?
+1) EXECUTIVE SUMMARY
+   - Explain WHY the overall ethical risk level is what it is (use dashboardMetrics.scores.totals.overallAvg and riskLevel)
+   - Ground in principle scores from dashboardMetrics.scores.byPrinciple
+   - Reference top risky questions from dashboardMetrics.topRiskyQuestions if available
+   - Keep to 3-5 sentences
 
-4) Explain evaluator disagreement when present (by role or principle):
-   - Where do role signals diverge?
-   - What might explain different risk perceptions?
+2) KEY RISKS INTERPRETATION (text narrative)
+   - Identify WHICH principles are driving the risk and WHY
+   - Use specific scores from dashboardMetrics.scores.byPrinciple (do not compute)
+   - Reference selected answer excerpts to understand expert reasoning
+   - Explain what concerns experts express in their answers
+   - Identify patterns in how different roles express concerns (from dashboardMetrics.scores.rolePrincipleMatrix)
+   - Explain evaluator disagreement when present (by role or principle)
+   - For each high-risk principle, explain the practical implications
 
-5) Analyze each ethical tension:
-   - why it exists (grounded in principle conflicts and expert signals)
-   - what practical risk it creates if unresolved (concrete ethical or safety consequence)
-   - evidence quality and availability
-
-6) Produce PRIORITIZED, ACTIONABLE insights grounded in the data:
-   - Which principles need immediate attention?
+3) RECOMMENDATIONS (actionable; prioritized; owner + timeline suggestions)
+   - Produce PRIORITIZED, ACTIONABLE recommendations grounded in the data
+   - Which principles need immediate attention? (prioritize by dashboardMetrics.scores.byPrinciple scores)
    - What concrete steps can address the identified risks?
-   - What additional information is needed?
+   - Suggest owners (roles) who should take action
+   - Suggest specific person names if available, otherwise use "Assign owner"
+   - Suggest timelines (immediate, short-term, medium-term)
+   - IMPORTANT: Scoring interpretation is 0 = worst (highest risk), 4 = best (lowest risk)
+     - For score improvements, use "Increase average scores to above 3.0" (Low risk level) or "Increase average scores to above 2.0" (Moderate risk level)
+     - DO NOT use "Resolved state" - valid review states are: "Proposed", "Under review", "Accepted", "Disputed"
+     - Use specific metrics like "Reduce tensions in 'Under review' state to 0", "Achieve 'Accepted' state for all critical tensions"
+   - Include dataBasis field: what data this recommendation is based on (e.g., "principle avg + top risky questions + unresolved tensions + evidence gap")
+   - Ground each recommendation in specific data from dashboardMetrics
+
+4) DATA GAPS / LIMITATIONS
+   - Reference dashboardMetrics.dataQuality for missing scores, missing answers, incomplete responses
+   - Identify what additional information is needed
+   - Note limitations in evidence coverage (from dashboardMetrics.tensionsSummary.evidenceCoverage)
+   - Note unresolved tensions that need attention (from dashboardMetrics.tensionsSummary.topUnresolvedTensions)
+   - Be explicit about what data is missing or incomplete
 
 ==============================
-OUTPUT FORMAT (JSON ONLY)
+OUTPUT FORMAT - NARRATIVE TEXT ONLY
 ==============================
 
-Return a JSON object ONLY, with the following structure:
+You MUST output PURE NARRATIVE TEXT in Markdown format. DO NOT output JSON, tables, or structured data.
 
-{
-  "executiveInterpretation": {
-    "overallRiskLevel": "LOW | MEDIUM | HIGH",
-    "whyThisRiskLevel": [
-      "Explanation grounded in specific low principle scores (e.g., 'Transparency scores 1.8/4.0, indicating...')",
-      "Explanation grounded in evaluator role patterns or risky questions (e.g., 'Technical experts consistently flagged...')"
-    ],
-    "overallSummary": "High-level narrative summary (2-4 sentences)"
-  },
+Structure your output as follows:
 
-  "principleDeepDive": [
-    {
-      "principle": "TRANSPARENCY | HUMAN AGENCY & OVERSIGHT | TECHNICAL ROBUSTNESS & SAFETY | PRIVACY & DATA GOVERNANCE | DIVERSITY, NON-DISCRIMINATION & FAIRNESS | SOCIETAL & INTERPERSONAL WELL-BEING | ACCOUNTABILITY",
-      "score": "numeric value as provided (from dashboardMetrics.byPrinciple)",
-      "whyLowOrModerate": [
-        "Concrete issues reported by experts (grounded in responseExcerpts or topRiskyQuestions)",
-        "Specific question codes that drive the low score"
-      ],
-      "supportingEvidence": {
-        "topRiskyQuestions": ["Q14", "Q18"],
-        "rolesMostConcerned": ["Medical", "Legal", "Technical"],
-        "expertInsights": ["Brief quote or summary from responseExcerpts if available"]
-      },
-      "riskLevelNarrative": "Safe | Needs improvement | High risk",
-      "practicalRisk": "What could realistically go wrong if unaddressed (grounded in principle and expert signals)"
-    }
-  ],
+## Executive Summary
 
-  "questionAnalysis": {
-    "highRiskQuestions": [
-      {
-        "questionCode": "T1, H2, etc.",
-        "principle": "TRANSPARENCY, etc.",
-        "avgRisk": "numeric (0-4)",
-        "expertConcerns": ["Summary of concerns from responseExcerpts if available"],
-        "rolePatterns": "Which roles scored lowest/highest on this question (if roleSignals provided)"
-      }
-    ],
-    "patterns": [
-      "Patterns identified across questions (e.g., 'Open-text questions consistently show concerns about...')"
-    ]
-  },
+[2-4 paragraphs of narrative text explaining the overall ethical risk level, grounded in dashboardMetrics.scores.totals.overallAvg and riskLevel. Reference specific principle scores from dashboardMetrics.scores.byPrinciple. Use numbers exactly as provided - do not compute or modify them.]
 
-  "tensionAnalysis": [
-    {
-      "tension": "Principle A vs Principle B",
-      "whyItExists": "Explanation grounded in system context and expert signals (not invented)",
-      "riskIfUnresolved": "Concrete ethical or safety consequence (specific, realistic)",
-      "evidenceStatus": "Evidence attached | No evidence attached",
-      "evidenceTypes": ["Policy", "Test", "User feedback", etc. if evidenceCount > 0],
-      "reviewState": "Proposed | Under Review | Accepted | Disputed",
-      "consensusLevel": "High consensus | Mixed | Disputed (based on votes if provided)"
-    }
-  ],
+## Key Risks Interpretation
 
-  "tensionOverview": {
-    "underReviewCount": 0,
-    "disputedCount": 0,
-    "acceptedCount": 0,
-    "keyTensions": [
-      {
-        "principles": ["Transparency", "Safety"],
-        "claimSummary": "...",
-        "reviewState": "Proposed | Under Review | Accepted | Disputed",
-        "evidenceStatus": "Evidence attached | No evidence attached"
-      }
-    ]
-  },
+[Multiple paragraphs of narrative text analyzing:
+- Which principles are driving risk (use dashboardMetrics.scores.byPrinciple scores exactly as provided)
+- Why these principles are at risk (reference selectedAnswerExcerpts if available)
+- Expert concerns expressed in answers (from selectedAnswerExcerpts)
+- Patterns in role-based concerns (from dashboardMetrics.scores.rolePrincipleMatrix)
+- Evaluator disagreement when present
+- Practical implications of each high-risk principle]
 
-  "priorityActions": [
-    {
-      "priority": 1,
-      "focusPrinciple": "Human Agency & Oversight",
-      "justification": "Lowest score (1.5/4.0) / highest harm potential (grounded in data)",
-      "suggestedNextStep": "Concrete, realistic design or governance action (not vague)",
-      "supportingQuestions": ["Q14", "Q18"],
-      "supportingRoles": ["Medical", "Legal"]
-    }
-  ],
+[For each high-risk principle, write 1-2 paragraphs explaining the risk in narrative form. Use scores from dashboardMetrics exactly as provided.]
 
-  "confidenceAndLimitations": {
-    "confidenceLevel": "LOW | MEDIUM | HIGH",
-    "limitations": [
-      "e.g., evaluator disagreement on principle X",
-      "e.g., missing evidence for tension Y",
-      "e.g., early project stage with limited responses",
-      "e.g., insufficient responseExcerpts to understand expert reasoning"
-    ],
-    "dataCompleteness": {
-      "expertCoverage": "Number of roles that provided responses",
-      "questionCoverage": "Percentage of questions answered",
-      "tensionEvidence": "Number of tensions with evidence vs. without"
-    }
-  }
-}
+## Recommendations
+
+[Prioritized, actionable recommendations in narrative form. For each recommendation:
+
+1. State the priority (e.g., "Highest Priority", "High Priority", "Medium Priority")
+2. Identify the principle or area of concern (use dashboardMetrics data)
+3. Provide concrete, actionable steps
+4. Suggest owner(s) - which role(s) should take action
+5. Suggest timeline (immediate, short-term within 1-3 months, medium-term 3-6 months)
+
+Ground each recommendation in specific data from dashboardMetrics. Use narrative paragraphs, not bullet points or tables.]
+
+## Data Gaps / Limitations
+
+[Narrative text describing:
+- Missing scores (from dashboardMetrics.dataQuality.missingScores)
+- Missing answers (from dashboardMetrics.dataQuality.missingAnswers)
+- Incomplete responses (from dashboardMetrics.dataQuality.incompleteResponses)
+- Evidence coverage gaps (from dashboardMetrics.tensionsSummary.evidenceCoverage)
+- Unresolved tensions needing attention (from dashboardMetrics.tensionsSummary.topUnresolvedTensions)
+- Any other data limitations
+
+Be explicit about what information is missing or incomplete.]
 
 ==============================
-OUTPUT RULES
+OUTPUT RULES - STRICT ENFORCEMENT
 ==============================
 
-- Use ONLY the numbers provided in dashboardMetrics.
-- Ground every insight in at least one data point (score, question, tension, or excerpt).
-- Do NOT generate tables unless explicitly requested.
-- Do NOT restate raw JSON.
-- Do NOT exaggerate or speculate.
-- If information is missing, explicitly state that it is unavailable.
-- Response excerpts must be used verbatim or with clear attribution - do not invent expert quotes.
+- Use ONLY the numbers provided in dashboardMetrics - NEVER compute, recalculate, or modify them
+- Ground every insight in at least one data point from dashboardMetrics, selectedAnswerExcerpts, or selectedTensionSummaries
+- DO NOT generate tables, JSON, or structured data - ONLY narrative text
+- DO NOT restate raw JSON or data structures
+- DO NOT exaggerate or speculate beyond the provided data
+- If information is missing, explicitly state "No evidence attached" or "Data not available"
+- Response excerpts must be used verbatim or with clear attribution - do not invent expert quotes
+- If a tension has no evidence (evidenceCount = 0), explicitly state "No evidence attached"
+- All numeric values MUST come from dashboardMetrics - reference them in narrative form (e.g., "The Transparency principle scored 1.8 out of 4.0")
+- DO NOT create markdown tables, HTML tables, or any tabular format
+- Your output should be readable narrative prose suitable for a professional report
 
 ==============================
 FINAL REMINDER
@@ -859,15 +983,15 @@ ${inputJson}
 
 --------------------------------------------------
 
-OUTPUT REQUIREMENTS:
-- Output MUST be valid JSON only (no markdown, no explanations, no extra text)
-- Do NOT include assumptions beyond the input
-- Ensure all string values are properly escaped
+CRITICAL OUTPUT REQUIREMENTS:
+- Output MUST be PURE NARRATIVE TEXT in Markdown format (## headings, paragraphs)
+- DO NOT output JSON, tables, or structured data
+- Use ONLY numbers from dashboardMetrics - do not compute or modify them
+- If evidence is missing, explicitly state "No evidence attached"
 - Ground EVERY insight in at least one data point from the input
-- Array of principleDeepDive may contain 0 or more items
-- Array of tensionAnalysis may contain 0 or more items
-- Array of priorityActions may contain 0 or more items
-- Array of questionAnalysis.highRiskQuestions may contain 0 or more items
+- Structure output as: Executive Summary, Key Risks Interpretation, Recommendations, Data Gaps / Limitations
+- Write in professional, readable prose suitable for a stakeholder report
+- Reference specific scores and metrics from dashboardMetrics in narrative form
 
 FIELD VALIDATION:
 - overallRiskLevel MUST be exactly one of: "LOW", "MEDIUM", "HIGH"
@@ -1140,6 +1264,45 @@ async function generateReportNarrative(reportMetrics) {
 within an Ethical AI Evaluation Platform based on the Z-Inspection methodology.
 
 ==============================
+NON-NEGOTIABLE RULES
+==============================
+
+0) SCORES ARE CANONICAL - DO NOT COMPUTE THEM
+   - Scores are pre-computed in MongoDB scores collection
+   - You MUST use ONLY the numbers provided in reportMetrics
+   - NEVER calculate, recalculate, infer, normalize, or modify any score
+   - Scores are deterministic and traceable to MongoDB
+   - RISK LABELS ARE PROVIDED - DO NOT INFER THRESHOLDS
+   - Risk labels (Low, Moderate, High, Critical) are pre-computed in reportMetrics
+   - You MUST use the provided riskLabel values from reportMetrics - NEVER infer or calculate risk labels
+   - Risk scores are 0–4 where 4 is highest risk and 0 is lowest risk
+   - Scoring interpretation: 0 = lowest risk (no/negligible risk), 4 = highest risk (high risk requiring immediate mitigation)
+   - Higher score = Higher risk
+
+1) CHARTS ARE GENERATED PROGRAMMATICALLY
+   - Charts are generated server-side and embedded as images
+   - DO NOT create, describe, or invent charts in your output
+   - DO NOT include chart descriptions or visualizations in text
+   - Charts will be added automatically to the final document
+
+2) USE ACTUAL EVALUATORS - NO PLACEHOLDERS
+   - Use ONLY evaluators listed in reportMetrics.evaluators.withScores
+   - If only 1 technical expert submitted, show 1 (never show 2)
+   - Use actual evaluator names from the provided data
+   - Never use generic labels like "Expert 1", "Expert 2", or assumed roles
+
+3) TENSION EVIDENCE - BE EXPLICIT
+   - If a tension has no evidence (evidence.count = 0), explicitly state "No evidence attached"
+   - DO NOT fabricate or assume evidence exists
+   - Only reference evidence that is explicitly provided in tensions.list[].evidence.items[]
+
+4) ROLE-SPECIFIC QUESTIONS - DO NOT COMPARE ACROSS ROLES
+   - First 12 questions are COMMON CORE across all roles
+   - Remaining questions are ROLE-SPECIFIC
+   - DO NOT compare role-specific answer sets across different roles
+   - Only compare answers for the common core questions (first 12)
+
+==============================
 ABSOLUTE CONSTRAINTS
 ==============================
 
@@ -1153,18 +1316,48 @@ ABSOLUTE CONSTRAINTS
 - All numeric metrics MUST come from reportMetrics JSON - never compute them.
 
 ==============================
-AUTHORITATIVE DATA SOURCES
+AUTHORITATIVE DATA SOURCES (MongoDB Collections)
 ==============================
 
-You will receive a reportMetrics JSON object that contains:
-1) project: basic project info (title, category, createdAt, questionnaireKey)
-2) coverage: team participation metrics (assignedExpertsCount, expertsStartedCount, etc.)
-3) scoring: ALL quantitative scores from MongoDB 'scores' collection
-   - totalsOverall: aggregated overall scores
-   - byPrincipleOverall: per-principle aggregates with riskPct, safePct
-   - byRole: role-specific aggregates
-4) topRiskDrivers: questions with lowest avgRiskScore, including answer excerpts
-5) tensions: summary stats and detailed list with evidence, mitigation, consensus
+The reportMetrics JSON you receive is derived from these MongoDB collections:
+
+(1) responses collection (answers)
+   - Source of ALL question answers (text)
+   - Fields: projectId, userId, role, questionnaireKey, questionnaireVersion
+   - answers: Array (contains questionId, answerText/selectedOption/etc.)
+   - status, submittedAt, createdAt, updatedAt
+   - NOTE: First 12 questions are common across all expert roles; remaining are role-specific
+
+(2) scores collection (risk scoring) — CANONICAL METRICS
+   - Source of computed scoring per expert submission
+   - Fields: projectId, userId, role, questionnaireKey
+   - byPrinciple: Object (per ethical principle scores/aggregates)
+   - totals: Object (overall aggregates)
+   - computedAt, createdAt, updatedAt
+   - The dashboard/report MUST treat these as source-of-truth numeric metrics
+   - You MUST use ONLY these numbers - never compute or modify them
+
+(3) tensions collection (claims + mitigations + trade-offs + impact + evidence)
+   - Fields used:
+     * createdBy, createdAt
+     * principle1, principle2 (conflict)
+     * claim, argument
+     * evidence (text), evidenceType (Policy/Test/User feedback/Logs/Incident/Other) [optional]
+     * attachments (files) if present
+     * severityLevel
+     * impactArea[], affectedGroups[]
+     * mitigation/resolution fields: proposedMitigations, tradeOffDecision, tradeOffRationale
+     * votes/consensus (agree/disagree counts) and computed reviewState (Proposed/Under Review/Accepted/Disputed)
+   - Dashboard/report computes:
+     * counts by reviewState (underReview, disputed, accepted, etc.)
+     * evidence coverage: evidence count + evidenceType distribution
+     * mitigation maturity signals (accepted ratio, evidence count)
+   - If no evidence exists (evidence count = 0), you MUST explicitly state: "No evidence attached"
+   - You may summarize tension texts, but MUST NOT invent evidence or numbers
+
+(4) Discussions/comments (optional)
+   - If stored separately (e.g., shareddiscussions): use it to count discussion activity per tension
+   - If embedded under tensions, use tensions.comments and/or tensions.evidence[].comments
 
 ==============================
 CRITICAL GROUNDING RULES
@@ -1186,9 +1379,10 @@ EVIDENCE INTEGRITY
 ==============================
 
 - Tension evidence shown MUST come from tensions.list[].evidence.items[]
-- If tension.evidence.count = 0 => state "No evidence attached"
+- If tension.evidence.count = 0 => ALWAYS state "No evidence attached" (explicitly, not implied)
 - Never fabricate evidence or evidence types
 - Use evidenceType from evidence items exactly as provided
+- In the report output, if evidence.count = 0, display "No evidence attached" clearly
 
 ==============================
 YOUR TASK
@@ -1236,7 +1430,7 @@ Return a JSON object with this EXACT structure:
       "tensionId": "from tensions.list[].tensionId",
       "summary": "Brief summary of claim and conflict",
       "whyItMatters": "Impact based on impactDescription and affectedGroups",
-      "evidenceStatus": "Evidence attached | No evidence attached (from evidence.count)",
+      "evidenceStatus": "Evidence attached | No evidence attached (MUST be "No evidence attached" if evidence.count = 0)",
       "mitigationAssessment": "Assessment of mitigation fields (or 'No mitigation proposed')",
       "nextStep": "Actionable next step based on reviewState and consensus"
     }
@@ -1246,8 +1440,10 @@ Return a JSON object with this EXACT structure:
       "title": "Specific recommendation title",
       "priority": "High | Med | Low",
       "ownerRole": "Role responsible (or 'Project team')",
+      "ownerPerson": "Specific person name if available, or 'Assign owner' if not specified",
       "timeline": "Suggested timeline",
-      "successMetric": "How to measure success",
+      "successMetric": "How to measure success (e.g., 'Increase average scores to above 3.0' for Low risk level, NOT 'Resolved state')",
+      "dataBasis": "What data this recommendation is based on (e.g., 'principle avg + top risky questions + unresolved tensions + evidence gap')",
       "linkedTo": ["principle:TRANSPARENCY", "tension:...", "question:..."]
     }
   ],
@@ -1263,17 +1459,21 @@ Return a JSON object with this EXACT structure:
 }
 
 ==============================
-OUTPUT RULES
+OUTPUT RULES - STRICT ENFORCEMENT
 ==============================
 
-- Use ONLY numbers from reportMetrics JSON
-- Ground every insight in at least one data point
-- Do NOT generate tables or markdown
-- Do NOT restate raw JSON
-- Do NOT exaggerate or speculate
+- Use ONLY numbers from reportMetrics.dashboardMetrics (if available) or reportMetrics JSON
+- NEVER compute, recalculate, infer, normalize, or modify any score
+- Ground every insight in at least one data point from reportMetrics
+- Do NOT generate tables with numeric values - tables are rendered server-side
+- Do NOT restate raw JSON structures
+- Do NOT exaggerate or speculate beyond provided data
 - If information is missing, explicitly state "Not provided" or "No evidence attached"
+- If tension evidence count = 0, explicitly state "No evidence attached"
 - Answer excerpts must be used verbatim or with clear attribution
 - Do NOT invent use-case/domain details; use only project fields given
+- DO NOT create markdown tables, HTML tables, or any tabular format in your output
+- If reportMetrics.dashboardMetrics is provided, use it as the single source of truth for all numeric values
 
 ==============================
 FINAL REMINDER
@@ -1299,8 +1499,12 @@ EVALUATORS (Actual assigned and submitted):
 - With Scores: ${reportMetrics.evaluators.withScores.length} expert(s)
   ${reportMetrics.evaluators.withScores.map(e => `  - ${e.name} (${e.role})`).join('\n')}
 
-CRITICAL: Report tables must ONLY include evaluators listed in "withScores" above.
-Do NOT reference "Expert 1/2" or "Medical Expert 3/4" - use actual names from the list above.
+CRITICAL RULES:
+1. Report tables must ONLY include evaluators listed in "withScores" above.
+2. Do NOT reference "Expert 1/2" or "Medical Expert 3/4" - use actual names from the list above.
+3. If only 1 technical expert submitted, show 1 (never show 2 or assume more).
+4. Use the exact count of evaluators who submitted - no placeholders or assumptions.
+5. Role-specific questions (after first 12) should NOT be compared across roles.
 ` : '';
 
   const userPrompt = `INPUT DATA (reportMetrics JSON):
@@ -1314,11 +1518,17 @@ OUTPUT REQUIREMENTS:
 - Do NOT include assumptions beyond the input
 - Ensure all string values are properly escaped
 - Ground EVERY insight in at least one data point from the input
-- If tension evidence count = 0 => state "No evidence attached"
+- If tension evidence count = 0 => ALWAYS state "No evidence attached" (explicitly, not implied)
 - Do NOT invent use-case/domain details; use only project fields given
 - Use ONLY evaluator names from evaluators.withScores list - never use generic labels like "Expert 1/2"
+- If only 1 evaluator of a role submitted, show 1 (never show 2 or assume more)
+- Role-specific questions (after first 12) should NOT be compared across roles in your narrative
 - If general assessment answers are missing => state "Missing / Not provided" and list missing fields
 - NEVER print the literal string "undefined" - use "Not provided" or "Missing" instead
+- DO NOT compute or recalculate scores - use only the numbers provided from reportMetrics.dashboardMetrics (if available) or reportMetrics
+- DO NOT describe or invent charts - charts are generated programmatically
+- DO NOT create tables with numeric values in your JSON output - tables are rendered server-side
+- If reportMetrics.dashboardMetrics is provided, it is the SINGLE SOURCE OF TRUTH for all numeric metrics
 
 FIELD VALIDATION:
 - priority MUST be exactly one of: "High", "Med", "Low"

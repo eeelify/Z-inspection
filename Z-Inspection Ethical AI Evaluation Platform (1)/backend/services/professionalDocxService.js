@@ -12,8 +12,11 @@ const {
   BorderStyle,
   ShadingType,
   ImageRun,
-  Media
+  Media,
+  Bookmark,
+  InternalHyperlink
 } = require("docx");
+const { riskLabel } = require('../utils/riskLabel');
 
 /**
  * Generate professional DOCX report from reportMetrics and geminiNarrative
@@ -22,8 +25,8 @@ const {
 async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generatedAt = new Date(), chartBuffers = null) {
   const children = [];
   
-  // Helper to add chart image to document
-  const addChartImage = async (chartBuffer, title, width = 500, height = 300) => {
+  // Helper to add chart image to document with caption, legend, and threshold explanation
+  const addChartImage = async (chartBuffer, title, width = 500, height = 300, options = {}) => {
     if (!chartBuffer) return;
     
     try {
@@ -37,14 +40,42 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       });
       
       children.push(createParagraph(''));
+      
+      // Add chart title/caption
       if (title) {
-        children.push(createParagraph(title, { bold: true }));
+        children.push(createParagraph(`Figure: ${title}`, { bold: true, italics: true }));
       }
+      
+      // Add the chart image
       children.push(new Paragraph({
         children: [imageRun],
         alignment: AlignmentType.CENTER,
         spacing: { after: 240 }
       }));
+      
+      // Add legend text if provided
+      if (options.legend) {
+        children.push(createParagraph(options.legend, { italics: true, alignment: AlignmentType.CENTER }));
+      }
+      
+      // Add threshold explanation if provided (for principle charts)
+      if (options.thresholdExplanation) {
+        children.push(createParagraph('Thresholds:', { bold: true }));
+        if (Array.isArray(options.thresholdExplanation)) {
+          options.thresholdExplanation.forEach(threshold => {
+            children.push(createParagraph(threshold));
+          });
+        } else {
+          children.push(createParagraph(options.thresholdExplanation));
+        }
+      }
+      
+      // Add note if provided
+      if (options.note) {
+        children.push(createParagraph(options.note, { italics: true }));
+      }
+      
+      children.push(createParagraph(''));
     } catch (error) {
       console.warn(`Failed to add chart image: ${error.message}`);
       // Continue without chart - add placeholder text
@@ -63,27 +94,64 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     });
   };
 
-  // Helper to create a heading
-  const createHeading = (text, level = 1) => {
+  // Helper to create a heading with bookmark
+  const createHeading = (text, level = 1, bookmarkId = null) => {
     const headingLevel = level === 1 ? HeadingLevel.HEADING_1 :
                         level === 2 ? HeadingLevel.HEADING_2 :
                         HeadingLevel.HEADING_3;
+    
+    // Create bookmark ID from text (sanitize for bookmark name)
+    const bookmarkName = bookmarkId || text.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    
+    const children = [];
+    if (bookmarkId || level === 1) {
+      // Add bookmark at start of heading
+      children.push(new Bookmark({
+        id: bookmarkName,
+        children: [new TextRun({ text: '', bold: true })]
+      }));
+    }
+    children.push(new TextRun({ text, bold: true }));
+    
     return new Paragraph({
       heading: headingLevel,
-      children: [new TextRun({ text, bold: true })],
+      children: children,
       spacing: { before: level === 1 ? 0 : 200, after: 120 }
+    });
+  };
+
+  // Helper to create internal hyperlink
+  const createInternalLink = (text, bookmarkId) => {
+    return new Paragraph({
+      children: [
+        new InternalHyperlink({
+          anchor: bookmarkId,
+          children: [new TextRun({ text, style: 'Hyperlink' })]
+        })
+      ],
+      spacing: { after: 80 }
     });
   };
 
   // ============================================================
   // 1) COVER PAGE
   // ============================================================
-  children.push(createHeading(reportMetrics.project.title || 'Ethical AI Evaluation Report', 1));
+  children.push(createHeading(reportMetrics.project.title || 'Ethical AI Evaluation Report', 1, 'cover'));
   children.push(createParagraph(''));
   children.push(createParagraph(`Category: ${reportMetrics.project.category || 'Not provided'}`));
   children.push(createParagraph(`Questionnaire: ${reportMetrics.project.questionnaireKey || 'general-v1'}`));
   children.push(createParagraph(`Version: ${reportMetrics.project.questionnaireVersion || 1}`));
   children.push(createParagraph(`Generated on: ${generatedAt.toISOString().split('T')[0]}`));
+  children.push(createParagraph(''));
+
+  // ============================================================
+  // 1.1) NAVIGATION MENU (Clickable Internal Links)
+  // ============================================================
+  children.push(createParagraph('Navigation:', { bold: true }));
+  children.push(createInternalLink('Dashboard', 'dashboard'));
+  children.push(createInternalLink('Risks', 'risks'));
+  children.push(createInternalLink('Tensions', 'tensions'));
+  children.push(createInternalLink('Recommendations', 'recommendations'));
   children.push(createParagraph(''));
 
   // ============================================================
@@ -103,13 +171,40 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // Risk mapping explanation
   children.push(createParagraph(''));
   children.push(createParagraph('Risk Score Mapping:', { bold: true }));
-  children.push(createParagraph('• Score 4 = Best/Low risk'));
-  children.push(createParagraph('• Score 3 = Good/Acceptable risk'));
-  children.push(createParagraph('• Score 2 = Moderate risk'));
+  children.push(createParagraph('• Score 0 = Worst (Critical/Highest risk)'));
   children.push(createParagraph('• Score 1 = High risk'));
-  children.push(createParagraph('• Score 0 = Critical/Worst risk'));
+  children.push(createParagraph('• Score 2 = Moderate risk'));
+  children.push(createParagraph('• Score 3 = Low risk'));
+  children.push(createParagraph('• Score 4 = Best (Lowest risk)'));
   children.push(createParagraph(''));
   children.push(createParagraph('Risk Percentage Formula: Percentage of responses with score < 3.0 (indicating risk)'));
+  children.push(createParagraph(''));
+  
+  // Data Integrity Checks
+  const consistencyChecks = reportMetrics.consistencyChecks || {};
+  if (consistencyChecks && (consistencyChecks.errors?.length > 0 || consistencyChecks.warnings?.length > 0)) {
+    children.push(createParagraph(''));
+    const hasErrors = consistencyChecks.errors && consistencyChecks.errors.length > 0;
+    children.push(createParagraph(
+      hasErrors ? '⚠ Data mismatch detected' : '⚠ Data Integrity Warnings',
+      { bold: true, color: hasErrors ? 'dc2626' : 'f59e0b' }
+    ));
+    
+    if (hasErrors && consistencyChecks.errors.length > 0) {
+      consistencyChecks.errors.forEach(err => {
+        children.push(createParagraph(`• ${err}`, { color: '991b1b' }));
+      });
+    }
+    
+    if (consistencyChecks.warnings && consistencyChecks.warnings.length > 0) {
+      consistencyChecks.warnings.forEach(warn => {
+        children.push(createParagraph(`• ${warn}`, { color: '92400e' }));
+      });
+    }
+  } else if (consistencyChecks && consistencyChecks.passed) {
+    children.push(createParagraph(''));
+    children.push(createParagraph('✓ Data Integrity: All consistency checks passed', { color: '065f46' }));
+  }
   children.push(createParagraph(''));
 
   // ============================================================
@@ -119,6 +214,25 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   children.push(createParagraph(`Assigned Experts: ${reportMetrics.coverage.assignedExpertsCount}`));
   children.push(createParagraph(`Experts Started: ${reportMetrics.coverage.expertsStartedCount}`));
   children.push(createParagraph(`Experts Submitted: ${reportMetrics.coverage.expertsSubmittedCount}`));
+  
+  // CRITICAL: Show evaluators who actually submitted (no duplicates)
+  if (reportMetrics.evaluators && reportMetrics.evaluators.submitted.length > 0) {
+    children.push(createParagraph(''));
+    children.push(createParagraph('Evaluators Who Submitted:', { bold: true }));
+    reportMetrics.evaluators.submitted.forEach(e => {
+      children.push(createParagraph(`• ${e.name} (${e.role})`));
+    });
+  }
+  
+  // Data quality notes (missing scores)
+  if (reportMetrics.dataQuality && reportMetrics.dataQuality.notes && reportMetrics.dataQuality.notes.length > 0) {
+    children.push(createParagraph(''));
+    children.push(createParagraph('Data Quality Notes:', { bold: true, color: 'FF0000' }));
+    reportMetrics.dataQuality.notes.forEach(note => {
+      children.push(createParagraph(`⚠️ ${note}`, { italics: true }));
+    });
+  }
+  
   children.push(createParagraph(''));
 
   // Add team completion donut chart
@@ -184,7 +298,8 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   } else {
     // Fallback: generate from metrics
     const overallAvg = reportMetrics.scoring.totalsOverall?.avg || 0;
-    const riskLevel = overallAvg >= 3.0 ? 'Low' : overallAvg >= 2.0 ? 'Medium' : 'High';
+    // Use riskLabel function for consistent mapping (0 = worst/critical, 4 = best/low)
+    const riskLevel = riskLabel(overallAvg);
     children.push(createParagraph(`• Overall ethical risk level: ${riskLevel} (Average score: ${overallAvg.toFixed(2)}/4.0)`));
     children.push(createParagraph(`• ${reportMetrics.coverage.expertsSubmittedCount} of ${reportMetrics.coverage.assignedExpertsCount} assigned experts completed evaluations`));
     children.push(createParagraph(`• ${reportMetrics.tensions.summary.total} ethical tensions identified`));
@@ -195,7 +310,9 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // ============================================================
   // 5) ETHICS PRINCIPLES DASHBOARD
   // ============================================================
-  children.push(createHeading('Ethics Principles Dashboard', 1));
+  children.push(createHeading('Ethics Principles Dashboard', 1, 'dashboard'));
+  children.push(createInternalLink('Back to Top', 'cover'));
+  children.push(createParagraph(''));
 
   const principleTableRows = [
     new TableRow({
@@ -254,14 +371,76 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   );
   children.push(createParagraph(''));
 
-  // Add principle bar chart
+  // Add principle bar chart with legend and threshold explanation
   if (chartBuffers && chartBuffers.principleBarChart) {
     await addChartImage(
       chartBuffers.principleBarChart,
-      'Ethical Principles Score Overview',
-      700,
-      400
+      '7 Ethical Principles Score Overview',
+      800,
+      500
     );
+    // Add legend and threshold explanation as text (next to chart)
+    children.push(createParagraph('Legend & Thresholds:', { bold: true }));
+    children.push(createParagraph('Scale 0–4 (0 = lowest risk, 4 = highest risk)'));
+    children.push(createParagraph('Thresholds:'));
+    children.push(createParagraph('• 0.0–1.0 = Critical'));
+    children.push(createParagraph('• 1.0–2.0 = High'));
+    children.push(createParagraph('• 2.0–3.0 = Moderate'));
+    children.push(createParagraph('• 3.0–4.0 = Low'));
+    
+    // Calculate and show evaluator counts and N/A excluded
+    const principles = Object.keys(reportMetrics.scoring.byPrincipleOverall);
+    const totalEvaluators = principles.reduce((sum, p) => {
+      return sum + (reportMetrics.scoring.byPrincipleOverall[p]?.count || 0);
+    }, 0);
+    const avgEvaluators = totalEvaluators / principles.length;
+    const totalPossibleEvaluators = reportMetrics.evaluators.withScores.length;
+    const naExcluded = totalPossibleEvaluators - Math.round(avgEvaluators);
+    children.push(createParagraph(`Evaluators used in averages: ${Math.round(avgEvaluators)}`));
+    if (naExcluded > 0) {
+      children.push(createParagraph(`N/A excluded: ${naExcluded}`));
+    }
+    children.push(createParagraph(''));
+  }
+
+  // Add short version of top risky questions table in Dashboard
+  if (reportMetrics.topRiskDrivers && reportMetrics.topRiskDrivers.questions.length > 0) {
+    children.push(createHeading('Top Risky Questions (Summary)', 2));
+    children.push(createParagraph('See "Risks" section for detailed view with answer snippets.', { italics: true }));
+    
+    const shortRiskTableRows = [
+      new TableRow({
+        children: [
+          new TableCell({ children: [createParagraph('Question ID', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Principle', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Avg Risk', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Type', { bold: true })] })
+        ]
+      })
+    ];
+
+    reportMetrics.topRiskDrivers.questions.slice(0, 5).forEach(q => {
+      const questionType = q.isCommonQuestion ? 'Common (Core)' : 'Role-Specific';
+      shortRiskTableRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ children: [createParagraph(q.questionCode || q.questionId)] }),
+            new TableCell({ children: [createParagraph(q.principle)] }),
+            new TableCell({ children: [createParagraph(q.avgRiskScore.toFixed(2))] }),
+            new TableCell({ children: [createParagraph(questionType)] })
+          ]
+        })
+      );
+    });
+
+    children.push(
+      new Table({
+        rows: shortRiskTableRows,
+        width: { size: 100, type: WidthType.PERCENTAGE }
+      })
+    );
+    children.push(createInternalLink('View Full Risks Table →', 'risks'));
+    children.push(createParagraph(''));
   }
 
   // ============================================================
@@ -338,43 +517,83 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   if (chartBuffers && chartBuffers.principleEvaluatorHeatmap) {
     await addChartImage(
       chartBuffers.principleEvaluatorHeatmap,
-      'Principle-by-Principle Scores: Evaluator Matrix',
+      'Role × Principle Heatmap',
       900,
-      500
+      500,
+      {
+        note: 'Role-specific coverage: only submitted roles appear. N/A cells are shown in gray.'
+      }
     );
   }
 
   // ============================================================
   // 6) TOP RISK DRIVERS (Question-level)
   // ============================================================
-  children.push(createHeading('Top Risk Drivers', 1));
+  children.push(createHeading('Top Risk Drivers', 1, 'risks'));
+  children.push(createInternalLink('Back to Dashboard', 'dashboard'));
+  children.push(createParagraph(''));
 
   if (reportMetrics.topRiskDrivers.questions.length > 0) {
     const riskTableRows = [
       new TableRow({
         children: [
           new TableCell({ children: [createParagraph('Question ID', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Question Text', { bold: true })] }),
           new TableCell({ children: [createParagraph('Principle', { bold: true })] }),
           new TableCell({ children: [createParagraph('Avg Risk Score', { bold: true })] }),
-          new TableCell({ children: [createParagraph('Role(s)', { bold: true })] }),
-          new TableCell({ children: [createParagraph('Answer Excerpt', { bold: true })] })
+          new TableCell({ children: [createParagraph('Type', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Role(s) Who Answered', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Answer Snippet', { bold: true })] })
         ]
       })
     ];
 
     reportMetrics.topRiskDrivers.questions.slice(0, 10).forEach(q => {
-      const excerpt = q.answerExcerpts && q.answerExcerpts.length > 0 
-        ? q.answerExcerpts[0].substring(0, 100) + '...'
-        : 'No text answer provided';
+      // Get best answer excerpt (longest available, truncated to 120 chars for table)
+      let excerpt = '';
+      if (q.answerExcerpts && q.answerExcerpts.length > 0) {
+        // Find longest excerpt
+        const longestExcerpt = q.answerExcerpts.reduce((longest, current) => 
+          current.length > longest.length ? current : longest
+        , '');
+        // Check if it's the empty marker
+        if (longestExcerpt === '[Answer is empty / not captured]') {
+          excerpt = 'Answer is empty / not captured';
+        } else {
+          excerpt = longestExcerpt.trim().substring(0, 120) + (longestExcerpt.length > 120 ? '...' : '');
+        }
+      } else if (q.answerStatus === 'submitted_empty') {
+        excerpt = 'Answer is empty / not captured';
+      } else {
+        // Skip questions without submitted text answers (should not appear in table)
+        return;
+      }
+      
+      // Use questionText if available, otherwise fallback to questionCode or questionId
+      const questionDisplay = q.questionText || q.questionCode || q.questionId;
+      
+      // Determine question type (first 12 = common/core)
+      const questionType = q.isCommonQuestion !== undefined 
+        ? (q.isCommonQuestion ? 'Common (Core)' : 'Role-Specific')
+        : (q.questionOrder && q.questionOrder <= 12 ? 'Common (Core)' : 'Role-Specific');
+      
+      // Get roles who answered (prefer rolesWhoAnswered if available, fallback to rolesMostAtRisk)
+      const rolesLabel = (q.rolesWhoAnswered && q.rolesWhoAnswered.length > 0)
+        ? q.rolesWhoAnswered.join(', ')
+        : (q.rolesMostAtRisk && q.rolesMostAtRisk.length > 0)
+          ? q.rolesMostAtRisk.join(', ')
+          : 'N/A';
       
       riskTableRows.push(
         new TableRow({
           children: [
-            new TableCell({ children: [createParagraph(q.questionCode || q.questionId)] }),
-            new TableCell({ children: [createParagraph(q.principle)] }),
-            new TableCell({ children: [createParagraph(q.avgRiskScore.toFixed(2))] }),
-            new TableCell({ children: [createParagraph(q.rolesMostAtRisk.join(', ') || 'N/A')] }),
-            new TableCell({ children: [createParagraph(excerpt)] })
+            new TableCell({ children: [createParagraph(q.questionId || q.questionCode || 'N/A')] }), // Question ID
+            new TableCell({ children: [createParagraph(questionDisplay)] }), // Question Text
+            new TableCell({ children: [createParagraph(q.principle)] }), // Principle
+            new TableCell({ children: [createParagraph(q.avgRiskScore.toFixed(2))] }), // Avg Risk Score
+            new TableCell({ children: [createParagraph(questionType)] }), // Type (Common/Role-Specific)
+            new TableCell({ children: [createParagraph(rolesLabel)] }), // Role(s) Who Answered
+            new TableCell({ children: [createParagraph(excerpt)] }) // Answer Snippet
           ]
         })
       );
@@ -405,16 +624,33 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // ============================================================
   // 7) ETHICAL TENSIONS (Z-Inspection style)
   // ============================================================
-  children.push(createHeading('Ethical Tensions', 1));
+  children.push(createHeading('Ethical Tensions', 1, 'tensions'));
+  children.push(createInternalLink('Back to Dashboard', 'dashboard'));
+  children.push(createParagraph(''));
 
   // Add tension visualizations
   if (chartBuffers) {
     if (chartBuffers.tensionReviewStateChart) {
       await addChartImage(
         chartBuffers.tensionReviewStateChart,
-        'Tension Review State Distribution',
+        'Tension Review State Distribution (with Consensus Maturity)',
+        600,
         500,
-        500
+        {
+          legend: 'Shows distribution of tensions by review state (Proposed, Under Review, Accepted, Disputed) and consensus maturity.'
+        }
+      );
+    }
+    
+    if (chartBuffers.evidenceCoverageDonut) {
+      await addChartImage(
+        chartBuffers.evidenceCoverageDonut,
+        'Evidence Coverage Donut (Evidence Types Distribution)',
+        600,
+        500,
+        {
+          legend: 'Distribution of evidence types across tensions (Policy, Test, User feedback, Logs, Incident, Other).'
+        }
       );
     }
     
@@ -423,21 +659,91 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         chartBuffers.severityChart,
         'Tension Severity Distribution',
         500,
-        400
+        400,
+        {
+          legend: 'Distribution of tensions by severity level (Critical, High, Medium, Low).'
+        }
       );
     }
     
     if (chartBuffers.evidenceTypeChart) {
       await addChartImage(
         chartBuffers.evidenceTypeChart,
-        'Evidence Type Distribution',
+        'Evidence Type Distribution (Bar Chart)',
         600,
-        400
+        400,
+        {
+          legend: 'Count of evidence items by type across all tensions.'
+        }
       );
     }
   }
 
+  // ============================================================
+  // 7.1) TENSIONS TABLE (Summary View)
+  // ============================================================
   if (reportMetrics.tensions.list.length > 0) {
+    children.push(createHeading('Tensions Summary Table', 2));
+    
+    const tensionsTableRows = [
+      new TableRow({
+        children: [
+          new TableCell({ children: [createParagraph('Conflict', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Severity', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Review State', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Votes (Agree/Disagree)', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Agree %', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Evidence Count', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Evidence Types', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Discussions', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Claim (One-line)', { bold: true })] })
+        ]
+      })
+    ];
+
+    reportMetrics.tensions.list.forEach(tension => {
+      const conflictLabel = `${tension.conflict.principle1} ↔ ${tension.conflict.principle2}`;
+      const votesLabel = `${tension.consensus.agreeCount}/${tension.consensus.disagreeCount}`;
+      const evidenceTypesLabel = tension.evidence.types.length > 0 
+        ? tension.evidence.types.join(', ')
+        : 'N/A';
+      const claimOneLine = (tension.claim || 'Not provided').substring(0, 80) + 
+        ((tension.claim && tension.claim.length > 80) ? '...' : '');
+      
+      tensionsTableRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ children: [createParagraph(conflictLabel)] }),
+            new TableCell({ children: [createParagraph(tension.severityLevel || 'Unknown')] }),
+            new TableCell({ children: [createParagraph(tension.consensus.reviewState)] }),
+            new TableCell({ children: [createParagraph(votesLabel)] }),
+            new TableCell({ children: [createParagraph(`${tension.consensus.agreePct.toFixed(1)}%`)] }),
+            new TableCell({ children: [createParagraph(String(tension.evidence.count))] }),
+            new TableCell({ children: [createParagraph(evidenceTypesLabel)] }),
+            new TableCell({ children: [createParagraph(String(tension.discussionCount || 0))] }),
+            new TableCell({ children: [createParagraph(claimOneLine)] })
+          ]
+        })
+      );
+    });
+
+    children.push(
+      new Table({
+        rows: tensionsTableRows,
+        width: { size: 100, type: WidthType.PERCENTAGE }
+      })
+    );
+    children.push(createParagraph(''));
+    children.push(createParagraph('Note: Votes exclude the tension creator/owner (they cannot vote on their own tensions).', { italics: true }));
+    children.push(createParagraph(''));
+  }
+
+  // ============================================================
+  // 7.2) TENSIONS DETAILED VIEW
+  // ============================================================
+  if (reportMetrics.tensions.list.length > 0) {
+    children.push(createHeading('Tensions Detailed View', 2));
+    
     reportMetrics.tensions.list.forEach((tension, idx) => {
       const header = `Conflict: ${tension.conflict.principle1} ↔ ${tension.conflict.principle2} | Severity: ${tension.severityLevel} | Review State: ${tension.consensus.reviewState}`;
       children.push(createHeading(`Tension ${idx + 1}: ${header}`, 2));
@@ -526,7 +832,9 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // ============================================================
   // 8) ACTION PLAN
   // ============================================================
-  children.push(createHeading('Action Plan', 1));
+  children.push(createHeading('Action Plan', 1, 'recommendations'));
+  children.push(createInternalLink('Back to Dashboard', 'dashboard'));
+  children.push(createParagraph(''));
 
   if (geminiNarrative && Array.isArray(geminiNarrative.recommendations) && geminiNarrative.recommendations.length > 0) {
     const actionTableRows = [
@@ -535,22 +843,29 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
           new TableCell({ children: [createParagraph('Recommendation', { bold: true })] }),
           new TableCell({ children: [createParagraph('Priority', { bold: true })] }),
           new TableCell({ children: [createParagraph('Owner Role', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Owner (Person)', { bold: true })] }),
           new TableCell({ children: [createParagraph('Timeline', { bold: true })] }),
           new TableCell({ children: [createParagraph('Success Metric', { bold: true })] }),
+          new TableCell({ children: [createParagraph('Data Basis', { bold: true })] }),
           new TableCell({ children: [createParagraph('Linked To', { bold: true })] })
         ]
       })
     ];
 
     geminiNarrative.recommendations.forEach(rec => {
+      // Owner person: use ownerPerson if available, otherwise "Assign owner"
+      const ownerPerson = rec.ownerPerson || 'Assign owner';
+      
       actionTableRows.push(
         new TableRow({
           children: [
             new TableCell({ children: [createParagraph(rec.title || '')] }),
             new TableCell({ children: [createParagraph(rec.priority || '')] }),
             new TableCell({ children: [createParagraph(rec.ownerRole || '')] }),
+            new TableCell({ children: [createParagraph(ownerPerson)] }),
             new TableCell({ children: [createParagraph(rec.timeline || '')] }),
             new TableCell({ children: [createParagraph(rec.successMetric || '')] }),
+            new TableCell({ children: [createParagraph(rec.dataBasis || '')] }),
             new TableCell({ children: [createParagraph(rec.linkedTo ? rec.linkedTo.join(', ') : '')] })
           ]
         })
@@ -569,23 +884,67 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   children.push(createParagraph(''));
 
   // ============================================================
-  // 9) LIMITATIONS & ASSUMPTIONS
+  // 9) LIMITATIONS & ASSUMPTIONS (DETERMINISTIC - from dataQuality)
   // ============================================================
   children.push(createHeading('Limitations & Assumptions', 1));
-
-  if (geminiNarrative && Array.isArray(geminiNarrative.limitations)) {
-    geminiNarrative.limitations.forEach(limitation => {
+  
+  // Build deterministic limitations from dataQuality (NOT from Gemini)
+  const dataQuality = reportMetrics.dataQuality || {};
+  const limitations = [];
+  
+  // 1. Submitted count check
+  const submittedCount = reportMetrics.team?.submittedCount || reportMetrics.coverage?.expertsSubmittedCount || 0;
+  const assignedCount = reportMetrics.team?.assignedCount || reportMetrics.coverage?.assignedExpertsCount || 0;
+  
+  if (submittedCount === 0) {
+    limitations.push('No evaluators have submitted their responses. This report is based on incomplete data.');
+  } else if (submittedCount < assignedCount) {
+    limitations.push(`Not all assigned experts have submitted evaluations (${submittedCount}/${assignedCount} submitted).`);
+  }
+  
+  // 2. Missing scores
+  if (dataQuality.missingScores && dataQuality.missingScores.count > 0) {
+    limitations.push(`${dataQuality.missingScores.count} evaluator(s) submitted responses but have no canonical scores in MongoDB. Scores may need to be recomputed.`);
+  }
+  
+  // 3. Missing answer texts
+  if (dataQuality.answerTexts) {
+    if (dataQuality.answerTexts.submittedCountWithMissingText > 0) {
+      if (dataQuality.answerTexts.submittedCountWithText === 0) {
+        limitations.push(`Evaluators submitted scores but did not provide answer texts (${dataQuality.answerTexts.submittedCountWithMissingText} evaluator(s)).`);
+      } else {
+        limitations.push(`${dataQuality.answerTexts.submittedCountWithMissingText} evaluator(s) submitted responses but some answer texts are empty or not captured.`);
+      }
+    }
+  }
+  
+  // 4. Missing evidence
+  if (dataQuality.evidence && dataQuality.evidence.tensionsWithoutEvidenceCount > 0) {
+    limitations.push(`${dataQuality.evidence.tensionsWithoutEvidenceCount} tension(s) lack evidence attachments (evidence coverage: ${dataQuality.evidence.evidenceCoveragePct}%).`);
+  }
+  
+  // 5. Missing mitigations
+  if (dataQuality.mitigation && dataQuality.mitigation.missingCount > 0) {
+    limitations.push(`${dataQuality.mitigation.missingCount} tension(s) lack proposed mitigations (${dataQuality.mitigation.missingPct}% without mitigation).`);
+  }
+  
+  // 6. Incomplete responses
+  if (dataQuality.incompleteResponses && dataQuality.incompleteResponses.count > 0) {
+    limitations.push(`${dataQuality.incompleteResponses.count} response(s) are incomplete (less than 80% of required questions answered).`);
+  }
+  
+  // 7. Missing answers
+  if (dataQuality.missingAnswers && dataQuality.missingAnswers.count > 0) {
+    limitations.push(`${dataQuality.missingAnswers.count} required question(s) have no answers from any evaluator.`);
+  }
+  
+  // Display limitations
+  if (limitations.length > 0) {
+    limitations.forEach(limitation => {
       children.push(createParagraph(`• ${limitation}`));
     });
   } else {
-    // Fallback limitations
-    const tensionsWithoutEvidence = reportMetrics.tensions.list.filter(t => t.evidence.count === 0).length;
-    if (tensionsWithoutEvidence > 0) {
-      children.push(createParagraph(`• ${tensionsWithoutEvidence} tensions lack evidence attachments`));
-    }
-    if (reportMetrics.coverage.expertsSubmittedCount < reportMetrics.coverage.assignedExpertsCount) {
-      children.push(createParagraph(`• Not all assigned experts have submitted evaluations (${reportMetrics.coverage.expertsSubmittedCount}/${reportMetrics.coverage.assignedExpertsCount})`));
-    }
+    children.push(createParagraph('No significant data quality limitations identified.'));
   }
   children.push(createParagraph(''));
 
@@ -595,7 +954,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   children.push(createHeading('Appendix', 1));
 
   children.push(createParagraph('Glossary:', { bold: true }));
-  children.push(createParagraph('• Risk Score: 0-4 scale where 4 = best/low risk, 0 = worst/high risk'));
+  children.push(createParagraph('• Risk Score: 0-4 scale where 0 = lowest risk (no/negligible risk), 4 = highest risk (high risk requiring immediate mitigation)'));
   children.push(createParagraph('• Risk %: Percentage of responses with score < 3.0'));
   children.push(createParagraph('• Safe %: Percentage of responses with score >= 3.0'));
   children.push(createParagraph('• Severity Levels: Critical, High, Medium, Low (based on avgRiskScore)'));

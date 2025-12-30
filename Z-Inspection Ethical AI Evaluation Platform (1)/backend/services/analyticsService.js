@@ -5,7 +5,8 @@ const Tension = mongoose.model('Tension');
 const ProjectAssignment = require('../models/projectAssignment');
 const Question = require('../models/question');
 const User = mongoose.model('User');
-const { getProjectEvaluators } = require('./reportMetricsService');
+// Lazy load getProjectEvaluators to avoid circular dependency
+// const { getProjectEvaluators } = require('./reportMetricsService');
 
 const isValidObjectId = (id) => {
   if (typeof mongoose.isValidObjectId === 'function') {
@@ -90,6 +91,8 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   });
   
   // Also get assigned evaluators for participation metrics
+  // Lazy load to avoid circular dependency
+  const { getProjectEvaluators } = require('./reportMetricsService');
   const evaluators = await getProjectEvaluators(projectId);
 
   // Get responses for answer snippets
@@ -286,15 +289,20 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   }
 
   const topRiskyQuestions = Object.values(questionScores)
-    .map(q => ({
-      questionId: q.questionId,
-      principleKey: q.principleKey,
-      avgRiskScore: q.scores.reduce((a, b) => a + b, 0) / q.scores.length,
-      n: q.scores.length,
-      rolesInvolved: Array.from(q.roles),
-      weight: 1 // Default weight
-    }))
-    .sort((a, b) => b.avgRiskScore - a.avgRiskScore) // Higher score = higher risk
+    .map(q => {
+      const question = questionMap.get(q.questionId);
+      return {
+        questionId: q.questionId,
+        questionText: question?.text || question?.questionText || question?.code || q.questionId, // Add question text
+        questionCode: question?.code || q.questionId,
+        principleKey: q.principleKey,
+        avgRiskScore: q.scores.reduce((a, b) => a + b, 0) / q.scores.length,
+        n: q.scores.length,
+        rolesInvolved: Array.from(q.roles),
+        weight: 1 // Default weight
+      };
+    })
+    .sort((a, b) => a.avgRiskScore - b.avgRiskScore) // Lower score = higher risk (0 = worst, 4 = best)
     .slice(0, 10);
 
   // ============================================================
@@ -303,7 +311,8 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   const topQuestionIds = new Set(topRiskyQuestions.map(q => q.questionId));
   const topRiskyQuestionContext = [];
   
-  responses.forEach(response => {
+  // Only process submitted responses for answer snippets
+  responses.filter(r => r.status === 'submitted').forEach(response => {
     if (response.answers && Array.isArray(response.answers)) {
       response.answers.forEach(answer => {
         const qId = answer.questionId?.toString();
@@ -317,7 +326,18 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
               answerSnippet: answerText.trim().substring(0, 160),
               score: answer.score
             });
+          } else if (answerText && answerText.trim().length > 0) {
+            // Answer exists but is too short (less than 20 chars) - still include it
+            topRiskyQuestionContext.push({
+              questionId: qId,
+              role: response.role || 'unknown',
+              userId: response.userId?.toString() || '',
+              answerSnippet: answerText.trim().substring(0, 160),
+              score: answer.score,
+              isShort: true
+            });
           }
+          // If answerText is empty, don't add to context (will be handled as "submitted_empty" in reportMetricsService)
         }
       });
     }
@@ -476,6 +496,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
 }
 
 module.exports = {
-  getProjectAnalytics
+  getProjectAnalytics,
+  computeReviewState
 };
 

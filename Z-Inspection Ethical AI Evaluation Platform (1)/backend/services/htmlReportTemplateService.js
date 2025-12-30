@@ -35,22 +35,19 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // Risk tier mapping (0-4 scale: Higher score = Higher risk)
-  // Note: In Z-Inspection, score 4 = best/low risk, score 0 = worst/high risk
-  // But user requirement says "Higher score = Higher risk", so we invert the logic
-  // Actually, let me check: if score 4 = best, then higher score = lower risk
-  // User says "Higher score = Higher risk", so we need to check the actual scale
-  // Based on the requirement: "0.0-1.0 = Low risk / Good, 3.0-4.0 = Critical"
-  // This means: Lower score = Better, Higher score = Worse (Critical)
+  // Risk tier mapping using shared function
+  // Scoring interpretation: 0 = worst (highest risk/critical concern), 4 = best (lowest risk)
+  // Lower score = Higher risk, Higher score = Lower risk
+  const { riskLabel } = require('../utils/riskLabel');
   const getRiskTier = (score) => {
-    // Score 0-1: Low risk (best)
-    if (score <= 1.0) return { label: 'Low', color: '#10b981' };
-    // Score 1-2: Moderate risk
-    if (score <= 2.0) return { label: 'Moderate', color: '#f59e0b' };
-    // Score 2-3: High risk
-    if (score <= 3.0) return { label: 'High', color: '#ef4444' };
-    // Score 3-4: Critical risk (worst)
-    return { label: 'Critical', color: '#dc2626' };
+    const label = riskLabel(score);
+    const colorMap = {
+      'Low': '#10b981',      // Green - lowest risk
+      'Moderate': '#f59e0b', // Amber
+      'High': '#ef4444',     // Red
+      'Critical': '#dc2626'  // Dark red - highest risk
+    };
+    return { label, color: colorMap[label] || '#6b7280' };
   };
 
   const overallAvg = scoring.totalsOverall?.avg || 0;
@@ -375,12 +372,12 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <h3>Ethical Principles Score Overview</h3>
       <img src="${getChartImage('principleBarChart')}" alt="Principle Scores Chart" class="chart-image" />
       <div class="chart-legend">
-        <h4>Scale (0-4): Higher Score = Higher Risk</h4>
+        <h4>Scale 0–4 (0 = lowest risk, 4 = highest risk)</h4>
         <ul>
-          <li><strong>0.0-1.0:</strong> Low risk / Good</li>
-          <li><strong>1.0-2.0:</strong> Moderate risk</li>
-          <li><strong>2.0-3.0:</strong> High risk</li>
-          <li><strong>3.0-4.0:</strong> Critical risk</li>
+          <li><strong>0.0–1.0:</strong> Low</li>
+          <li><strong>1.0–2.0:</strong> Moderate</li>
+          <li><strong>2.0–3.0:</strong> High</li>
+          <li><strong>3.0–4.0:</strong> Critical</li>
         </ul>
         <p style="margin-top: 0.3cm; font-style: italic; color: #6b7280;">
           <strong>Note:</strong> Scores are canonical from scores collection; Gemini does not compute scores.
@@ -396,7 +393,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <img src="${getChartImage('principleEvaluatorHeatmap')}" alt="Principle-Evaluator Heatmap" class="chart-image" />
       <div class="chart-legend">
         <h4>Heatmap Legend</h4>
-        <p>Cells show evaluator's average risk score per principle (0-4 scale).</p>
+        <p>Cells show evaluator's average risk score per principle (0-4 scale, 0 = lowest risk, 4 = highest risk).</p>
         <p><strong>N/A</strong> = evaluator did not submit responses for this principle.</p>
         <p>Only evaluators with submitted responses (status="submitted") are shown.</p>
         <p><strong>Note:</strong> Evaluators are derived from scores collection - no hardcoded "Expert 1/2" labels.</p>
@@ -454,12 +451,13 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <table>
         <thead>
           <tr>
-            <th>Rank</th>
+            <th>Question ID</th>
+            <th>Question Text</th>
             <th>Principle</th>
-            <th>Question</th>
             <th>Avg Risk Score</th>
-            <th>Roles</th>
-            <th>Answer Excerpt</th>
+            <th>Type</th>
+            <th>Role(s) Who Answered</th>
+            <th>Answer Snippet</th>
           </tr>
         </thead>
         <tbody>
@@ -467,18 +465,46 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
             const riskTier = getRiskTier(q.avgRiskScore || q.avgRiskScore);
             // Get answer snippet from topRiskyQuestionContext
             const contextItem = options.analytics?.topRiskyQuestionContext?.find(c => c.questionId === q.questionId);
-            const excerpt = contextItem?.answerSnippet 
-              ? contextItem.answerSnippet.substring(0, 140) + (contextItem.answerSnippet.length > 140 ? '...' : '')
-              : (q.answerExcerpts && q.answerExcerpts.length > 0 
-                ? q.answerExcerpts[0].substring(0, 140) + (q.answerExcerpts[0].length > 140 ? '...' : '')
-                : 'No text answer provided');
+            let excerpt = '';
+            if (contextItem?.answerSnippet) {
+              excerpt = contextItem.answerSnippet.substring(0, 140) + (contextItem.answerSnippet.length > 140 ? '...' : '');
+            } else if (q.answerExcerpts && q.answerExcerpts.length > 0) {
+              const excerptText = q.answerExcerpts[0];
+              if (excerptText === '[Answer is empty / not captured]') {
+                excerpt = 'Answer is empty / not captured';
+              } else {
+                excerpt = excerptText.substring(0, 140) + (excerptText.length > 140 ? '...' : '');
+              }
+            } else if (q.answerStatus === 'submitted_empty') {
+              excerpt = 'Answer is empty / not captured';
+            } else {
+              // Skip questions without submitted text answers
+              return '';
+            }
+            
+            // Use questionText if available, otherwise fallback to questionCode or questionId
+            const questionDisplay = q.questionText || q.questionCode || q.questionId;
+            const questionId = q.questionId || q.questionCode || 'N/A';
+            // Determine question type (first 12 = common/core)
+            const questionType = q.isCommonQuestion !== undefined 
+              ? (q.isCommonQuestion ? 'Common (Core)' : 'Role-Specific')
+              : (q.questionOrder && q.questionOrder <= 12 ? 'Common (Core)' : 'Role-Specific');
+            // Get roles who answered
+            const rolesLabel = (q.rolesWhoAnswered && q.rolesWhoAnswered.length > 0)
+              ? q.rolesWhoAnswered.join(', ')
+              : (q.rolesMostAtRisk && q.rolesMostAtRisk.length > 0)
+                ? q.rolesMostAtRisk.join(', ')
+                : (q.rolesInvolved && q.rolesInvolved.length > 0)
+                  ? q.rolesInvolved.join(', ')
+                  : 'N/A';
             return `
             <tr>
-              <td>${idx + 1}</td>
+              <td style="font-size: 8pt;">${questionId}</td>
+              <td style="font-size: 8pt;">${questionDisplay}</td>
               <td>${q.principleKey || q.principle || 'Unknown'}</td>
-              <td style="font-size: 8pt;">${q.questionId || q.questionCode || 'N/A'}</td>
-              <td><strong>${(q.avgRiskScore || q.avgRiskScore).toFixed(2)}</strong></td>
-              <td>${(q.rolesInvolved || q.rolesMostAtRisk || []).join(', ') || 'N/A'}</td>
+              <td><strong>${(q.avgRiskScore || q.avgRisk || 0).toFixed(2)}</strong></td>
+              <td>${questionType}</td>
+              <td style="font-size: 8pt;">${rolesLabel}</td>
               <td style="font-size: 8pt; color: #4b5563;">${excerpt}</td>
             </tr>
             `;
@@ -566,12 +592,15 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <table>
         <thead>
           <tr>
-            <th>Conflict</th>
+            <th>Conflict Principles</th>
             <th>Severity</th>
             <th>Review State</th>
-            <th>Evidence</th>
-            <th>Consensus</th>
-            <th>Comments</th>
+            <th>Agree/Disagree</th>
+            <th>Agree %</th>
+            <th>Evidence Count</th>
+            <th>Evidence Types</th>
+            <th>Discussions</th>
+            <th>Claim (One-line)</th>
             <th>Created By</th>
           </tr>
         </thead>
@@ -579,31 +608,36 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
           ${(options.analytics?.tensionsTable || tensions.list || []).map(t => {
             const evidenceCount = t.evidenceCount || t.evidence?.count || 0;
             const evidenceTypes = t.evidenceTypes || t.evidence?.types || [];
-            const evidenceStatus = evidenceCount > 0 
-              ? `${evidenceCount} attached${evidenceTypes.length > 0 ? ' (' + Object.keys(evidenceTypes).join(', ') + ')' : ''}`
-              : '<strong style="color: #dc2626;">No evidence attached</strong>';
+            const evidenceTypesLabel = evidenceTypes.length > 0 
+              ? evidenceTypes.join(', ')
+              : 'N/A';
             const agreeCount = t.agreeCount || t.consensus?.agreeCount || 0;
             const disagreeCount = t.disagreeCount || t.consensus?.disagreeCount || 0;
             const agreePct = t.agreePct || t.consensus?.agreePct || 0;
-            const totalVotes = agreeCount + disagreeCount;
-            const consensusText = totalVotes > 0
-              ? `${agreeCount} agree / ${disagreeCount} disagree (${agreePct.toFixed(1)}% agree)`
-              : 'No votes yet';
-            const commentCount = t.commentCount || 0;
+            const discussionCount = t.discussionCount || t.commentCount || 0;
+            const claimOneLine = (t.claim || t.claimStatement || 'Not provided').substring(0, 80) + 
+              ((t.claim || t.claimStatement) && (t.claim || t.claimStatement).length > 80 ? '...' : '');
+            const conflictLabel = `${t.conflict?.principle1 || t.principle1 || ''} ↔ ${t.conflict?.principle2 || t.principle2 || ''}`;
             return `
             <tr>
-              <td>${t.conflict?.principle1 || t.conflict?.principle1 || ''} ↔ ${t.conflict?.principle2 || t.conflict?.principle2 || ''}</td>
+              <td>${conflictLabel}</td>
               <td><span class="risk-badge risk-${(t.severityLevel || 'Unknown').toLowerCase()}">${t.severityLevel || 'Unknown'}</span></td>
               <td>${t.reviewState || t.consensus?.reviewState || 'Proposed'}</td>
-              <td>${evidenceStatus}</td>
-              <td style="font-size: 8pt;">${consensusText}</td>
-              <td>${commentCount}</td>
-              <td style="font-size: 8pt;">${t.createdByRole || 'Unknown'}</td>
+              <td>${agreeCount} / ${disagreeCount}</td>
+              <td>${agreePct.toFixed(1)}%</td>
+              <td>${evidenceCount}</td>
+              <td style="font-size: 8pt;">${evidenceTypesLabel}</td>
+              <td>${discussionCount}</td>
+              <td style="font-size: 8pt;">${claimOneLine}</td>
+              <td style="font-size: 8pt;">${t.createdByName || t.createdByRole || 'Unknown'}</td>
             </tr>
             `;
           }).join('')}
         </tbody>
       </table>
+      <p style="font-size: 8pt; color: #6b7280; margin-top: 0.5cm; font-style: italic;">
+        Note: Votes exclude the tension creator/owner (they cannot vote on their own tensions).
+      </p>
       ` : '<p>No ethical tensions identified.</p>'}
       
       ${geminiNarrative?.tensionsNarrative ? `
@@ -694,22 +728,30 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
             <th>Recommendation</th>
             <th>Priority</th>
             <th>Owner Role</th>
+            <th>Owner (Person)</th>
             <th>Timeline</th>
             <th>Success Metric</th>
+            <th>Data Basis</th>
             <th>Linked To</th>
           </tr>
         </thead>
         <tbody>
-          ${geminiNarrative.recommendations.map(rec => `
+          ${geminiNarrative.recommendations.map(rec => {
+            // Owner person: use ownerPerson if available, otherwise "Assign owner"
+            const ownerPerson = rec.ownerPerson || 'Assign owner';
+            return `
             <tr>
               <td>${rec.title || ''}</td>
               <td><span class="risk-badge risk-${(rec.priority || 'Med').toLowerCase()}">${rec.priority || 'Med'}</span></td>
               <td>${rec.ownerRole || 'Project team'}</td>
+              <td>${ownerPerson}</td>
               <td>${rec.timeline || 'TBD'}</td>
               <td style="font-size: 8pt;">${rec.successMetric || ''}</td>
+              <td style="font-size: 8pt;">${rec.dataBasis || ''}</td>
               <td style="font-size: 8pt;">${rec.linkedTo ? rec.linkedTo.join(', ') : ''}</td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
     </div>
@@ -748,6 +790,49 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       </ul>
       
       <p style="margin-top: 0.4cm;"><strong>Risk Percentage Formula:</strong> Percentage of responses with score &lt; 3.0 (indicating risk)</p>
+      
+      <!-- Data Integrity Checks -->
+      ${(() => {
+        const consistencyChecks = options.reportMetrics?.consistencyChecks || reportMetrics?.consistencyChecks || {};
+        if (!consistencyChecks || Object.keys(consistencyChecks).length === 0) {
+          return '';
+        }
+        
+        const hasErrors = consistencyChecks.errors && consistencyChecks.errors.length > 0;
+        const hasWarnings = consistencyChecks.warnings && consistencyChecks.warnings.length > 0;
+        
+        if (!hasErrors && !hasWarnings) {
+          return `
+      <div style="margin-top: 0.8cm; padding: 0.5cm; background: #d1fae5; border-left: 4px solid #10b981; border-radius: 4px;">
+        <p style="margin: 0; font-weight: bold; color: #065f46;">✓ Data Integrity: All consistency checks passed</p>
+      </div>`;
+        }
+        
+        let html = `
+      <div style="margin-top: 0.8cm; padding: 0.5cm; background: ${hasErrors ? '#fee2e2' : '#fef3c7'}; border-left: 4px solid ${hasErrors ? '#dc2626' : '#f59e0b'}; border-radius: 4px;">
+        <p style="margin: 0 0 0.3cm 0; font-weight: bold; color: ${hasErrors ? '#991b1b' : '#92400e'};">
+          ${hasErrors ? '⚠ Data mismatch detected' : '⚠ Data Integrity Warnings'}
+        </p>`;
+        
+        if (hasErrors) {
+          html += `<ul style="margin: 0.3cm 0 0 1.5cm; padding: 0; color: #991b1b;">`;
+          consistencyChecks.errors.forEach(err => {
+            html += `<li style="margin: 0.2cm 0;">${err}</li>`;
+          });
+          html += `</ul>`;
+        }
+        
+        if (hasWarnings) {
+          html += `<ul style="margin: 0.3cm 0 0 1.5cm; padding: 0; color: #92400e;">`;
+          consistencyChecks.warnings.forEach(warn => {
+            html += `<li style="margin: 0.2cm 0;">${warn}</li>`;
+          });
+          html += `</ul>`;
+        }
+        
+        html += `</div>`;
+        return html;
+      })()}
     </div>
 
     <div class="section" id="section-appendix" style="margin-top: 1.5cm;">
@@ -796,15 +881,67 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       ` : ''}
       
       <h3 style="margin-top: 0.8cm;">Limitations</h3>
-      ${geminiNarrative?.limitations && geminiNarrative.limitations.length > 0 ? `
-      <ul style="margin-left: 1.5cm; margin-top: 0.4cm;">
-        ${geminiNarrative.limitations.map(lim => `<li>${lim}</li>`).join('')}
-      </ul>
-      ` : '<p>No specific limitations identified.</p>'}
+      ${(() => {
+        // Build deterministic limitations from dataQuality (NOT from Gemini)
+        const dataQuality = options.reportMetrics?.dataQuality || {};
+        const limitations = [];
+        
+        // 1. Submitted count check
+        const submittedCount = options.reportMetrics?.team?.submittedCount || options.analytics?.evaluators?.length || 0;
+        const assignedCount = options.reportMetrics?.team?.assignedCount || options.analytics?.participation?.assignedCount || 0;
+        
+        if (submittedCount === 0) {
+          limitations.push('No evaluators have submitted their responses. This report is based on incomplete data.');
+        } else if (submittedCount < assignedCount) {
+          limitations.push(`Not all assigned experts have submitted evaluations (${submittedCount}/${assignedCount} submitted).`);
+        }
+        
+        // 2. Missing scores
+        if (dataQuality.missingScores && dataQuality.missingScores.count > 0) {
+          limitations.push(`${dataQuality.missingScores.count} evaluator(s) submitted responses but have no canonical scores in MongoDB. Scores may need to be recomputed.`);
+        }
+        
+        // 3. Missing answer texts
+        if (dataQuality.answerTexts) {
+          if (dataQuality.answerTexts.submittedCountWithMissingText > 0) {
+            if (dataQuality.answerTexts.submittedCountWithText === 0) {
+              limitations.push(`Evaluators submitted scores but did not provide answer texts (${dataQuality.answerTexts.submittedCountWithMissingText} evaluator(s)).`);
+            } else {
+              limitations.push(`${dataQuality.answerTexts.submittedCountWithMissingText} evaluator(s) submitted responses but some answer texts are empty or not captured.`);
+            }
+          }
+        }
+        
+        // 4. Missing evidence
+        if (dataQuality.evidence && dataQuality.evidence.tensionsWithoutEvidenceCount > 0) {
+          limitations.push(`${dataQuality.evidence.tensionsWithoutEvidenceCount} tension(s) lack evidence attachments (evidence coverage: ${dataQuality.evidence.evidenceCoveragePct}%).`);
+        }
+        
+        // 5. Missing mitigations
+        if (dataQuality.mitigation && dataQuality.mitigation.missingCount > 0) {
+          limitations.push(`${dataQuality.mitigation.missingCount} tension(s) lack proposed mitigations (${dataQuality.mitigation.missingPct}% without mitigation).`);
+        }
+        
+        // 6. Incomplete responses
+        if (dataQuality.incompleteResponses && dataQuality.incompleteResponses.count > 0) {
+          limitations.push(`${dataQuality.incompleteResponses.count} response(s) are incomplete (less than 80% of required questions answered).`);
+        }
+        
+        // 7. Missing answers
+        if (dataQuality.missingAnswers && dataQuality.missingAnswers.count > 0) {
+          limitations.push(`${dataQuality.missingAnswers.count} required question(s) have no answers from any evaluator.`);
+        }
+        
+        if (limitations.length > 0) {
+          return `<ul style="margin-left: 1.5cm; margin-top: 0.4cm;">${limitations.map(lim => `<li>${lim}</li>`).join('')}</ul>`;
+        } else {
+          return '<p>No significant data quality limitations identified.</p>';
+        }
+      })()}
       
       <h3 style="margin-top: 0.8cm;">Glossary</h3>
       <ul style="margin-left: 1.5cm; margin-top: 0.4cm; font-size: 9pt;">
-        <li><strong>Risk Score:</strong> 0-4 scale where 4 = best/low risk, 0 = worst/high risk</li>
+        <li><strong>Risk Score:</strong> 0-4 scale where 0 = lowest risk, 4 = highest risk</li>
         <li><strong>Risk %:</strong> Percentage of responses with score &lt; 3.0</li>
         <li><strong>Safe %:</strong> Percentage of responses with score &gt;= 3.0</li>
         <li><strong>Severity Levels:</strong> Critical, High, Medium, Low (based on avgRiskScore)</li>

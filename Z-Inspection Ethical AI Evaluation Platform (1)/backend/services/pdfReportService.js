@@ -230,67 +230,145 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
     
     // Step 5: Convert HTML to PDF using Puppeteer
     console.log('🖨️ Converting HTML to PDF...');
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu'
-      ]
-    });
+    console.log(`📄 HTML content length: ${html.length} characters`);
     
-    const page = await browser.newPage();
-    
-    // Set content
-    await page.setContent(html, {
-      waitUntil: 'networkidle0',
-      timeout: 30000
-    });
-    
-    // Wait for images to load
-    await page.evaluateHandle(() => {
-      return Promise.all(
-        Array.from(document.images).map(img => {
-          if (img.complete) return Promise.resolve();
-          return new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            setTimeout(reject, 5000);
-          });
-        })
-      );
-    }).catch(() => {
-      // Continue even if some images fail to load
-      console.warn('Some images may not have loaded');
-    });
+    let page;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu'
+        ],
+        timeout: 60000 // 60 second timeout for browser launch
+      });
+      
+      console.log('✅ Browser launched successfully');
+      
+      page = await browser.newPage();
+      console.log('✅ New page created');
+      
+      // Set content with longer timeout
+      console.log('📝 Setting HTML content...');
+      await page.setContent(html, {
+        waitUntil: 'networkidle0',
+        timeout: 60000 // 60 second timeout
+      });
+      console.log('✅ HTML content set');
+      
+      // Wait for images to load
+      console.log('🖼️ Waiting for images to load...');
+      await page.evaluateHandle(() => {
+        return Promise.all(
+          Array.from(document.images).map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              setTimeout(reject, 10000); // Increased timeout for images
+            });
+          })
+        );
+      }).catch((imgError) => {
+        // Continue even if some images fail to load
+        console.warn('⚠️ Some images may not have loaded:', imgError.message);
+      });
+      console.log('✅ Images loaded (or skipped)');
+    } catch (setupError) {
+      console.error('❌ Error setting up Puppeteer:', setupError);
+      throw new Error(`Failed to set up PDF generation: ${setupError.message}`);
+    }
     
     // Generate PDF
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      margin: {
-        top: '2cm',
-        right: '1.5cm',
-        bottom: '2cm',
-        left: '1.5cm'
-      },
-      printBackground: true,
-      preferCSSPageSize: true,
-      displayHeaderFooter: true,
-      headerTemplate: `
-        <div style="font-size: 8pt; color: #6b7280; width: 100%; text-align: center; padding: 0.5cm;">
-          <span>${reportMetrics.project.title || 'Ethical AI Evaluation Report'}</span>
-        </div>
-      `,
-      footerTemplate: `
-        <div style="font-size: 8pt; color: #6b7280; width: 100%; text-align: center; padding: 0.5cm;">
-          <span class="pageNumber"></span> / <span class="totalPages"></span>
-        </div>
-      `
-    });
+    console.log('📄 Generating PDF buffer...');
+    let pdfBuffer;
     
-    console.log('✅ PDF report generated successfully');
+    if (!page) {
+      throw new Error('Page object is null or undefined');
+    }
+    
+    try {
+      const pdfResult = await page.pdf({
+        format: 'A4',
+        margin: {
+          top: '2cm',
+          right: '1.5cm',
+          bottom: '2cm',
+          left: '1.5cm'
+        },
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: true,
+        headerTemplate: `
+          <div style="font-size: 8pt; color: #6b7280; width: 100%; text-align: center; padding: 0.5cm;">
+            <span>${reportMetrics.project.title || 'Ethical AI Evaluation Report'}</span>
+          </div>
+        `,
+        footerTemplate: `
+          <div style="font-size: 8pt; color: #6b7280; width: 100%; text-align: center; padding: 0.5cm;">
+            <span class="pageNumber"></span> / <span class="totalPages"></span>
+          </div>
+        `,
+        timeout: 60000 // 60 second timeout
+      });
+      
+      console.log('✅ PDF result received from Puppeteer');
+      console.log('📊 PDF result type:', typeof pdfResult);
+      console.log('📊 PDF result is Buffer:', Buffer.isBuffer(pdfResult));
+      
+      // Ensure we have a Buffer
+      if (Buffer.isBuffer(pdfResult)) {
+        pdfBuffer = pdfResult;
+      } else if (pdfResult && typeof pdfResult === 'object' && pdfResult.data) {
+        // Some Puppeteer versions return { data: Buffer }
+        pdfBuffer = Buffer.from(pdfResult.data);
+      } else if (pdfResult && typeof pdfResult === 'string') {
+        // If it's a base64 string, convert to Buffer
+        pdfBuffer = Buffer.from(pdfResult, 'base64');
+      } else if (pdfResult && Array.isArray(pdfResult)) {
+        // If it's an array (Uint8Array), convert to Buffer
+        pdfBuffer = Buffer.from(pdfResult);
+      } else {
+        // Try to convert to Buffer
+        pdfBuffer = Buffer.from(pdfResult);
+      }
+      
+      console.log('✅ PDF buffer converted/validated');
+    } catch (pdfError) {
+      console.error('❌ Error calling page.pdf():', pdfError);
+      console.error('❌ PDF error message:', pdfError.message);
+      console.error('❌ PDF error stack:', pdfError.stack);
+      throw new Error(`Failed to generate PDF from page: ${pdfError.message}`);
+    }
+    
+    // Validate PDF buffer
+    if (!pdfBuffer) {
+      throw new Error('PDF generation returned null or undefined buffer');
+    }
+    
+    if (!Buffer.isBuffer(pdfBuffer)) {
+      console.error('❌ PDF buffer type:', typeof pdfBuffer);
+      console.error('❌ PDF buffer constructor:', pdfBuffer?.constructor?.name);
+      console.error('❌ PDF buffer value (first 100 chars):', pdfBuffer?.toString?.()?.substring(0, 100));
+      // Try one more time to convert to Buffer
+      try {
+        pdfBuffer = Buffer.from(pdfBuffer);
+        if (!Buffer.isBuffer(pdfBuffer)) {
+          throw new Error(`PDF generation returned invalid buffer type: ${typeof pdfBuffer}. Expected Buffer, got ${typeof pdfBuffer}`);
+        }
+      } catch (convertError) {
+        throw new Error(`PDF generation returned invalid buffer type: ${typeof pdfBuffer}. Expected Buffer, got ${typeof pdfBuffer}. Conversion failed: ${convertError.message}`);
+      }
+    }
+    
+    if (pdfBuffer.length === 0) {
+      throw new Error('PDF generation returned empty buffer');
+    }
+    
+    console.log(`✅ PDF report generated successfully (${pdfBuffer.length} bytes)`);
     return pdfBuffer;
     
   } catch (error) {
@@ -352,7 +430,25 @@ async function generateAndSavePDFReport(projectId, questionnaireKey = 'general-v
       geminiNarrative = null;
     }
   
-  // Save report to database
+  // Determine version (increment if report exists)
+  const existingReport = await Report.findOne({ projectId: projectIdObj })
+    .sort({ generatedAt: -1 })
+    .select('version')
+    .lean();
+  const version = existingReport ? (existingReport.version || 1) + 1 : 1;
+
+  // Compute hash for versioning (before saving)
+  const hash = crypto.createHash('sha256').update(pdfBuffer).digest('hex').substring(0, 16);
+
+  // Save PDF to file system first
+  const reportsDir = path.join(__dirname, '../storage/reports');
+  try {
+    await fs.mkdir(reportsDir, { recursive: true });
+  } catch (err) {
+    // Directory might already exist
+  }
+  
+  // Create report document first to get _id for filename
   const report = new Report({
     projectId: projectIdObj,
     useCaseId: projectIdObj,
@@ -361,7 +457,10 @@ async function generateAndSavePDFReport(projectId, questionnaireKey = 'general-v
     geminiNarrative: geminiNarrative,
     questionnaireKey: questionnaireKey,
     generatedBy: userId,
+    createdAt: new Date(), // Explicitly set createdAt
     status: 'draft',
+    version,
+    hash,
     metadata: {
       totalScores: reportMetrics.scoring.totalsOverall?.count || 0,
       totalTensions: reportMetrics.tensions.summary.total,
@@ -371,27 +470,18 @@ async function generateAndSavePDFReport(projectId, questionnaireKey = 'general-v
     }
   });
   
-  // Save PDF to file system
-  const reportsDir = path.join(__dirname, '../storage/reports');
-  try {
-    await fs.mkdir(reportsDir, { recursive: true });
-  } catch (err) {
-    // Directory might already exist
-  }
+  // Save report to get _id, then update with file metadata
+  await report.save();
   
   const fileName = `report_${report._id}_${Date.now()}.pdf`;
   const filePath = path.join(reportsDir, fileName);
   await fs.writeFile(filePath, pdfBuffer);
-  
-  // Compute hash for versioning
-  const hash = crypto.createHash('sha256').update(pdfBuffer).digest('hex').substring(0, 16);
   
   // Update report with file metadata
   report.filePath = filePath;
   report.fileUrl = `/api/reports/${report._id}/file`;
   report.mimeType = 'application/pdf';
   report.fileSize = pdfBuffer.length;
-  report.hash = hash;
   
   await report.save();
   

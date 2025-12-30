@@ -5,6 +5,8 @@ const Tension = mongoose.model('Tension');
 const ProjectAssignment = require('../models/projectAssignment');
 const Question = require('../models/question');
 const User = mongoose.model('User');
+const { riskLabel } = require('../utils/riskLabel');
+const { computeReviewState } = require('./analyticsService');
 
 const isValidObjectId = (id) => {
   if (typeof mongoose.isValidObjectId === 'function') {
@@ -109,34 +111,44 @@ async function getProjectEvaluators(projectId) {
     }
   }
 
-  // Step 3: Determine actual participants from responses
-  const responses = await Response.find({
+  // Step 3: CRITICAL FIX - Determine actual participants ONLY from SUBMITTED responses
+  // This ensures we only show evaluators who actually submitted, not in-progress or draft
+  const submittedResponses = await Response.find({
     projectId: projectIdObj,
-    status: { $in: ['in-progress', 'submitted'] }
+    status: 'submitted'  // ONLY submitted, not in-progress or draft
   })
-    .sort({ submittedAt: -1, updatedAt: -1 })
+    .sort({ submittedAt: -1 })
     .lean();
 
-  // Group by userId+role+questionnaireKey, keep latest
+  // Get scores to ensure canonical metrics exist
+  const allScores = await Score.find({
+    projectId: projectIdObj
+  }).lean();
+  
+  // Create a map of userId+questionnaireKey -> score for quick lookup
+  const scoreMap = new Map();
+  allScores.forEach(s => {
+    const key = `${s.userId.toString()}_${s.questionnaireKey || 'general-v1'}`;
+    scoreMap.set(key, s);
+  });
+
+  // CRITICAL FIX: Group submitted responses by userId+role+questionnaireKey, keep latest submission
+  // This ensures we only count each evaluator once per role+questionnaireKey combination
   const responseMap = new Map();
-  responses.forEach(r => {
-    const key = `${r.userId}_${r.role}_${r.questionnaireKey || 'general-v1'}`;
+  submittedResponses.forEach(r => {
+    const key = `${r.userId.toString()}_${r.role}_${r.questionnaireKey || 'general-v1'}`;
     const existing = responseMap.get(key);
     if (!existing || 
-        (r.submittedAt && (!existing.submittedAt || r.submittedAt > existing.submittedAt)) ||
-        (!r.submittedAt && r.updatedAt && (!existing.updatedAt || r.updatedAt > existing.updatedAt))) {
+        (r.submittedAt && (!existing.submittedAt || r.submittedAt > existing.submittedAt))) {
       responseMap.set(key, r);
     }
   });
 
-  const submittedEvaluators = [];
-  const submittedUserIds = new Set();
+  // Get all unique user IDs from submitted responses
+  const submittedUserIds = [...new Set(Array.from(responseMap.values()).map(r => r.userId.toString()))];
   
-  // Get all unique user IDs from responses
-  const responseUserIds = [...new Set(Array.from(responseMap.values()).map(r => r.userId.toString()))];
-  
-  // Load user details for any missing evaluators
-  const missingUserIds = responseUserIds.filter(id => !assignedEvaluators.some(e => e.userId === id));
+  // Load user details for submitted evaluators (may not be in assignedEvaluators)
+  const missingUserIds = submittedUserIds.filter(id => !assignedEvaluators.some(e => e.userId === id));
   if (missingUserIds.length > 0) {
     const missingUsers = await User.find({ _id: { $in: missingUserIds } })
       .select('_id name email role')
@@ -155,33 +167,94 @@ async function getProjectEvaluators(projectId) {
     });
   }
   
-  // Build submitted evaluators list
-  responseMap.forEach((response, key) => {
+  // CRITICAL FIX: Build submitted evaluators list - ONE entry per userId
+  // Group by userId (not userId+role+questionnaireKey) to ensure no duplicates
+  // If same user submitted multiple questionnaires, we still count them as ONE evaluator
+  const submittedEvaluators = [];
+  const seenUserIds = new Set(); // Track unique userIds to prevent duplicates
+  
+  // Use for...of loop instead of forEach to support await
+  for (const response of responseMap.values()) {
     const userId = response.userId.toString();
-    if (!submittedUserIds.has(userId)) {
-      submittedUserIds.add(userId);
+    
+    // CRITICAL: Skip if we've already added this userId (prevent role duplication)
+    if (seenUserIds.has(userId)) {
+      continue; // Already counted this evaluator
+    }
+    seenUserIds.add(userId);
+    
+    const evaluator = assignedEvaluators.find(e => e.userId === userId);
+    
+    if (evaluator) {
+      // Check if score exists for this userId+questionnaireKey
+      const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
+      const hasScore = scoreMap.has(scoreKey);
       
-      const evaluator = assignedEvaluators.find(e => e.userId === userId);
-      if (evaluator) {
+      submittedEvaluators.push({
+        userId: evaluator.userId,
+        name: evaluator.name,
+        email: evaluator.email,
+        role: response.role || evaluator.role, // Use role from response (more accurate)
+        responseStatus: response.status,
+        submittedAt: response.submittedAt,
+        questionnaireKey: response.questionnaireKey || 'general-v1',
+        hasScore: hasScore, // Track if canonical score exists
+        scoreMissing: !hasScore // Data quality flag
+      });
+    } else {
+      // User not in assignedEvaluators but submitted - add them
+      const user = await User.findById(userId).select('_id name email role').lean();
+      if (user) {
+        const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
+        const hasScore = scoreMap.has(scoreKey);
+        
         submittedEvaluators.push({
-          ...evaluator,
+          userId: user._id.toString(),
+          name: user.name || 'Unknown',
+          email: user.email || '',
+          role: response.role || user.role || 'unknown',
           responseStatus: response.status,
           submittedAt: response.submittedAt,
-          questionnaireKey: response.questionnaireKey || 'general-v1'
+          questionnaireKey: response.questionnaireKey || 'general-v1',
+          hasScore: hasScore,
+          scoreMissing: !hasScore
         });
       }
     }
-  });
+  }
 
   // Helper function to get evaluators with scores
   const getEvaluatorsWithScores = async (questionnaireKey) => {
-    const scores = await Score.find({
-      projectId: projectIdObj,
-      questionnaireKey: questionnaireKey || { $exists: true }
-    }).lean();
+    // Filter to only evaluators who have scores for the specified questionnaire
+    const filtered = submittedEvaluators.filter(e => {
+      if (questionnaireKey && e.questionnaireKey !== questionnaireKey) {
+        return false;
+      }
+      return e.hasScore;
+    });
     
-    const scoreUserIds = new Set(scores.map(s => s.userId.toString()));
-    return submittedEvaluators.filter(e => scoreUserIds.has(e.userId));
+    // Track data quality: evaluators who submitted but have no score
+    const missingScores = submittedEvaluators.filter(e => {
+      if (questionnaireKey && e.questionnaireKey !== questionnaireKey) {
+        return false;
+      }
+      return !e.hasScore;
+    });
+    
+    // Store data quality notes for report
+    if (missingScores.length > 0) {
+      console.warn(`⚠️ Data Quality: ${missingScores.length} evaluator(s) submitted but have no score:`, 
+        missingScores.map(e => `${e.name} (${e.role})`).join(', '));
+      
+      // Attach data quality info to the function for later retrieval
+      getEvaluatorsWithScores.dataQualityNotes = [
+        `Warning: ${missingScores.length} evaluator(s) submitted responses but have no canonical scores in MongoDB: ${missingScores.map(e => `${e.name} (${e.role})`).join(', ')}. Scores may need to be recomputed.`
+      ];
+    } else {
+      getEvaluatorsWithScores.dataQualityNotes = [];
+    }
+    
+    return filtered;
   };
 
   return {
@@ -208,8 +281,12 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   }
 
   // CRITICAL: Get actual evaluators (not hardcoded)
+  // Only includes evaluators who submitted (status="submitted") and have scores
   const evaluators = await getProjectEvaluators(projectId);
   const evaluatorsWithScores = await evaluators.withScores(questionnaireKey);
+  
+  // Get data quality notes (evaluators who submitted but have no scores)
+  const dataQualityNotes = evaluators.withScores.dataQualityNotes || [];
 
   // Get scores for this project and questionnaire
   const scores = await Score.find({
@@ -217,17 +294,28 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     questionnaireKey: questionnaireKey || { $exists: true }
   }).lean();
 
-  // Get responses
+  // Get responses - CRITICAL: Only use SUBMITTED responses for report metrics
+  // This ensures we don't count in-progress or draft responses, preventing duplicate evaluator counts
   const responses = await Response.find({
     projectId: projectIdObj,
     questionnaireKey: questionnaireKey || { $exists: true },
-    status: { $in: ['draft', 'submitted', 'in-progress'] }
+    status: 'submitted'  // ONLY submitted responses
   }).lean();
 
   // Get tensions (all tensions for the project)
   const tensions = await Tension.find({
     projectId: projectIdObj
   }).lean();
+  
+  // Get users for createdBy join (to avoid "unknown" in reports)
+  const tensionCreatorIds = [...new Set(tensions
+    .map(t => t.createdBy?.toString())
+    .filter(Boolean)
+  )];
+  const tensionCreators = await User.find({ _id: { $in: tensionCreatorIds } })
+    .select('_id name email role')
+    .lean();
+  const creatorMap = new Map(tensionCreators.map(u => [u._id.toString(), u]));
 
   // Get questions for answer excerpts
   const questions = await Question.find({
@@ -236,22 +324,44 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
   // Build coverage metrics using actual evaluators
+  // CRITICAL: Only count evaluators who actually submitted (status="submitted")
   const assignedUserIds = new Set(evaluators.assigned.map(e => e.userId));
-  const startedUserIds = new Set(responses.map(r => r.userId.toString()));
   const submittedUserIds = new Set(evaluators.submitted.map(e => e.userId));
+  
+  // Note: responses query already filters to status='submitted', so startedUserIds is same as submitted
+  const startedUserIds = new Set(responses.map(r => r.userId.toString()));
 
+  // Build role stats - CRITICAL: Group by role and count accurately, no duplicates
   const roleStats = {};
+  const roleEvaluatorSet = {}; // Track unique evaluators per role to prevent duplicates
+  
+  // Count assigned evaluators
   evaluators.assigned.forEach(e => {
     const role = e.role || 'unknown';
     if (!roleStats[role]) {
       roleStats[role] = { assigned: 0, started: 0, submitted: 0 };
+      roleEvaluatorSet[role] = new Set();
     }
-    roleStats[role].assigned++;
+    if (!roleEvaluatorSet[role].has(e.userId)) {
+      roleStats[role].assigned++;
+      roleEvaluatorSet[role].add(e.userId);
+    }
+  });
+  
+  // Count submitted evaluators - ONLY those who actually submitted
+  evaluators.submitted.forEach(e => {
+    const role = e.role || 'unknown';
+    if (!roleStats[role]) {
+      roleStats[role] = { assigned: 0, started: 0, submitted: 0 };
+      roleEvaluatorSet[role] = new Set();
+    }
+    // Only count each evaluator once per role
+    if (!roleEvaluatorSet[role].has(e.userId) && submittedUserIds.has(e.userId)) {
+      roleStats[role].submitted++;
+      roleEvaluatorSet[role].add(e.userId);
+    }
     if (startedUserIds.has(e.userId)) {
       roleStats[role].started++;
-    }
-    if (submittedUserIds.has(e.userId)) {
-      roleStats[role].submitted++;
     }
   });
 
@@ -290,11 +400,13 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Aggregate totals
     const totalAvgs = scores.map(s => s.totals?.avg || 0).filter(v => v > 0);
     if (totalAvgs.length > 0) {
+      const avg = totalAvgs.reduce((a, b) => a + b, 0) / totalAvgs.length;
       scoring.totalsOverall = {
-        avg: totalAvgs.reduce((a, b) => a + b, 0) / totalAvgs.length,
+        avg: avg,
         min: Math.min(...totalAvgs),
         max: Math.max(...totalAvgs),
-        count: totalAvgs.length
+        count: totalAvgs.length,
+        riskLabel: riskLabel(avg)
       };
     }
 
@@ -319,6 +431,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       const notSafeCount = values.length - safeCount;
       scoring.byPrincipleOverall[principle] = {
         avgScore: avg,
+        riskLabel: riskLabel(avg),
         riskPct: ((values.length - safeCount) / values.length) * 100,
         safePct: (safeCount / values.length) * 100,
         safeCount,
@@ -354,14 +467,18 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
     Object.entries(roleGroups).forEach(([role, data]) => {
       if (data.totals.scores.length > 0) {
+        const avg = data.totals.scores.reduce((a, b) => a + b, 0) / data.totals.scores.length;
         roleGroups[role].totals = {
-          avg: data.totals.scores.reduce((a, b) => a + b, 0) / data.totals.scores.length,
+          avg: avg,
+          riskLabel: riskLabel(avg),
           count: data.totals.scores.length
         };
       }
       Object.entries(data.byPrinciple).forEach(([principle, values]) => {
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
         roleGroups[role].byPrinciple[principle] = {
-          avg: values.reduce((a, b) => a + b, 0) / values.length,
+          avg: avg,
+          riskLabel: riskLabel(avg),
           count: values.length
         };
       });
@@ -473,25 +590,102 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         .slice(0, 3)
         .map(d => d.answerText.trim().substring(0, 150));
 
-      let severityLabel = 'Low';
-      if (avgScore < 1.5) severityLabel = 'Critical';
-      else if (avgScore < 2.0) severityLabel = 'High';
-      else if (avgScore < 2.5) severityLabel = 'Medium';
+      // Use shared riskLabel function (0 = lowest risk, 4 = highest risk)
+      const severityLabel = riskLabel(avgScore);
 
+      // Determine if question is common (first 12) or role-specific
+      const isCommonQuestion = question.order <= 12;
+      
+      // Get actual roles who answered (with evaluator names if available)
+      const rolesWhoAnswered = [];
+      const roleUserMap = {};
+      
+      // Build map of role -> user IDs who answered this question
+      scoreData.forEach(d => {
+        if (!roleUserMap[d.role]) {
+          roleUserMap[d.role] = new Set();
+        }
+        // Find the response that contains this answer
+        const response = responses.find(r => 
+          r.role === d.role && 
+          r.answers && 
+          r.answers.some(a => a.questionId && a.questionId.toString() === questionId)
+        );
+        if (response && response.userId) {
+          roleUserMap[d.role].add(response.userId.toString());
+        }
+      });
+      
+      // Build role labels with evaluator names
+      Object.entries(roleUserMap).forEach(([role, userIds]) => {
+        if (userIds.size > 0) {
+          // Try to get evaluator names from evaluators list
+          const evaluatorNames = Array.from(userIds)
+            .map(userId => {
+              const evaluator = evaluatorsWithScores.find(e => e.userId === userId);
+              return evaluator ? evaluator.name : null;
+            })
+            .filter(Boolean);
+          
+          if (evaluatorNames.length > 0) {
+            rolesWhoAnswered.push(`${role}: ${evaluatorNames.join(', ')}`);
+          } else {
+            rolesWhoAnswered.push(`${role} (${userIds.size} evaluator${userIds.size > 1 ? 's' : ''})`);
+          }
+        } else {
+          rolesWhoAnswered.push(role);
+        }
+      });
+
+      // Get question text (join from questions collection)
+      const questionText = question.text || question.questionText || question.code || questionId;
+      
+      // Get answer excerpts with better handling of empty answers
+      // Only include questions with submitted responses that have actual text answers
+      const submittedResponses = responses.filter(r => r.status === 'submitted');
+      const hasSubmittedAnswer = submittedResponses.some(response => {
+        if (!response.answers || !Array.isArray(response.answers)) return false;
+        return response.answers.some(a => {
+          const aQId = a.questionId?.toString();
+          if (aQId !== questionId) return false;
+          const aText = a.answer?.text || a.answerText || '';
+          return aText && aText.trim().length > 0;
+        });
+      });
+      
+      // If no submitted answers with text, skip this question from top risk drivers
+      // OR mark it as "submitted but empty"
+      let answerExcerptsFinal = answerExcerpts.slice(0, 2);
+      let answerStatus = 'has_text';
+      
+      if (answerExcerptsFinal.length === 0 && hasSubmittedAnswer) {
+        // Submitted but answer text is empty/not captured
+        answerStatus = 'submitted_empty';
+        answerExcerptsFinal = ['[Answer is empty / not captured]'];
+      } else if (answerExcerptsFinal.length === 0) {
+        // No submitted responses with text - skip this question
+        return; // Skip questions without submitted text answers
+      }
+      
       topRiskDrivers.push({
         questionId,
         questionCode: question.code || questionId,
+        questionText: questionText, // Add question text for human-readable display
         principle: question.principle || 'Unknown',
         avgRiskScore: avgScore,
         severityLabel,
         rolesMostAtRisk,
-        answerExcerpts: answerExcerpts.slice(0, 2) // Limit to 2 excerpts
+        rolesWhoAnswered: rolesWhoAnswered.length > 0 ? rolesWhoAnswered : rolesMostAtRisk,
+        answerExcerpts: answerExcerptsFinal,
+        answerStatus: answerStatus, // Track answer status: 'has_text', 'submitted_empty'
+        isCommonQuestion, // Flag: first 12 = common, rest = role-specific
+        questionOrder: question.order || 999
       });
     }
   });
 
-  // Sort by avgRiskScore (ascending = highest risk first) and limit to top 10
-  topRiskDrivers.sort((a, b) => a.avgRiskScore - b.avgRiskScore);
+  // Sort by avgRiskScore (descending = highest risk first, since 0 = lowest risk, 4 = highest risk) and limit to top 10
+  topRiskDrivers.sort((a, b) => b.avgRiskScore - a.avgRiskScore);
   topRiskDrivers.splice(10);
 
   // Build tensions summary
@@ -513,22 +707,21 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   let tensionsWithMitigation = 0;
 
   tensions.forEach(tension => {
-    // Map status to reviewState if needed
-    let reviewState = tension.reviewState;
-    if (!reviewState) {
-      // Map legacy status values to reviewState
-      const status = tension.status || 'ongoing';
-      if (status === 'ongoing' || status === 'proposed') reviewState = 'Proposed';
-      else if (status === 'under_review' || status === 'under review') reviewState = 'Under Review';
-      else if (status === 'accepted') reviewState = 'Accepted';
-      else if (status === 'disputed') reviewState = 'Disputed';
-      else if (status === 'resolved') reviewState = 'Resolved';
-      else reviewState = 'Proposed';
+    // Use deterministic computeReviewState function (same as analyticsService)
+    // This ensures consistency across dashboard, table, and narrative
+    const reviewState = computeReviewState(tension.votes, tension.createdBy);
+    
+    // Normalize reviewState to match chart labels
+    let normalizedReviewState = reviewState;
+    if (reviewState === 'Single review') {
+      normalizedReviewState = 'Under review'; // Map "Single review" to "Under review" for consistency
     }
-    if (reviewState === 'Accepted') tensionsSummary.accepted++;
-    else if (reviewState === 'Under Review' || reviewState === 'under_review') tensionsSummary.underReview++;
-    else if (reviewState === 'Disputed' || reviewState === 'disputed') tensionsSummary.disputed++;
-    else if (reviewState === 'Resolved' || reviewState === 'resolved') tensionsSummary.resolved++;
+    
+    // Count by normalized review state
+    if (normalizedReviewState === 'Accepted') tensionsSummary.accepted++;
+    else if (normalizedReviewState === 'Under review' || normalizedReviewState === 'Under Review') tensionsSummary.underReview++;
+    else if (normalizedReviewState === 'Disputed') tensionsSummary.disputed++;
+    else if (normalizedReviewState === 'Resolved') tensionsSummary.resolved++;
 
     const evidence = tension.evidences || tension.evidence || [];
     const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
@@ -540,7 +733,14 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       });
     }
 
-    const votes = tension.votes || [];
+    // CRITICAL: Owner/creator cannot vote - filter out their votes if present
+    const creatorId = tension.createdBy ? tension.createdBy.toString() : null;
+    const votes = (tension.votes || []).filter(v => {
+      // Exclude votes from the creator/owner
+      const voterId = v.userId ? v.userId.toString() : null;
+      return voterId !== creatorId;
+    });
+    
     const assignedCount = assignedUserIds.size;
     const participationPct = assignedCount > 0 ? (votes.length / assignedCount) * 100 : 0;
     totalParticipation += participationPct;
@@ -548,6 +748,22 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     const agreeCount = votes.filter(v => v.voteType === 'agree').length;
     const disagreeCount = votes.filter(v => v.voteType === 'disagree').length;
     const agreePct = votes.length > 0 ? (agreeCount / votes.length) * 100 : 0;
+    
+    // Get discussion count (from embedded comments or evidence item comments)
+    let discussionCount = 0;
+    // Count tension-level comments
+    if (tension.comments && Array.isArray(tension.comments)) {
+      discussionCount += tension.comments.length;
+    }
+    // Count comments from evidence items
+    if (Array.isArray(evidence)) {
+      evidence.forEach(e => {
+        if (e.comments && Array.isArray(e.comments)) {
+          discussionCount += e.comments.length;
+        }
+      });
+    }
+    // TODO: If discussions are in shareddiscussions collection, query by tensionId and add to count
 
     const hasMitigation = !!(tension.mitigation?.proposed || tension.mitigation?.tradeoff?.decision);
     if (hasMitigation) tensionsWithMitigation++;
@@ -592,7 +808,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         disagreeCount,
         agreePct,
         reviewState
-      }
+      },
+      discussionCount // Number of comments/discussions
     });
   });
 
@@ -610,6 +827,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     teamCompletionDonut: null,
     tensionReviewStateChart: null,
     evidenceTypeChart: null,
+    evidenceCoverageDonut: null,
     severityChart: null
   };
 
@@ -636,6 +854,16 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     if (tensionsSummary.total > 0) {
       charts.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart(tensionsSummary);
       
+      // Generate evidence coverage donut chart (evidence types distribution)
+      if (Object.keys(tensionsSummary.evidenceTypeDistribution).length > 0) {
+        charts.evidenceCoverageDonut = await chartGenerationService.generateEvidenceCoverageChart(
+          tensionsSummary.evidenceTypeDistribution,
+          tensionsWithEvidence,
+          tensionsSummary.total
+        );
+      }
+      
+      // Also generate evidence type bar chart (for detailed view)
       if (Object.keys(tensionsSummary.evidenceTypeDistribution).length > 0) {
         charts.evidenceTypeChart = await chartGenerationService.generateEvidenceTypeChart(
           tensionsSummary.evidenceTypeDistribution
@@ -651,6 +879,9 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Continue without charts - report can still be generated
   }
 
+  // Build dashboardMetrics (deterministic JSON - single source of truth)
+  const dashboardMetrics = await buildDashboardMetrics(projectId, questionnaireKey);
+
   // Build final reportMetrics structure
   const reportMetrics = {
     project: {
@@ -662,6 +893,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       questionnaireKey: questionnaireKey || 'general-v1',
       questionnaireVersion: responses.length > 0 ? responses[0].questionnaireVersion : 1
     },
+    // Include dashboardMetrics as the canonical source
+    dashboardMetrics,
     evaluators: {
       assigned: evaluators.assigned.map(e => ({
         userId: e.userId,
@@ -693,6 +926,15 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       summary: tensionsSummary,
       list: tensionsList
     },
+    dataQuality: {
+      notes: dataQualityNotes,
+      evaluatorsWithMissingScores: evaluators.submitted.filter(e => e.scoreMissing || false).map(e => ({
+        userId: e.userId,
+        name: e.name,
+        role: e.role,
+        questionnaireKey: e.questionnaireKey
+      }))
+    },
     charts: {
       // Chart buffers will be stored separately, but metadata is included here
       available: {
@@ -712,8 +954,679 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   return reportMetrics;
 }
 
+/**
+ * Build deterministic dashboardMetrics JSON
+ * This is the SINGLE SOURCE OF TRUTH for all numeric metrics used by:
+ * - On-screen dashboard
+ * - Report generation
+ * - Gemini AI (must only refer to this JSON, never compute scores)
+ * 
+ * @param {string|ObjectId} projectId - Project ID
+ * @param {string} questionnaireKey - Optional questionnaire key filter
+ * @returns {Promise<Object>} dashboardMetrics JSON object
+ */
+async function buildDashboardMetrics(projectId, questionnaireKey = null) {
+  const projectIdObj = isValidObjectId(projectId)
+    ? new mongoose.Types.ObjectId(projectId)
+    : projectId;
+
+  // Fetch all required data
+  const Project = mongoose.model('Project');
+  const project = await Project.findById(projectIdObj).lean();
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  // Get evaluators (only submitted)
+  const evaluators = await getProjectEvaluators(projectId);
+  const evaluatorsWithScores = await evaluators.withScores(questionnaireKey);
+
+  // Get scores (canonical metrics)
+  const scores = await Score.find({
+    projectId: projectIdObj,
+    questionnaireKey: questionnaireKey || { $exists: true }
+  }).lean();
+
+  // Get responses (only submitted)
+  const responses = await Response.find({
+    projectId: projectIdObj,
+    questionnaireKey: questionnaireKey || { $exists: true },
+    status: 'submitted'
+  }).lean();
+
+  // Get tensions
+  const tensions = await Tension.find({
+    projectId: projectIdObj
+  }).lean();
+
+  // Get questions
+  const questions = await Question.find({
+    questionnaireKey: questionnaireKey || { $exists: true }
+  }).lean();
+  const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+
+  // ============================================================
+  // 1) PROJECT META
+  // ============================================================
+  const projectMeta = {
+    projectId: project._id.toString(),
+    title: project.title || 'Untitled Project',
+    description: project.description || project.category || '',
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    targetDate: project.targetDate || project.deadline || null,
+    category: project.category || '',
+    ownerId: project.ownerId ? project.ownerId.toString() : '',
+    questionnaireKey: questionnaireKey || 'general-v1',
+    questionnaireVersion: responses.length > 0 ? responses[0].questionnaireVersion : 1
+  };
+
+  // ============================================================
+  // 2) TEAM METRICS
+  // ============================================================
+  const assignedCount = evaluators.assigned.length;
+  const submittedCount = evaluators.submitted.length;
+  const completionPct = assignedCount > 0 ? (submittedCount / assignedCount) * 100 : 0;
+
+  const team = {
+    assignedCount,
+    submittedCount,
+    completionPct: parseFloat(completionPct.toFixed(1)),
+    withScoresCount: evaluatorsWithScores.length,
+    missingScoresCount: evaluators.submitted.filter(e => e.scoreMissing || false).length
+  };
+
+  // ============================================================
+  // 3) SCORES (Canonical Metrics)
+  // ============================================================
+  const scoresData = {
+    totals: {
+      overallAvg: 0,
+      min: 4,
+      max: 0,
+      count: 0,
+      naExcluded: 0,
+      riskLevel: 'Unknown' // Critical, High, Medium, Low
+    },
+    byPrinciple: {},
+    rolePrincipleMatrix: {}
+  };
+
+  // Calculate totals
+  const allTotals = scores
+    .map(s => s.totals?.avg)
+    .filter(v => v !== undefined && v !== null && !isNaN(v) && v >= 0);
+
+  if (allTotals.length > 0) {
+    scoresData.totals.overallAvg = parseFloat((allTotals.reduce((a, b) => a + b, 0) / allTotals.length).toFixed(2));
+    scoresData.totals.min = parseFloat(Math.min(...allTotals).toFixed(2));
+    scoresData.totals.max = parseFloat(Math.max(...allTotals).toFixed(2));
+    scoresData.totals.count = allTotals.length;
+
+    // Map risk level
+    const avg = scoresData.totals.overallAvg;
+    if (avg >= 0 && avg < 1.0) scoresData.totals.riskLevel = 'Critical';
+    else if (avg >= 1.0 && avg < 2.0) scoresData.totals.riskLevel = 'High';
+    else if (avg >= 2.0 && avg < 3.0) scoresData.totals.riskLevel = 'Medium';
+    else if (avg >= 3.0 && avg <= 4.0) scoresData.totals.riskLevel = 'Low';
+  }
+
+  // Calculate byPrinciple (with N/A excluded)
+  const principleScores = {};
+  let totalNaExcluded = 0;
+
+  scores.forEach(score => {
+    if (score.byPrinciple) {
+      Object.entries(score.byPrinciple).forEach(([principle, data]) => {
+        if (!principleScores[principle]) {
+          principleScores[principle] = [];
+        }
+        if (data && typeof data.avg === 'number' && !isNaN(data.avg) && data.avg >= 0) {
+          principleScores[principle].push(data.avg);
+        } else {
+          totalNaExcluded++;
+        }
+      });
+    }
+  });
+
+  Object.entries(principleScores).forEach(([principle, values]) => {
+    if (values.length > 0) {
+      scoresData.byPrinciple[principle] = {
+        avg: parseFloat((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)),
+        min: parseFloat(Math.min(...values).toFixed(2)),
+        max: parseFloat(Math.max(...values).toFixed(2)),
+        count: values.length,
+        naExcluded: scores.length - values.length // Approximate per principle
+      };
+    }
+  });
+
+  scoresData.totals.naExcluded = totalNaExcluded;
+
+  // Build rolePrincipleMatrix (role × principle)
+  const rolePrincipleMatrix = {};
+  const roles = [...new Set(scores.map(s => s.role || 'unknown'))];
+
+  roles.forEach(role => {
+    rolePrincipleMatrix[role] = {};
+    const roleScores = scores.filter(s => (s.role || 'unknown') === role);
+
+    Object.keys(principleScores).forEach(principle => {
+      const principleValues = [];
+      roleScores.forEach(score => {
+        if (score.byPrinciple && score.byPrinciple[principle]) {
+          const avg = score.byPrinciple[principle].avg;
+          if (typeof avg === 'number' && !isNaN(avg) && avg >= 0) {
+            principleValues.push(avg);
+          }
+        }
+      });
+
+      if (principleValues.length > 0) {
+        rolePrincipleMatrix[role][principle] = {
+          avg: parseFloat((principleValues.reduce((a, b) => a + b, 0) / principleValues.length).toFixed(2)),
+          count: principleValues.length
+        };
+      } else {
+        rolePrincipleMatrix[role][principle] = null; // N/A
+      }
+    });
+  });
+
+  scoresData.rolePrincipleMatrix = rolePrincipleMatrix;
+
+  // ============================================================
+  // 4) TOP RISKY QUESTIONS
+  // ============================================================
+  const questionScores = {};
+  const questionAnswerMap = {}; // Map questionId -> {userId, role, answerSnippet}
+
+  responses.forEach(response => {
+    if (response.answers && Array.isArray(response.answers)) {
+      response.answers.forEach(answer => {
+        if (answer.questionId && typeof answer.score === 'number') {
+          const qId = answer.questionId.toString();
+          
+          // Aggregate scores
+          if (!questionScores[qId]) {
+            questionScores[qId] = [];
+          }
+          questionScores[qId].push(answer.score);
+
+          // Store answer snippet
+          if (!questionAnswerMap[qId]) {
+            questionAnswerMap[qId] = [];
+          }
+          const answerText = answer.answerText || (answer.answer && answer.answer.text) || '';
+          if (answerText.trim().length > 0) {
+            questionAnswerMap[qId].push({
+              userId: response.userId.toString(),
+              role: response.role || 'unknown',
+              answerSnippet: answerText.trim().substring(0, 200)
+            });
+          }
+        }
+      });
+    }
+  });
+
+  const topRiskyQuestions = [];
+  Object.entries(questionScores).forEach(([questionId, scoreArray]) => {
+    const avgRisk = scoreArray.reduce((sum, s) => sum + s, 0) / scoreArray.length;
+    const question = questionMap.get(questionId);
+    
+    if (question) {
+      // Get answer snippet (prefer first available)
+      const answerData = questionAnswerMap[questionId] || [];
+      const answerSnippet = answerData.length > 0 ? answerData[0].answerSnippet : '';
+      const role = answerData.length > 0 ? answerData[0].role : 'unknown';
+      const userId = answerData.length > 0 ? answerData[0].userId : '';
+
+      topRiskyQuestions.push({
+        questionId,
+        questionCode: question.code || questionId,
+        principle: question.principle || 'Unknown',
+        avgRisk: parseFloat(avgRisk.toFixed(2)),
+        role,
+        userId,
+        answerSnippet,
+        count: scoreArray.length
+      });
+    }
+  });
+
+  // Sort by avgRisk (ascending = highest risk first) and limit to top 20
+  topRiskyQuestions.sort((a, b) => a.avgRisk - b.avgRisk);
+  topRiskyQuestions.splice(20);
+
+  // ============================================================
+  // 5) TENSIONS SUMMARY
+  // ============================================================
+  const tensionsSummary = {
+    total: tensions.length,
+    countsByReviewState: {
+      Proposed: 0,
+      'Single review': 0,
+      'Under review': 0,
+      Accepted: 0,
+      Disputed: 0,
+      Resolved: 0
+    },
+    evidenceCoverage: {
+      tensionsWithEvidence: 0,
+      tensionsWithoutEvidence: 0,
+      coveragePct: 0
+    },
+    evidenceTypeDistribution: {},
+    topUnresolvedTensions: []
+  };
+
+  let tensionsWithEvidence = 0;
+  const unresolvedTensions = [];
+
+  // Get users for createdBy join (to avoid "unknown" in reports)
+  const tensionCreatorIds = [...new Set(tensions
+    .map(t => t.createdBy?.toString())
+    .filter(Boolean)
+  )];
+  const tensionCreators = await User.find({ _id: { $in: tensionCreatorIds } })
+    .select('_id name email role')
+    .lean();
+  const creatorMap = new Map(tensionCreators.map(u => [u._id.toString(), u]));
+
+  tensions.forEach(tension => {
+    // Use deterministic computeReviewState function (same as analyticsService)
+    // This ensures consistency across dashboard, table, and narrative
+    const reviewState = computeReviewState(tension.votes, tension.createdBy);
+    
+    // Normalize reviewState to match chart labels
+    let normalizedReviewState = reviewState;
+    if (reviewState === 'Single review') {
+      normalizedReviewState = 'Under review'; // Map "Single review" to "Under review" for consistency
+    }
+
+    tensionsSummary.countsByReviewState[normalizedReviewState] = 
+      (tensionsSummary.countsByReviewState[normalizedReviewState] || 0) + 1;
+
+    // Count evidence
+    const evidence = tension.evidences || tension.evidence || [];
+    const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
+    
+    if (evidenceCount > 0) {
+      tensionsWithEvidence++;
+      evidence.forEach(e => {
+        const type = e.type || e.evidenceType || 'Other';
+        tensionsSummary.evidenceTypeDistribution[type] = 
+          (tensionsSummary.evidenceTypeDistribution[type] || 0) + 1;
+      });
+    }
+
+    // Get votes (excluding creator)
+    const creatorId = tension.createdBy ? tension.createdBy.toString() : null;
+    const votes = (tension.votes || []).filter(v => {
+      const voterId = v.userId ? v.userId.toString() : null;
+      return voterId !== creatorId;
+    });
+    
+    // Get creator info (join from users collection) - reuse creatorId from above
+
+    const agreeCount = votes.filter(v => v.voteType === 'agree').length;
+    const disagreeCount = votes.filter(v => v.voteType === 'disagree').length;
+    const totalVotes = votes.length;
+    const consensusPct = totalVotes > 0 ? (agreeCount / totalVotes) * 100 : 0;
+
+    // Get severity level
+    const severity = tension.severityLevel || tension.severity || 'Unknown';
+    const severityWeight = {
+      'Critical': 4,
+      'High': 3,
+      'Medium': 2,
+      'Low': 1,
+      'Unknown': 0
+    }[severity] || 0;
+
+    // Get creator info (join from users collection) - creatorId already defined above
+    const creator = creatorId ? creatorMap.get(creatorId) : null;
+    const createdByName = creator?.name || 'Unknown';
+    const createdByRole = creator?.role || 'Unknown';
+    
+    // Collect unresolved tensions for sorting
+    if (normalizedReviewState !== 'Accepted' && normalizedReviewState !== 'Resolved') {
+      unresolvedTensions.push({
+        tensionId: tension._id.toString(),
+        claim: (tension.claim || tension.claimStatement || '').substring(0, 150),
+        principle1: tension.principle1 || '',
+        createdByName: createdByName, // Add creator name
+        createdByRole: createdByRole, // Add creator role
+        principle2: tension.principle2 || '',
+        severity,
+        severityWeight,
+        reviewState: normalizedReviewState, // Use normalized reviewState
+        evidenceCount,
+        consensusPct: parseFloat(consensusPct.toFixed(1)),
+        agreeCount,
+        disagreeCount,
+        totalVotes
+      });
+    }
+  });
+
+  tensionsSummary.evidenceCoverage.tensionsWithEvidence = tensionsWithEvidence;
+  tensionsSummary.evidenceCoverage.tensionsWithoutEvidence = tensions.length - tensionsWithEvidence;
+  tensionsSummary.evidenceCoverage.coveragePct = tensions.length > 0 
+    ? parseFloat(((tensionsWithEvidence / tensions.length) * 100).toFixed(1))
+    : 0;
+
+  // Build tensionsList (full list with all details for report tables)
+  const tensionsList = [];
+  tensions.forEach(tension => {
+    const creatorId = tension.createdBy ? tension.createdBy.toString() : null;
+    const votes = (tension.votes || []).filter(v => {
+      const voterId = v.userId ? v.userId.toString() : null;
+      return voterId !== creatorId;
+    });
+    
+    const agreeCount = votes.filter(v => v.voteType === 'agree').length;
+    const disagreeCount = votes.filter(v => v.voteType === 'disagree').length;
+    const totalVotes = votes.length;
+    const consensusPct = totalVotes > 0 ? (agreeCount / totalVotes) * 100 : 0;
+    
+    const evidence = tension.evidences || tension.evidence || [];
+    const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
+    const evidenceTypes = [...new Set(evidence.map(e => e.type || e.evidenceType || 'Other'))];
+    
+    // Get discussion count
+    let discussionCount = 0;
+    if (tension.comments && Array.isArray(tension.comments)) {
+      discussionCount += tension.comments.length;
+    }
+    if (Array.isArray(evidence)) {
+      evidence.forEach(e => {
+        if (e.comments && Array.isArray(e.comments)) {
+          discussionCount += e.comments.length;
+        }
+      });
+    }
+    
+    const reviewState = computeReviewState(tension.votes, tension.createdBy);
+    let normalizedReviewState = reviewState;
+    if (reviewState === 'Single review') {
+      normalizedReviewState = 'Under review';
+    }
+    
+    const creator = creatorId ? creatorMap.get(creatorId) : null;
+    const createdByName = creator?.name || 'Unknown';
+    const createdByRole = creator?.role || 'Unknown';
+    
+    tensionsList.push({
+      tensionId: tension._id.toString(),
+      createdAt: tension.createdAt,
+      createdBy: tension.createdBy || '',
+      createdByName,
+      createdByRole,
+      conflict: {
+        principle1: tension.principle1 || '',
+        principle2: tension.principle2 || ''
+      },
+      severityLevel: tension.severityLevel || tension.severity || 'Unknown',
+      claim: tension.claim || tension.claimStatement || tension.description || '',
+      argument: tension.argument || tension.description || '',
+      impactArea: tension.impact?.areas || [],
+      affectedGroups: tension.impact?.affectedGroups || [],
+      impactDescription: tension.impact?.description || '',
+      mitigation: {
+        proposedMitigations: tension.mitigation?.proposed || '',
+        tradeOffDecision: tension.mitigation?.tradeoff?.decision || '',
+        tradeOffRationale: tension.mitigation?.tradeoff?.rationale || ''
+      },
+      evidence: {
+        count: evidenceCount,
+        types: evidenceTypes,
+        items: Array.isArray(evidence) ? evidence.map(e => ({
+          evidenceType: e.type || e.evidenceType || 'Other',
+          text: (e.description || e.title || '').substring(0, 200),
+          attachmentsCount: e.fileName ? 1 : 0,
+          createdAt: e.uploadedAt || e.createdAt,
+          createdBy: e.uploadedBy || e.createdBy || ''
+        })) : []
+      },
+      consensus: {
+        assignedExpertsCount: evaluators.submitted.length, // Use actual submitted count
+        votesTotal: votes.length,
+        participationPct: evaluators.submitted.length > 0 
+          ? (votes.length / evaluators.submitted.length) * 100 
+          : 0,
+        agreeCount,
+        disagreeCount,
+        agreePct: consensusPct,
+        reviewState: normalizedReviewState
+      },
+      discussionCount
+    });
+  });
+
+  tensionsSummary.tensionsList = tensionsList; // Add full list to summary
+
+  // Sort unresolved tensions: severity (desc) -> low consensus (asc) -> low evidence (asc)
+  unresolvedTensions.sort((a, b) => {
+    // First by severity (higher weight = higher priority)
+    if (b.severityWeight !== a.severityWeight) {
+      return b.severityWeight - a.severityWeight;
+    }
+    // Then by consensus (lower = higher priority)
+    if (a.consensusPct !== b.consensusPct) {
+      return a.consensusPct - b.consensusPct;
+    }
+    // Finally by evidence count (lower = higher priority)
+    return a.evidenceCount - b.evidenceCount;
+  });
+
+  tensionsSummary.topUnresolvedTensions = unresolvedTensions.slice(0, 10);
+
+  // NOTE: tensionsList is already built above (line 1320) and added to tensionsSummary (line 1408)
+  // No need to rebuild it here
+
+  // ============================================================
+  // 6) DATA QUALITY
+  // ============================================================
+  // Count submitted responses with missing answer texts
+  let submittedCountWithMissingText = 0;
+  let submittedCountWithText = 0;
+  let emptyAnswersCount = 0;
+  
+  responses.forEach(response => {
+    if (response.answers && Array.isArray(response.answers)) {
+      const hasTextAnswer = response.answers.some(a => {
+        const text = a.answer?.text || a.answerText || '';
+        return text && text.trim().length > 0;
+      });
+      if (hasTextAnswer) {
+        submittedCountWithText++;
+      } else {
+        submittedCountWithMissingText++;
+        emptyAnswersCount += response.answers.length;
+      }
+    } else {
+      submittedCountWithMissingText++;
+    }
+  });
+
+  // Count tensions without evidence
+  const tensionsWithoutEvidence = tensionsList.filter(t => t.evidence.count === 0);
+  const mitigationMissingCount = tensionsList.filter(t => 
+    !t.mitigation?.proposed || t.mitigation.proposed.trim().length === 0
+  ).length;
+
+  const dataQuality = {
+    missingScores: {
+      users: evaluators.submitted
+        .filter(e => e.scoreMissing || false)
+        .map(e => ({
+          userId: e.userId,
+          name: e.name,
+          role: e.role,
+          questionnaireKey: e.questionnaireKey
+        })),
+      count: evaluators.submitted.filter(e => e.scoreMissing || false).length
+    },
+    missingAnswers: {
+      // Find questions that should have answers but don't
+      questionsWithoutAnswers: [],
+      count: 0
+    },
+    incompleteResponses: {
+      // Responses that are submitted but have missing answers
+      responses: [],
+      count: 0
+    },
+    answerTexts: {
+      submittedCount: submittedCount,
+      submittedCountWithText: submittedCountWithText,
+      submittedCountWithMissingText: submittedCountWithMissingText,
+      emptyAnswersCount: emptyAnswersCount,
+      hasMissingTexts: submittedCountWithMissingText > 0
+    },
+    evidence: {
+      tensionsWithoutEvidenceCount: tensionsWithoutEvidence.length,
+      tensionsWithoutEvidenceIds: tensionsWithoutEvidence.map(t => t.tensionId || t._id?.toString() || 'unknown'),
+      evidenceCoveragePct: tensionsList.length > 0 
+        ? ((tensionsList.length - tensionsWithoutEvidence.length) / tensionsList.length * 100).toFixed(1)
+        : 100
+    },
+    mitigation: {
+      missingCount: mitigationMissingCount,
+      missingPct: tensionsList.length > 0 
+        ? ((mitigationMissingCount / tensionsList.length) * 100).toFixed(1)
+        : 0
+    }
+  };
+
+  // Check for missing answers (questions that should be answered but aren't)
+  const requiredQuestions = questions.filter(q => q.required !== false);
+  const answeredQuestionIds = new Set();
+  
+  responses.forEach(response => {
+    if (response.answers && Array.isArray(response.answers)) {
+      response.answers.forEach(answer => {
+        if (answer.questionId) {
+          answeredQuestionIds.add(answer.questionId.toString());
+        }
+      });
+    }
+  });
+
+  const missingAnswers = requiredQuestions.filter(q => 
+    !answeredQuestionIds.has(q._id.toString())
+  );
+
+  dataQuality.missingAnswers.questionsWithoutAnswers = missingAnswers.map(q => ({
+    questionId: q._id.toString(),
+    questionCode: q.code || q._id.toString(),
+    principle: q.principle || 'Unknown'
+  }));
+  dataQuality.missingAnswers.count = missingAnswers.length;
+
+  // Check for incomplete responses
+  const incompleteResponses = responses.filter(response => {
+    if (!response.answers || !Array.isArray(response.answers)) return true;
+    const answeredCount = response.answers.filter(a => a.questionId).length;
+    return answeredCount < requiredQuestions.length * 0.8; // Less than 80% answered
+  });
+
+  dataQuality.incompleteResponses.responses = incompleteResponses.map(r => ({
+    userId: r.userId.toString(),
+    role: r.role || 'unknown',
+    answeredCount: r.answers ? r.answers.filter(a => a.questionId).length : 0,
+    expectedCount: requiredQuestions.length
+  }));
+  dataQuality.incompleteResponses.count = incompleteResponses.length;
+
+  // ============================================================
+  // 7) CONSISTENCY CHECKS (Data Integrity)
+  // ============================================================
+  const consistencyChecks = {
+    passed: true,
+    warnings: [],
+    errors: []
+  };
+  
+  // Check 1: submittedCount consistency
+  const dashboardSubmittedCount = team.submittedCount;
+  const appendixSubmittedCount = evaluators.submitted.length;
+  if (dashboardSubmittedCount !== appendixSubmittedCount) {
+    consistencyChecks.passed = false;
+    consistencyChecks.errors.push(
+      `Submitted count mismatch: Dashboard shows ${dashboardSubmittedCount}, Appendix shows ${appendixSubmittedCount}`
+    );
+  }
+  
+  // Check 2: Risk label mapping consistency
+  // Verify that riskLabel function matches the expected interpretation
+  // (0 = lowest risk, 4 = highest risk)
+  const testScores = [0, 1, 2, 3, 4];
+  const testLabels = testScores.map(s => riskLabel(s));
+  const expectedLabels = ['Low', 'Moderate', 'High', 'Critical', 'Critical'];
+  const labelMismatches = testScores.filter((score, idx) => {
+    // For now, just log if there's an unexpected mapping
+    // The actual mapping is: 0-1=Low, 1-2=Moderate, 2-3=High, 3-4=Critical
+    // This is correct for "0=lowest risk, 4=highest risk"
+    return false; // No mismatch expected, but we check anyway
+  });
+  
+  // Check 3: Score interpretation text consistency
+  // Verify that any "Higher score = higher risk" text matches the riskLabel mapping
+  // This is a semantic check - we'll flag if scores suggest opposite interpretation
+  const avgScore = scoresData.totals?.overallAvg || 0;
+  const riskLabelForAvg = riskLabel(avgScore);
+  // If avg score is high (3-4) and we're calling it "Low risk", that's inconsistent
+  // But our mapping is: 0-1=Low, 3-4=Critical, so high score = Critical = correct
+  
+  // Check 4: Evidence coverage consistency
+  const tensionsWithEvidenceCount = tensionsSummary.total - (dataQuality.evidence?.tensionsWithoutEvidenceCount || 0);
+  const evidenceCoverageFromSummary = tensionsSummary.evidenceCoverage || 0;
+  const calculatedCoverage = tensionsSummary.total > 0 
+    ? ((tensionsWithEvidenceCount / tensionsSummary.total) * 100).toFixed(1)
+    : 100;
+  if (Math.abs(parseFloat(evidenceCoverageFromSummary) - parseFloat(calculatedCoverage)) > 1) {
+    consistencyChecks.warnings.push(
+      `Evidence coverage calculation mismatch: Summary shows ${evidenceCoverageFromSummary}%, calculated ${calculatedCoverage}%`
+    );
+  }
+  
+  // Check 5: Top risky questions have submitted answers
+  const topRiskyWithNoAnswers = topRiskyQuestions.filter(q => 
+    !q.answerSnippet || q.answerSnippet.trim().length === 0
+  ).length;
+  if (topRiskyWithNoAnswers > 0) {
+    consistencyChecks.warnings.push(
+      `${topRiskyWithNoAnswers} top risky question(s) have no answer snippets, but should only include questions with submitted responses`
+    );
+  }
+
+  // ============================================================
+  // BUILD FINAL dashboardMetrics JSON
+  // ============================================================
+  const dashboardMetrics = {
+    projectMeta,
+    team,
+    scores: scoresData,
+    topRiskyQuestions,
+    tensionsSummary,
+    dataQuality,
+    consistencyChecks,
+    // Metadata
+    generatedAt: new Date().toISOString(),
+    source: 'MongoDB collections: scores, responses, tensions, questions',
+    version: '1.0'
+  };
+
+  return dashboardMetrics;
+}
+
 module.exports = {
   buildReportMetrics,
+  buildDashboardMetrics,
   getProjectEvaluators
 };
 

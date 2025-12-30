@@ -7,7 +7,11 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node tests/acceptanceCriteriaVerification.js",
+    "test:unit": "node tests/reportMetrics.test.js",
+    "test:acceptance": "node tests/acceptanceCriteria.test.js",
+    "test:integration": "node tests/integration/reportGeneration.test.js",
+    "test:all": "npm run test && npm run test:unit && npm run test:acceptance && npm run test:integration",
     "start": "node server.js",
     "migrate:usecasequestions": "node scripts/migrate_usecasequestions.js"
   },
@@ -17,6 +21,8 @@
   "dependencies": {
     "@google/genai": "^1.33.0",
     "@google/generative-ai": "^0.24.1",
+    "chartjs-node-canvas": "^4.1.6",
+    "_comment_chartjs": "chartjs-node-canvas requires native compilation. Use chartGenerationServicePuppeteer.js on Windows if build tools unavailable",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "docx": "^9.5.1",

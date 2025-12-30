@@ -89,7 +89,12 @@ const ReportSchema = new mongoose.Schema({
   },
   hash: {
     type: String // Content hash for versioning/deduplication
-  }
+  },
+  // Soft delete: Users who have hidden this report (only visible to them)
+  hiddenForUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true
 });

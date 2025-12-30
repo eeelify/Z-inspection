@@ -3,7 +3,7 @@ const { generateReport, generateDashboardNarrative, generateReportNarrative } = 
 const { generatePDFFromMarkdown } = require('../services/pdfService');
 const { generateDOCXFromMarkdown } = require('../services/docxService');
 const { generateProfessionalDOCX } = require('../services/professionalDocxService');
-const { buildReportMetrics } = require('../services/reportMetricsService');
+const { buildReportMetrics, getProjectEvaluators } = require('../services/reportMetricsService');
 const { generatePDFReport: generatePDFReportService, generateAndSavePDFReport } = require('../services/pdfReportService');
 const { getProjectAnalytics } = require('../services/analyticsService');
 
@@ -246,6 +246,17 @@ exports.generateReport = async (req, res) => {
       ? new mongoose.Types.ObjectId(projectId)
       : projectId;
 
+    // Compute hash for versioning
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha256').update(reportContent).digest('hex').substring(0, 16);
+    
+    // Determine version (increment if report exists)
+    const existingReport = await Report.findOne({ projectId: projectIdObj })
+      .sort({ generatedAt: -1 })
+      .select('version')
+      .lean();
+    const version = existingReport ? (existingReport.version || 1) + 1 : 1;
+
     const report = new Report({
       projectId: projectIdObj,
       useCaseId: projectIdObj,
@@ -253,13 +264,30 @@ exports.generateReport = async (req, res) => {
       // Legacy compatibility
       content: reportContent,
       generatedBy: userIdObj,
+      createdAt: new Date(), // Explicitly set createdAt
       metadata,
-      status: 'draft'
+      status: 'draft',
+      version,
+      hash,
+      mimeType: 'text/markdown' // Legacy reports are markdown
     });
 
     await report.save();
 
     console.log('✅ Report generated and saved:', report._id);
+
+    // Prepare response with file metadata
+    const reportResponse = {
+      id: report._id,
+      title: report.title,
+      generatedAt: report.generatedAt,
+      createdAt: report.createdAt || report.generatedAt,
+      metadata: report.metadata,
+      status: report.status,
+      fileUrl: report.fileUrl || null,
+      version: report.version || 1,
+      hash: report.hash || null
+    };
 
     // Notify all assigned experts (excluding admin who generated the report)
     try {
@@ -315,13 +343,7 @@ exports.generateReport = async (req, res) => {
 
     res.json({
       success: true,
-      report: {
-        id: report._id,
-        title: report.title,
-        generatedAt: report.generatedAt,
-        metadata: report.metadata,
-        status: report.status
-      }
+      report: reportResponse
     });
   } catch (err) {
     console.error('❌ Error generating report:', err);
@@ -480,21 +502,31 @@ exports.updateReport = async (req, res) => {
 exports.deleteReport = async (req, res) => {
   try {
     const { id } = req.params;
-    const { roleCategory } = await loadRequestUser(req);
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
 
-    if (roleCategory !== 'admin') {
-      return res.status(403).json({ error: 'Only Admin can delete reports.' });
-    }
+    // Allow both admin and experts to hide reports (soft delete)
+    // Admin can still see all reports, but experts can hide reports from their view
 
-    const deleted = await Report.findByIdAndDelete(id);
-
-    if (!deleted) {
+    const report = await Report.findById(id);
+    if (!report) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    res.json({ success: true });
+    // Soft delete: Add user to hiddenForUsers array (only hide for this user)
+    if (!report.hiddenForUsers) {
+      report.hiddenForUsers = [];
+    }
+    
+    // Only add if not already hidden for this user
+    const userIdStr = userIdObj.toString();
+    if (!report.hiddenForUsers.some(id => id.toString() === userIdStr)) {
+      report.hiddenForUsers.push(userIdObj);
+      await report.save();
+    }
+
+    res.json({ success: true, message: 'Report hidden for this user' });
   } catch (err) {
-    console.error('Error deleting report:', err);
+    console.error('Error hiding report:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -531,9 +563,10 @@ exports.getMyReports = async (req, res) => {
       return res.json([]);
     }
 
-    // Find all reports for these projects
+    // Find all reports for these projects, excluding reports hidden for this user
     const reports = await Report.find({
-      projectId: { $in: projectIds }
+      projectId: { $in: projectIds },
+      hiddenForUsers: { $ne: userIdObj } // Exclude reports hidden for this user
     })
       .select('-content -sections')
       .populate('projectId', 'title')
@@ -616,15 +649,38 @@ exports.downloadReportPDF = async (req, res) => {
 exports.downloadReportDOCX = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    
+    // Enhanced error handling for loadRequestUser
+    let userIdObj, roleCategory;
+    try {
+      const userData = await loadRequestUser(req);
+      userIdObj = userData.userIdObj;
+      roleCategory = userData.roleCategory;
+    } catch (authError) {
+      console.error('❌ Error loading user from request:', authError);
+      return res.status(authError.statusCode || 400).json({ 
+        error: authError.message || 'User ID is required for this operation' 
+      });
+    }
 
     const report = await Report.findById(id)
-      .select('title projectId content computedMetrics geminiNarrative generatedAt')
+      .select('title projectId content computedMetrics geminiNarrative questionnaireKey generatedAt hiddenForUsers')
       .populate('projectId', 'title')
       .lean();
 
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Check if report is hidden for this user (soft delete)
+    if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
+      const userIdStr = userIdObj.toString();
+      const isHidden = report.hiddenForUsers.some(hiddenId => 
+        hiddenId && hiddenId.toString() === userIdStr
+      );
+      if (isHidden && roleCategory !== 'admin') {
+        return res.status(404).json({ error: 'Report not found' });
+      }
     }
 
     // Authorization: admin can export all. Expert/Viewer can export assigned reports.
@@ -641,29 +697,116 @@ exports.downloadReportDOCX = async (req, res) => {
 
     console.log('📝 Generating DOCX for report:', id);
 
-    let docxBuffer;
+    // Always use latest data (same as PDF download)
+    const projectId = report.projectId?._id || report.projectId;
+    if (!projectId) {
+      console.error('❌ Missing projectId in report:', id);
+      return res.status(500).json({ error: 'Report is missing project information' });
+    }
     
-    // Use new professional DOCX generator if report has computedMetrics
-    if (report.computedMetrics && report.geminiNarrative) {
-      console.log('Using professional DOCX generator with metrics and narrative');
-      
-      // Use regenerated chart buffers if available
-      docxBuffer = await generateProfessionalDOCX(
-        report.computedMetrics,
-        report.geminiNarrative,
-        report.generatedAt ? new Date(report.generatedAt) : new Date(),
-        chartBuffers
-      );
-    } else {
-      // Fallback to markdown-based DOCX for legacy reports
-      console.log('Using legacy markdown-based DOCX generator');
-      docxBuffer = await generateDOCXFromMarkdown(
-        buildExportMarkdownFromReport(report),
-        report.title
-      );
+    const questionnaireKey = report.questionnaireKey || report.computedMetrics?.project?.questionnaireKey || 'general-v1';
+    if (!questionnaireKey) {
+      console.error('❌ Missing questionnaireKey in report:', id);
+      return res.status(500).json({ error: 'Report is missing questionnaire information' });
+    }
+    
+    // Validate projectId format
+    if (!isValidObjectId(projectId)) {
+      console.error('❌ Invalid projectId format:', projectId);
+      return res.status(500).json({ error: `Invalid projectId format: ${projectId}` });
     }
 
-    const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
+    // Always regenerate with latest data (same approach as PDF)
+    console.log('📊 Fetching latest report metrics for DOCX generation...');
+    
+    let reportMetrics, geminiNarrative;
+    try {
+      // Build fresh report metrics from current data
+      reportMetrics = await buildReportMetrics(projectId, questionnaireKey);
+      
+      // Generate fresh narrative
+      const { generateReportNarrative } = require('./geminiService');
+      geminiNarrative = await generateReportNarrative(reportMetrics);
+    } catch (metricsError) {
+      console.error('❌ Error building report metrics:', metricsError);
+      // Fallback to stored data if available
+      if (report.computedMetrics && report.geminiNarrative) {
+        console.log('⚠️ Using stored metrics as fallback');
+        reportMetrics = report.computedMetrics;
+        geminiNarrative = report.geminiNarrative;
+      } else {
+        // Last resort: use legacy markdown
+        console.log('⚠️ Using legacy markdown-based DOCX generator');
+        const docxBuffer = await generateDOCXFromMarkdown(
+          buildExportMarkdownFromReport(report),
+          report.title || 'Report'
+        );
+        const fileName = `${(report.title || 'report').replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Length', docxBuffer.length);
+        return res.send(docxBuffer);
+      }
+    }
+
+    // Generate charts for DOCX
+    let chartBuffers = null;
+    try {
+      const chartGenerationService = require('./chartGenerationService');
+      const { getProjectAnalytics } = require('./analyticsService');
+      const analytics = await getProjectAnalytics(projectId, questionnaireKey);
+      
+      // Generate chart images
+      chartBuffers = {};
+      
+      // Principle bar chart
+      if (analytics.principleBar && analytics.principleBar.length > 0) {
+        const principleData = {};
+        analytics.principleBar.forEach(p => {
+          principleData[p.principleKey] = {
+            avgScore: p.avgScore,
+            min: 0,
+            max: 4
+          };
+        });
+        chartBuffers.principleBarChart = await chartGenerationService.generatePrincipleBarChart(principleData);
+      }
+      
+      // Evidence type donut
+      if (analytics.evidenceMetrics && analytics.evidenceMetrics.typeDistribution.length > 0) {
+        const evidenceTypeDist = {};
+        analytics.evidenceMetrics.typeDistribution.forEach(d => {
+          evidenceTypeDist[d.type] = d.count;
+        });
+        chartBuffers.evidenceTypeChart = await chartGenerationService.generateEvidenceTypeChart(evidenceTypeDist);
+      }
+      
+      // Role × Principle heatmap
+      if (analytics.rolePrincipleMatrix && Object.keys(analytics.rolePrincipleMatrix).length > 0) {
+        chartBuffers.rolePrincipleHeatmap = await chartGenerationService.generateRolePrincipleHeatmap(analytics.rolePrincipleMatrix);
+      }
+      
+      // Tensions review state chart
+      if (analytics.tensionsSummary && analytics.tensionsSummary.countsByReviewState) {
+        chartBuffers.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart(analytics.tensionsSummary.countsByReviewState);
+      }
+    } catch (chartError) {
+      console.warn('⚠️ Error generating charts for DOCX, continuing without charts:', chartError.message);
+      chartBuffers = null;
+    }
+
+    // Generate DOCX with latest data
+    const docxBuffer = await generateProfessionalDOCX(
+      reportMetrics,
+      geminiNarrative,
+      report.generatedAt ? new Date(report.generatedAt) : new Date(),
+      chartBuffers
+    );
+
+    const fileName = `${(report.title || 'report').replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
 
     res.setHeader(
       'Content-Type',
@@ -674,8 +817,28 @@ exports.downloadReportDOCX = async (req, res) => {
 
     res.send(docxBuffer);
   } catch (err) {
-    console.error('Error generating DOCX:', err);
-    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to generate DOCX' });
+    console.error('❌ Error in downloadReportDOCX:', err);
+    console.error('❌ Error stack:', err.stack);
+    console.error('❌ Report ID:', req.params.id);
+    console.error('❌ User ID from request:', getUserIdFromReq(req));
+    console.error('❌ Request query:', req.query);
+    console.error('❌ Request body:', req.body);
+    
+    const errorMessage = err.message || 'Failed to generate DOCX';
+    const errorDetails = process.env.NODE_ENV === 'development' 
+      ? {
+          message: errorMessage,
+          stack: err.stack,
+          statusCode: err.statusCode,
+          reportId: req.params.id,
+          userId: getUserIdFromReq(req)
+        }
+      : { message: errorMessage };
+    
+    res.status(err.statusCode || 500).json({ 
+      error: errorMessage,
+      details: errorDetails
+    });
   }
 };
 
@@ -706,7 +869,11 @@ exports.getAssignedToMe = async (req, res) => {
 
     if (projectIds.length === 0) return res.json([]);
 
-    const reports = await Report.find({ projectId: { $in: projectIds } })
+    // Exclude reports hidden for this user
+    const reports = await Report.find({ 
+      projectId: { $in: projectIds },
+      hiddenForUsers: { $ne: userIdObj } // Exclude reports hidden for this user
+    })
       .select('-content -sections')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
@@ -1078,8 +1245,8 @@ exports.generateDashboardNarrative = async (req, res) => {
     const topRiskyQuestions = [];
     for (const [questionId, scores] of Object.entries(questionScores)) {
       const avgRisk = scores.reduce((a, b) => a + b, 0) / scores.length;
-      // Lower score = higher risk, so we want questions with avgRisk < 2.0
-      if (avgRisk < 2.0 && scores.length > 0) {
+      // Higher score = higher risk (0 = lowest risk, 4 = highest risk), so we want questions with avgRisk >= 2.0 (High or Critical)
+      if (avgRisk >= 2.0 && scores.length > 0) {
         try {
           const question = await Question.findById(questionId).lean();
           if (question) {
@@ -1097,8 +1264,8 @@ exports.generateDashboardNarrative = async (req, res) => {
       }
     }
 
-    // Sort by avgRisk (ascending = highest risk first) and limit to top 10
-    topRiskyQuestions.sort((a, b) => a.avgRisk - b.avgRisk);
+    // Sort by avgRisk (descending = highest risk first) and limit to top 10
+    topRiskyQuestions.sort((a, b) => b.avgRisk - a.avgRisk);
     topRiskyQuestions.splice(10);
 
     // Build tensionSummaries
@@ -1267,6 +1434,58 @@ exports.generatePDFReport = async (req, res) => {
 
     console.log('✅ PDF report generated and saved:', report._id);
 
+    // Notify assigned experts (non-blocking)
+    try {
+      const Message = mongoose.model('Message');
+      const projectIdObj = isValidObjectId(projectId)
+        ? new mongoose.Types.ObjectId(projectId)
+        : projectId;
+      
+      // Get project to find assigned users
+      const project = await Project.findById(projectIdObj).select('assignedUsers title').lean();
+      
+      if (project && project.assignedUsers && project.assignedUsers.length > 0) {
+        const assignedUserIds = project.assignedUsers
+          .map(id => {
+            const idStr = id.toString ? id.toString() : String(id);
+            return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : id;
+          })
+          .filter(id => {
+            // Exclude the admin who generated the report
+            if (userIdObj) {
+              const idStr = id.toString ? id.toString() : String(id);
+              const userIdStr = userIdObj.toString ? userIdObj.toString() : String(userIdObj);
+              return idStr !== userIdStr;
+            }
+            return true;
+          });
+
+        if (assignedUserIds.length > 0) {
+          const projectTitle = project.title || report.title || 'Project';
+          const notificationText = `[NOTIFICATION] A new PDF report has been generated for project "${projectTitle}". You can review it in the Reports section.`;
+          
+          await Promise.all(
+            assignedUserIds.map(assignedUserId =>
+              Message.create({
+                projectId: projectIdObj,
+                fromUserId: userIdObj || assignedUserId,
+                toUserId: assignedUserId,
+                text: notificationText,
+                isNotification: true,
+                createdAt: new Date(),
+                readAt: null,
+              })
+            )
+          );
+          
+          console.log(`📬 Notifications sent to ${assignedUserIds.length} assigned expert(s) for PDF report`);
+        }
+      }
+    } catch (notificationError) {
+      // Don't fail report generation if notification fails
+      console.error('⚠️ Error sending notifications:', notificationError);
+    }
+
     // Return PDF for download
     const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${report._id}.pdf`;
     
@@ -1308,15 +1527,38 @@ exports.generatePDFReport = async (req, res) => {
 exports.downloadPDFReport = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    
+    // Enhanced error handling for loadRequestUser
+    let userIdObj, roleCategory;
+    try {
+      const userData = await loadRequestUser(req);
+      userIdObj = userData.userIdObj;
+      roleCategory = userData.roleCategory;
+    } catch (authError) {
+      console.error('❌ Error loading user from request:', authError);
+      return res.status(authError.statusCode || 400).json({ 
+        error: authError.message || 'User ID is required for this operation' 
+      });
+    }
 
     const report = await Report.findById(id)
-      .select('title projectId computedMetrics geminiNarrative questionnaireKey generatedAt metadata')
+      .select('title projectId computedMetrics geminiNarrative questionnaireKey generatedAt metadata hiddenForUsers')
       .populate('projectId', 'title')
       .lean();
 
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Check if report is hidden for this user (soft delete)
+    if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
+      const userIdStr = userIdObj.toString();
+      const isHidden = report.hiddenForUsers.some(hiddenId => 
+        hiddenId && hiddenId.toString() === userIdStr
+      );
+      if (isHidden && roleCategory !== 'admin') {
+        return res.status(404).json({ error: 'Report not found' });
+      }
     }
 
     // Authorization: admin can export all. Expert/Viewer can export assigned reports.
@@ -1335,13 +1577,57 @@ exports.downloadPDFReport = async (req, res) => {
 
     // Regenerate PDF (charts are generated on-demand)
     const projectId = report.projectId?._id || report.projectId;
-    const questionnaireKey = report.questionnaireKey || report.computedMetrics?.project?.questionnaireKey || 'general-v1';
+    if (!projectId) {
+      console.error('❌ Missing projectId in report:', id);
+      return res.status(500).json({ error: 'Report is missing project information' });
+    }
     
-    const pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
-      generatedAt: report.generatedAt ? new Date(report.generatedAt) : new Date()
-    });
+    const questionnaireKey = report.questionnaireKey || report.computedMetrics?.project?.questionnaireKey || 'general-v1';
+    if (!questionnaireKey) {
+      console.error('❌ Missing questionnaireKey in report:', id);
+      return res.status(500).json({ error: 'Report is missing questionnaire information' });
+    }
+    
+    // Validate projectId format
+    if (!isValidObjectId(projectId)) {
+      console.error('❌ Invalid projectId format:', projectId);
+      return res.status(500).json({ error: `Invalid projectId format: ${projectId}` });
+    }
+    
+    let pdfBuffer;
+    try {
+      pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
+        generatedAt: report.generatedAt ? new Date(report.generatedAt) : new Date()
+      });
+    } catch (pdfGenError) {
+      console.error('❌ Error in generatePDFReportService:', pdfGenError);
+      console.error('❌ PDF generation error stack:', pdfGenError?.stack);
+      console.error('❌ Report ID:', id);
+      console.error('❌ Project ID:', projectId);
+      console.error('❌ Questionnaire Key:', questionnaireKey);
+      return res.status(500).json({ 
+        error: `PDF generation failed: ${pdfGenError?.message || 'Unknown error'}`,
+        details: process.env.NODE_ENV === 'development' ? {
+          message: pdfGenError?.message,
+          stack: pdfGenError?.stack,
+          reportId: id,
+          projectId: projectId?.toString(),
+          questionnaireKey: questionnaireKey
+        } : undefined
+      });
+    }
+    
+    if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+      console.error('❌ PDF generation returned invalid buffer');
+      return res.status(500).json({ error: 'PDF generation returned invalid buffer' });
+    }
+    
+    if (pdfBuffer.length === 0) {
+      console.error('❌ PDF generation returned empty buffer');
+      return res.status(500).json({ error: 'PDF generation returned empty buffer' });
+    }
 
-    const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.pdf`;
+    const fileName = `${(report.title || 'report').replace(/[^a-z0-9]/gi, '_')}_${id}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -1349,8 +1635,28 @@ exports.downloadPDFReport = async (req, res) => {
 
     res.send(pdfBuffer);
   } catch (err) {
-    console.error('Error generating PDF:', err);
-    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to generate PDF' });
+    console.error('❌ Error in downloadPDFReport:', err);
+    console.error('❌ Error stack:', err.stack);
+    console.error('❌ Report ID:', req.params.id);
+    console.error('❌ User ID from request:', getUserIdFromReq(req));
+    console.error('❌ Request query:', req.query);
+    console.error('❌ Request body:', req.body);
+    
+    const errorMessage = err.message || 'Failed to generate PDF';
+    const errorDetails = process.env.NODE_ENV === 'development' 
+      ? {
+          message: errorMessage,
+          stack: err.stack,
+          statusCode: err.statusCode,
+          reportId: req.params.id,
+          userId: getUserIdFromReq(req)
+        }
+      : { message: errorMessage };
+    
+    res.status(err.statusCode || 500).json({ 
+      error: errorMessage,
+      details: errorDetails
+    });
   }
 };
 
@@ -1361,15 +1667,38 @@ exports.downloadPDFReport = async (req, res) => {
 exports.getReportFile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    
+    // Enhanced error handling for loadRequestUser
+    let userIdObj, roleCategory;
+    try {
+      const userData = await loadRequestUser(req);
+      userIdObj = userData.userIdObj;
+      roleCategory = userData.roleCategory;
+    } catch (authError) {
+      console.error('❌ Error loading user from request:', authError);
+      return res.status(authError.statusCode || 400).json({ 
+        error: authError.message || 'User ID is required for this operation' 
+      });
+    }
 
     const report = await Report.findById(id)
-      .select('filePath fileUrl mimeType fileSize projectId')
+      .select('filePath fileUrl mimeType fileSize projectId hiddenForUsers')
       .populate('projectId', 'title')
       .lean();
 
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Check if report is hidden for this user (soft delete)
+    if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
+      const userIdStr = userIdObj.toString();
+      const isHidden = report.hiddenForUsers.some(hiddenId => 
+        hiddenId && hiddenId.toString() === userIdStr
+      );
+      if (isHidden && roleCategory !== 'admin') {
+        return res.status(404).json({ error: 'Report not found' });
+      }
     }
 
     // Authorization: admin can view all. Expert/Viewer can view assigned reports.
@@ -1384,8 +1713,90 @@ exports.getReportFile = async (req, res) => {
       }
     }
 
+    // If filePath doesn't exist, regenerate PDF on-the-fly
     if (!report.filePath) {
-      return res.status(404).json({ error: 'Report file not found' });
+      console.log('⚠️ Report file not found on disk, regenerating PDF on-the-fly...');
+      
+      // Get report details to regenerate
+      const fullReport = await Report.findById(id)
+        .select('projectId questionnaireKey generatedAt title computedMetrics')
+        .populate('projectId', 'title')
+        .lean();
+      
+      if (!fullReport) {
+        return res.status(404).json({ error: 'Report not found' });
+      }
+      
+      const projectId = fullReport.projectId?._id || fullReport.projectId;
+      if (!projectId) {
+        console.error('❌ Missing projectId in report:', id);
+        return res.status(500).json({ error: 'Report is missing project information' });
+      }
+      
+      const questionnaireKey = fullReport.questionnaireKey || fullReport.computedMetrics?.project?.questionnaireKey || 'general-v1';
+      
+      if (!questionnaireKey) {
+        console.error('❌ Missing questionnaireKey in report:', id);
+        return res.status(500).json({ error: 'Report is missing questionnaire information' });
+      }
+      
+      try {
+        console.log(`📄 Regenerating PDF for report ${id}, projectId: ${projectId}, questionnaireKey: ${questionnaireKey}`);
+        
+        // Validate projectId format
+        if (!isValidObjectId(projectId)) {
+          throw new Error(`Invalid projectId format: ${projectId}`);
+        }
+        
+        // Regenerate PDF
+        let pdfBuffer;
+        try {
+          pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
+            generatedAt: fullReport.generatedAt ? new Date(fullReport.generatedAt) : new Date()
+          });
+        } catch (pdfGenError) {
+          console.error('❌ Error in generatePDFReportService:', pdfGenError);
+          console.error('❌ PDF generation error stack:', pdfGenError?.stack);
+          throw new Error(`PDF generation failed: ${pdfGenError?.message || 'Unknown error'}`);
+        }
+        
+        if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+          throw new Error('PDF generation returned invalid buffer');
+        }
+        
+        if (pdfBuffer.length === 0) {
+          throw new Error('PDF generation returned empty buffer');
+        }
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${fullReport.projectId?.title || 'report'}.pdf"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        
+        return res.send(pdfBuffer);
+      } catch (regenerateError) {
+        console.error('❌ Error regenerating PDF:', regenerateError);
+        console.error('❌ Error stack:', regenerateError.stack);
+        console.error('❌ Report ID:', id);
+        console.error('❌ Project ID:', projectId);
+        console.error('❌ Questionnaire Key:', questionnaireKey);
+        
+        // Return more detailed error message
+        const errorMessage = regenerateError.message || 'Unknown error occurred';
+        const errorDetails = process.env.NODE_ENV === 'development' 
+          ? {
+              message: errorMessage,
+              stack: regenerateError.stack,
+              reportId: id,
+              projectId: projectId?.toString(),
+              questionnaireKey: questionnaireKey
+            }
+          : { message: errorMessage };
+        
+        return res.status(500).json({ 
+          error: `Failed to generate report file: ${errorMessage}`,
+          details: errorDetails
+        });
+      }
     }
 
     const fs = require('fs').promises;
@@ -1398,12 +1809,113 @@ exports.getReportFile = async (req, res) => {
       
       res.send(fileBuffer);
     } catch (fileError) {
-      console.error('Error reading report file:', fileError);
+      console.error('❌ Error reading report file:', fileError);
+      console.error('❌ File path:', report.filePath);
+      
+      // Try to regenerate if file read fails
+      console.log('⚠️ File read failed, attempting to regenerate PDF...');
+      const fullReport = await Report.findById(id)
+        .select('projectId questionnaireKey generatedAt title computedMetrics')
+        .populate('projectId', 'title')
+        .lean();
+      
+      if (fullReport) {
+        const projectId = fullReport.projectId?._id || fullReport.projectId;
+        if (!projectId) {
+          console.error('❌ Missing projectId in report:', id);
+          return res.status(500).json({ error: 'Report is missing project information' });
+        }
+        
+        const questionnaireKey = fullReport.questionnaireKey || fullReport.computedMetrics?.project?.questionnaireKey || 'general-v1';
+        
+        if (!questionnaireKey) {
+          console.error('❌ Missing questionnaireKey in report:', id);
+          return res.status(500).json({ error: 'Report is missing questionnaire information' });
+        }
+        
+        try {
+          console.log(`📄 Regenerating PDF for report ${id}, projectId: ${projectId}, questionnaireKey: ${questionnaireKey}`);
+          
+          // Validate projectId format
+          if (!isValidObjectId(projectId)) {
+            throw new Error(`Invalid projectId format: ${projectId}`);
+          }
+          
+          let pdfBuffer;
+          try {
+            pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
+              generatedAt: fullReport.generatedAt ? new Date(fullReport.generatedAt) : new Date()
+            });
+          } catch (pdfGenError) {
+            console.error('❌ Error in generatePDFReportService (fallback):', pdfGenError);
+            console.error('❌ PDF generation error stack:', pdfGenError?.stack);
+            throw new Error(`PDF generation failed: ${pdfGenError?.message || 'Unknown error'}`);
+          }
+          
+          if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+            throw new Error('PDF generation returned invalid buffer');
+          }
+          
+          if (pdfBuffer.length === 0) {
+            throw new Error('PDF generation returned empty buffer');
+          }
+          
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${fullReport.projectId?.title || 'report'}.pdf"`);
+          res.setHeader('Content-Length', pdfBuffer.length);
+          
+          return res.send(pdfBuffer);
+        } catch (regenerateError) {
+          console.error('❌ Error regenerating PDF:', regenerateError);
+          console.error('❌ Error stack:', regenerateError.stack);
+          console.error('❌ Report ID:', id);
+          console.error('❌ Project ID:', projectId);
+          console.error('❌ Questionnaire Key:', questionnaireKey);
+          
+          // Return more detailed error message
+          const errorMessage = regenerateError.message || 'Unknown error occurred';
+          const errorDetails = process.env.NODE_ENV === 'development' 
+            ? {
+                message: errorMessage,
+                stack: regenerateError.stack,
+                reportId: id,
+                projectId: projectId?.toString(),
+                questionnaireKey: questionnaireKey
+              }
+            : { message: errorMessage };
+          
+          return res.status(500).json({ 
+            error: `Failed to regenerate report file: ${errorMessage}`,
+            details: errorDetails
+          });
+        }
+      }
+      
       res.status(404).json({ error: 'Report file not found on disk' });
     }
   } catch (err) {
-    console.error('Error serving report file:', err);
-    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to serve report file' });
+    console.error('❌ Error serving report file:', err);
+    console.error('❌ Error stack:', err.stack);
+    console.error('❌ Report ID:', req.params.id);
+    console.error('❌ User ID from request:', getUserIdFromReq(req));
+    console.error('❌ Request query:', req.query);
+    console.error('❌ Request body:', req.body);
+    
+    const errorMessage = err.message || 'Failed to serve report file';
+    const errorDetails = process.env.NODE_ENV === 'development' 
+      ? {
+          message: errorMessage,
+          stack: err.stack,
+          statusCode: err.statusCode,
+          reportId: req.params.id,
+          userId: getUserIdFromReq(req)
+        }
+      : { message: errorMessage };
+    
+    res.status(err.statusCode || 500).json({ 
+      error: errorMessage,
+      details: errorDetails
+    });
   }
 };
 
@@ -1434,13 +1946,41 @@ exports.getLatestReport = async (req, res) => {
       ? new mongoose.Types.ObjectId(projectId)
       : projectId;
 
-    const report = await Report.findOne({ projectId: projectIdObj })
-      .sort({ generatedAt: -1 })
-      .select('_id title generatedAt fileUrl status questionnaireKey')
+    // Get latest report with file metadata
+    // Sort by generatedAt (preferred) or createdAt (fallback) descending
+    // Also consider version field to ensure we get the most recent report
+    // Exclude reports hidden for this user (unless admin, who can see all)
+    const query = { projectId: projectIdObj };
+    if (roleCategory !== 'admin') {
+      query.hiddenForUsers = { $ne: userIdObj }; // Exclude reports hidden for this user
+    }
+    
+    const report = await Report.findOne(query)
+      .sort({ 
+        generatedAt: -1, 
+        createdAt: -1,
+        version: -1  // Also sort by version to ensure latest version
+      })
+      .select('_id title generatedAt createdAt fileUrl filePath mimeType fileSize hash version status questionnaireKey')
       .lean();
 
     if (!report) {
       return res.json({ report: null });
+    }
+
+    // Ensure title exists (fallback to default)
+    if (!report.title) {
+      report.title = 'Analysis Report';
+    }
+
+    // Ensure fileUrl is set (use API endpoint if filePath exists but fileUrl doesn't)
+    if (!report.fileUrl && report.filePath) {
+      report.fileUrl = `/api/reports/${report._id}/file`;
+    }
+
+    // Ensure generatedAt exists (use createdAt as fallback)
+    if (!report.generatedAt && report.createdAt) {
+      report.generatedAt = report.createdAt;
     }
 
     res.json({ report });
