@@ -76,6 +76,8 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
     const controller = new AbortController();
     (async () => {
       try {
+        // Note: UseCaseDetail doesn't have currentUser context, so we can't filter by userId
+        // This is OK as use case owners might need to see all projects
         const res = await fetch(api('/api/projects'), { signal: controller.signal });
         if (!res.ok) return;
         const allProjects = await res.json();

@@ -751,12 +751,12 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
               </div>
               <div className="grid grid-cols-5 gap-3 max-w-4xl">
                 {([
-                  { value: 4, label: 'Excellent', labelTr: 'Mükemmel', desc: 'Clear understanding, high confidence', color: 'green' },
-                  { value: 3, label: 'Good', labelTr: 'İyi', desc: 'Minor gaps but generally appropriate', color: 'blue' },
-                  { value: 2, label: 'Moderate', labelTr: 'Orta', desc: 'Basic awareness, notable gaps', color: 'yellow' },
-                  { value: 1, label: 'Poor', labelTr: 'Zayıf', desc: 'Significant misunderstanding, low confidence', color: 'orange' },
-                  { value: 0, label: 'Unacceptable', labelTr: 'Kabul Edilemez', desc: 'No awareness, serious risk', color: 'red' }
-                ] as const).map(({ value, label, labelTr, desc, color }) => {
+                  { value: 4, label: 'High risk', labelTr: 'Yüksek risk', desc: 'High likelihood of harm / major ethical concern. Immediate mitigation required.', descTr: 'Zarar olasılığı yüksek / ciddi etik sorun. Acil azaltım gerekli.', color: 'red' },
+                  { value: 3, label: 'Medium–High risk', labelTr: 'Orta–yüksek risk', desc: 'Meaningful risk; mitigation required before wider deployment.', descTr: 'Anlamlı risk; yaygın kullanımdan önce azaltım gerekli.', color: 'orange' },
+                  { value: 2, label: 'Medium risk', labelTr: 'Orta risk', desc: 'Some risk; monitor and improve safeguards.', descTr: 'Bir miktar risk; izleme ve güvenlik önlemleri güçlendirilmeli.', color: 'yellow' },
+                  { value: 1, label: 'Low risk', labelTr: 'Düşük risk', desc: 'Minor risk; acceptable with basic controls.', descTr: 'Küçük risk; temel kontrollerle kabul edilebilir.', color: 'blue' },
+                  { value: 0, label: 'No / Negligible risk', labelTr: 'Risk yok / ihmal edilebilir', desc: 'No meaningful ethical risk identified for this question.', descTr: 'Bu soru için anlamlı etik risk tespit edilmedi.', color: 'green' }
+                ] as const).map(({ value, label, labelTr, desc, descTr, color }) => {
                   const questionKey = getQuestionKey(currentQuestion);
                   // Get risk value - check all possible keys (same logic as working buttons 4, 3, 2)
                   let riskValue: number | undefined = undefined;
@@ -786,21 +786,20 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                   // Use explicit type check and equality (same as working buttons 4, 3, 2)
                   const isSelected = typeof riskValue === 'number' && riskValue === value;
                   
+                  // Color scheme: 4 = highest risk (red), 0 = no risk (green)
                   const colorClasses = {
-                    green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30',
-                    blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
-                    // Make 2/1 states visually distinct and obvious when selected
-                    yellow: isSelected ? 'border-yellow-600 bg-yellow-100 shadow-md ring-2 ring-yellow-200 ring-offset-2' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
+                    red: isSelected ? 'border-red-700 bg-red-100 shadow-md ring-2 ring-red-200 ring-offset-2' : 'border-gray-200 hover:border-red-300 hover:bg-red-50',
                     orange: isSelected ? 'border-orange-600 bg-orange-100 shadow-md ring-2 ring-orange-200 ring-offset-2' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50',
-                    // Make 0 (Unacceptable) clearly red when selected
-                    red: isSelected ? 'border-red-700 bg-red-100 shadow-md ring-2 ring-red-200 ring-offset-2' : 'border-gray-200 hover:border-red-300 hover:bg-red-50'
+                    yellow: isSelected ? 'border-yellow-600 bg-yellow-100 shadow-md ring-2 ring-yellow-200 ring-offset-2' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
+                    blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
+                    green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
                   };
                   const bgColorClasses = {
-                    green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400',
-                    blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
-                    yellow: isSelected ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-100 text-gray-400',
+                    red: isSelected ? 'bg-red-200 text-red-900' : 'bg-gray-100 text-gray-400',
                     orange: isSelected ? 'bg-orange-200 text-orange-900' : 'bg-gray-100 text-gray-400',
-                    red: isSelected ? 'bg-red-200 text-red-900' : 'bg-gray-100 text-gray-400'
+                    yellow: isSelected ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-100 text-gray-400',
+                    blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
+                    green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
                   };
                   return (
                     <label
@@ -846,7 +845,9 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                         {label}
                       </span>
                       <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
-                      <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>{desc}</span>
+                      <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
+                        {descTr || desc}
+                      </span>
                     </label>
                   );
                 })}

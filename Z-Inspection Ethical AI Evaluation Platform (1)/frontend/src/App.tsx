@@ -54,8 +54,9 @@ function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
+        const userId = currentUser?.id || (currentUser as any)?._id;
         const [projectsRes, usersRes, useCasesRes] = await Promise.all([
-          fetch(api('/api/projects'), { signal: controller.signal }),
+          fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`), { signal: controller.signal }),
           fetch(api('/api/users'), { signal: controller.signal }),
           fetch(api('/api/use-cases'), { signal: controller.signal })
         ]);
@@ -101,7 +102,8 @@ function App() {
     // Periodically refresh projects (every 10 seconds) to catch assignment updates
     const refreshInterval = setInterval(() => {
       if (currentUser) {
-        fetch(api('/api/projects'))
+        const userId = currentUser?.id || (currentUser as any)?._id;
+        fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`))
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) {
@@ -393,7 +395,12 @@ function App() {
 
   const handleDeleteProject = async (projectId: string) => {
     try {
-      const response = await fetch(api(`/api/projects/${projectId}`), {
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('User ID is required');
+        return;
+      }
+      const response = await fetch(api(`/api/projects/${projectId}?userId=${userId}`), {
         method: 'DELETE'
       });
 

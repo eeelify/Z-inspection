@@ -257,6 +257,38 @@ export function ProjectDetail({
     }
   };
 
+  // Fetch latest report on page load
+  useEffect(() => {
+    const fetchLatestReport = async () => {
+      try {
+        const projectId = project.id || (project as any)._id;
+        const userId = currentUser?.id || (currentUser as any)?._id;
+        const response = await fetch(api(`/api/projects/${projectId}/reports/latest?userId=${userId}`));
+        if (response.ok) {
+          const reportResponse = await response.json();
+          if (reportResponse.report) {
+            setLatestReport({
+              id: reportResponse.report._id,
+              fileUrl: reportResponse.report.fileUrl || `/api/reports/${reportResponse.report._id}/file`,
+              title: reportResponse.report.title || 'Analysis Report'
+            });
+          } else {
+            setLatestReport(null); // Ensure it's null if no report exists
+          }
+        } else {
+          setLatestReport(null); // Ensure it's null on error
+        }
+      } catch (err) {
+        console.warn('Could not fetch latest report:', err);
+        setLatestReport(null); // Ensure it's null on error
+      }
+    };
+    
+    if ((project.id || (project as any)._id) && currentUser) {
+      fetchLatestReport();
+    }
+  }, [project.id, (project as any)._id, currentUser]);
+
   useEffect(() => {
     fetchTensions();
     fetchUseCase();
@@ -513,19 +545,32 @@ export function ProjectDetail({
       if (response.ok) {
         const result = await response.json();
         alert('✅ Report generated successfully!');
-        // Refresh latest report
-        const projectId = project.id || (project as any)._id;
-        try {
-          const reportResponse = await api.get(`/projects/${projectId}/reports/latest`);
-          if (reportResponse.data?.report) {
-            setLatestReport({
-              id: reportResponse.data.report._id,
-              fileUrl: reportResponse.data.report.fileUrl || `/api/reports/${reportResponse.data.report._id}/file`,
-              title: reportResponse.data.report.title
-            });
+        // Update latest report from response or fetch it
+        if (result.report) {
+          setLatestReport({
+            id: result.report.id || result.report._id,
+            fileUrl: result.report.fileUrl || `/api/reports/${result.report.id || result.report._id}/file`,
+            title: result.report.title || 'Analysis Report'
+          });
+        } else {
+          // Fallback: fetch latest report
+          const projectId = project.id || (project as any)._id;
+          const userId = currentUser?.id || (currentUser as any)?._id;
+          try {
+            const reportResponse = await fetch(api(`/api/projects/${projectId}/reports/latest?userId=${userId}`));
+            if (reportResponse.ok) {
+              const data = await reportResponse.json();
+              if (data.report) {
+                setLatestReport({
+                  id: data.report._id,
+                  fileUrl: data.report.fileUrl || `/api/reports/${data.report._id}/file`,
+                  title: data.report.title || 'Analysis Report'
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('Could not fetch latest report after generation');
           }
-        } catch (err) {
-          console.warn('Could not fetch latest report after generation');
         }
       } else {
         const error = await response.json();
@@ -657,14 +702,80 @@ export function ProjectDetail({
               );
             })()}
             {latestReport && (
-              <a
-                href={latestReport.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors ml-2 inline-block"
+              <button
+                onClick={async () => {
+                  try {
+                    // Always fetch the latest report before opening to ensure we have the most recent one
+                    const projectId = project.id || (project as any)._id;
+                    const userId = currentUser?.id || (currentUser as any)?._id;
+                    
+                    // Fetch latest report to ensure we have the most recent one
+                    const response = await fetch(api(`/api/projects/${projectId}/reports/latest?userId=${userId}`));
+                    if (response.ok) {
+                      const reportResponse = await response.json();
+                      if (reportResponse.report) {
+                        // Use the latest report ID
+                        const reportId = reportResponse.report._id || reportResponse.report.id;
+                        let reportUrl = reportResponse.report.fileUrl || `/api/reports/${reportId}/file`;
+                        
+                        // Ensure URL is absolute
+                        if (!reportUrl.startsWith('http')) {
+                          reportUrl = api(reportUrl);
+                        }
+                        
+                        // Add userId as query parameter if not already present
+                        if (userId && !reportUrl.includes('userId=')) {
+                          const separator = reportUrl.includes('?') ? '&' : '?';
+                          reportUrl = `${reportUrl}${separator}userId=${userId}`;
+                        }
+                        
+                        // Update latestReport state
+                        setLatestReport({
+                          id: reportId,
+                          fileUrl: reportUrl,
+                          title: reportResponse.report.title || 'Analysis Report'
+                        });
+                        
+                        // Open report in new tab
+                        window.open(reportUrl, '_blank', 'noopener,noreferrer');
+                      } else {
+                        alert('No report found for this project.');
+                      }
+                    } else {
+                      // Fallback to existing latestReport if fetch fails
+                      let reportUrl = latestReport.fileUrl.startsWith('http') 
+                        ? latestReport.fileUrl 
+                        : api(latestReport.fileUrl);
+                      
+                      const userId = currentUser?.id || (currentUser as any)?._id;
+                      if (userId && !reportUrl.includes('userId=')) {
+                        const separator = reportUrl.includes('?') ? '&' : '?';
+                        reportUrl = `${reportUrl}${separator}userId=${userId}`;
+                      }
+                      
+                      window.open(reportUrl, '_blank', 'noopener,noreferrer');
+                    }
+                  } catch (err) {
+                    console.error('Error fetching latest report:', err);
+                    // Fallback to existing latestReport
+                    let reportUrl = latestReport.fileUrl.startsWith('http') 
+                      ? latestReport.fileUrl 
+                      : api(latestReport.fileUrl);
+                    
+                    const userId = currentUser?.id || (currentUser as any)?._id;
+                    if (userId && !reportUrl.includes('userId=')) {
+                      const separator = reportUrl.includes('?') ? '&' : '?';
+                      reportUrl = `${reportUrl}${separator}userId=${userId}`;
+                    }
+                    
+                    window.open(reportUrl, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors ml-2"
+                title={`View latest report: ${latestReport.title || 'Analysis Report'}`}
               >
                 Show Report
-              </a>
+              </button>
             )}
             {isAssigned && progressDisplay === 0 && (
               <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>

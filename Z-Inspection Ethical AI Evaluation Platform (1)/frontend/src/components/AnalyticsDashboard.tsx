@@ -84,10 +84,12 @@ const COLORS = {
 };
 
 const getRiskColor = (score: number) => {
-  if (score <= 1) return COLORS.low;
-  if (score <= 2) return COLORS.moderate;
-  if (score <= 3) return COLORS.high;
-  return COLORS.critical;
+  // 0 = lowest risk, 4 = highest risk
+  if (score >= 0.0 && score < 1.0) return COLORS.low;
+  if (score >= 1.0 && score < 2.0) return COLORS.moderate;
+  if (score >= 2.0 && score < 3.0) return COLORS.high;
+  if (score >= 3.0 && score <= 4.0) return COLORS.critical;
+  return COLORS.low; // Default to low for edge cases
 };
 
 const getStatusColor = (status: string) => {
@@ -249,7 +251,7 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                   interval={0}
                   fontSize={11}
                 />
-                <YAxis domain={[0, 4]} label={{ value: 'Score (0-4)', angle: -90, position: 'insideLeft' }} />
+                <YAxis domain={[0, 4]} label={{ value: 'Score (0-4, 0=lowest risk, 4=highest risk)', angle: -90, position: 'insideLeft' }} />
                 <Tooltip 
                   formatter={(value: number) => [`${value.toFixed(2)}/4.0`, 'Average Score']}
                   labelFormatter={(label) => `Principle: ${label}`}
@@ -265,24 +267,23 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
           </div>
           <div className="lg:col-span-1">
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-sm mb-3">Scale: 0–4</h4>
-              <p className="text-xs text-gray-600 mb-3">Higher score = Higher risk</p>
+              <h4 className="font-semibold text-sm mb-3">Scale 0–4 (0 = lowest risk, 4 = highest risk)</h4>
               <div className="space-y-2 text-xs">
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded mr-2" style={{ backgroundColor: COLORS.low }}></div>
-                  <span>0-1: Low risk</span>
+                  <span>0.0–1.0: Low</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded mr-2" style={{ backgroundColor: COLORS.moderate }}></div>
-                  <span>1-2: Moderate</span>
+                  <span>1.0–2.0: Moderate</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded mr-2" style={{ backgroundColor: COLORS.high }}></div>
-                  <span>2-3: High</span>
+                  <span>2.0–3.0: High</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded mr-2" style={{ backgroundColor: COLORS.critical }}></div>
-                  <span>3-4: Critical</span>
+                  <span>3.0–4.0: Critical</span>
                 </div>
               </div>
             </div>
@@ -317,8 +318,9 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                         key={principle}
                         className="px-3 py-2 text-center border-b"
                         style={{
-                          backgroundColor: score !== null ? `rgba(${score <= 1 ? '16, 185, 129' : score <= 2 ? '245, 158, 11' : score <= 3 ? '239, 68, 68' : '220, 38, 38'}, ${0.2 + (score / 4) * 0.3})` : '#f9fafb',
-                          color: score !== null ? (score > 2 ? '#fff' : '#1f2937') : '#9ca3af'
+                          // 0 = lowest risk, 4 = highest risk
+                          backgroundColor: score !== null ? `rgba(${score < 1.0 ? '16, 185, 129' : score < 2.0 ? '245, 158, 11' : score < 3.0 ? '239, 68, 68' : '220, 38, 38'}, ${0.2 + (score / 4) * 0.3})` : '#f9fafb',
+                          color: score !== null ? (score >= 2.0 ? '#fff' : '#1f2937') : '#9ca3af'
                         }}
                         title={`${role} - ${principle}: ${score !== null ? score.toFixed(2) : 'N/A'} (n=${n})`}
                       >
@@ -331,7 +333,7 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Cells show evaluator's average risk score per principle (0-4). N/A = not submitted.</p>
+        <p className="text-xs text-gray-500 mt-2">Cells show evaluator's average risk score per principle (0-4 scale, 0 = lowest risk, 4 = highest risk). N/A = not submitted.</p>
       </div>
 
       {/* Top Risky Questions */}

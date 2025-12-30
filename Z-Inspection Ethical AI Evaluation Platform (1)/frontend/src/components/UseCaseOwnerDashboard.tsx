@@ -377,7 +377,7 @@ export function UseCaseOwnerDashboard({
 
         <nav className="flex-1 px-3 py-4">
           <button className="w-full px-4 py-3 mb-2 flex items-center bg-green-50 text-green-700 rounded-lg">
-            <FolderOpen className="h-4 w-4 mr-3" />
+            <FolderOpen className="h-4 w-4 mr-3 text-green-600" />
             My Projects
           </button>
           {adminUser && (
@@ -385,7 +385,7 @@ export function UseCaseOwnerDashboard({
               onClick={handleContactAdmin}
               className="w-full px-4 py-3 mb-2 flex items-center text-gray-700 hover:bg-gray-100 rounded-lg"
             >
-              <MessageSquare className="h-4 w-4 mr-3" />
+              <MessageSquare className="h-4 w-4 mr-3 text-green-600" />
               Contact Admin
             </button>
           )}

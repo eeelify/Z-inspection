@@ -565,7 +565,7 @@ export function AdminDashboardEnhanced({
               activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <Folder className="h-5 w-5 mr-3" />
+            <Folder className="h-5 w-5 mr-3 text-blue-600" />
             Dashboard
           </button>
           <button
@@ -574,7 +574,7 @@ export function AdminDashboardEnhanced({
               activeTab === 'use-case-assignments' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <UserPlus className="h-5 w-5 mr-3" />
+            <UserPlus className="h-5 w-5 mr-3 text-pink-600" />
             Assignments
           </button>
           <button
@@ -583,7 +583,7 @@ export function AdminDashboardEnhanced({
               activeTab === 'project-creation' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <Plus className="h-5 w-5 mr-3" />
+            <Plus className="h-5 w-5 mr-3 text-green-600" />
             Create Project
           </button>
           <button
@@ -592,14 +592,14 @@ export function AdminDashboardEnhanced({
               activeTab === 'created-reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <FileText className="h-5 w-5 mr-3" />
+            <FileText className="h-5 w-5 mr-3 text-orange-600" />
             Created Reports
           </button>
           <button
             onClick={() => onNavigate('other-members')}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <Users className="h-5 w-5 mr-3" />
+            <Users className="h-5 w-5 mr-3 text-purple-600" />
             Members
           </button>
           <button
@@ -608,7 +608,7 @@ export function AdminDashboardEnhanced({
             }}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <MessageSquare className="h-5 w-5 mr-3" />
+            <MessageSquare className="h-5 w-5 mr-3 text-green-600" />
             Shared Area
           </button>
         </nav>
@@ -953,7 +953,8 @@ export function AdminDashboardEnhanced({
                if (response.ok) {
                  // Reload projects to reflect updated assignments
                  try {
-                   const projectsRes = await fetch(api('/api/projects'));
+                   const userId = currentUser?.id || (currentUser as any)?._id;
+                   const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
                    if (projectsRes.ok) {
                      const data = await projectsRes.json();
                      const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
@@ -1786,57 +1787,215 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     }
   };
 
-  // Download report as PDF
+  // Download report as PDF (full dashboard report with charts - always uses latest data)
   const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation(); // Prevent card click event
     }
+    
+    // Show loading state
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
     try {
-      const response = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      if (!reportId) {
+        alert('Rapor ID bulunamadı.');
+        return;
+      }
+      
+      console.log(`📥 [CreatedReports] Downloading PDF for report: ${reportId}, user: ${userId}`);
+      
+      // Use /download-pdf endpoint which generates full dashboard report with charts (always uses latest data)
+      const url = api(`/api/reports/${reportId}/download-pdf?userId=${userId}`);
+      console.log(`🔗 Request URL: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/pdf'
+        }
+      });
+      
+      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}, statusText: ${response.statusText}`);
+      
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📄 Content-Type: ${contentType}`);
+        
+        if (!contentType || !contentType.includes('application/pdf')) {
+          // Try to get error message from response
+          const text = await response.text();
+          console.error('❌ Response is not PDF:', text.substring(0, 500));
+          try {
+            const error = JSON.parse(text);
+            const errorMsg = error.error || error.message || error.details?.message || 'Sunucu PDF formatında yanıt döndürmedi';
+            alert(`PDF indirilemedi: ${errorMsg}\n\nDetay: ${JSON.stringify(error.details || {}, null, 2)}`);
+          } catch {
+            alert(`PDF indirilemedi: Sunucu PDF formatında yanıt döndürmedi.\n\nYanıt: ${text.substring(0, 200)}`);
+          }
+          return;
+        }
+        
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          alert('PDF dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
+        const urlObj = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
+        link.href = urlObj;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
         link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlObj);
+        
+        console.log('✅ PDF downloaded successfully');
       } else {
-        const error = await response.json();
-        alert('PDF indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+        let errorMessage = 'Bilinmeyen hata';
+        let errorDetails: any = null;
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+          errorDetails = error.details;
+          console.error('❌ PDF download error (JSON):', error);
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 500) || errorMessage;
+          console.error('❌ PDF download error (text):', text.substring(0, 500));
+        }
+        
+        const fullErrorMsg = errorDetails 
+          ? `${errorMessage}\n\nDetay: ${JSON.stringify(errorDetails, null, 2)}`
+          : errorMessage;
+        alert(`PDF indirilemedi (HTTP ${response.status}):\n\n${fullErrorMsg}`);
       }
     } catch (error: any) {
-      console.error('Error downloading PDF:', error);
-      alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+      console.error('❌ Error downloading PDF:', error);
+      console.error('❌ Error stack:', error.stack);
+      alert(`PDF indirilemedi: ${error.message || 'Bağlantı hatası'}\n\nLütfen konsolu kontrol edin.`);
+    } finally {
+      // Restore button state
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
     }
   };
 
-  // Download report as Word (DOCX)
+  // Download report as Word (DOCX) - always uses latest data
   const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    
+    // Show loading state
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
     try {
-      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${currentUser.id}`));
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      if (!reportId) {
+        alert('Rapor ID bulunamadı.');
+        return;
+      }
+      
+      console.log(`📥 [CreatedReports] Downloading DOCX for report: ${reportId}, user: ${userId}`);
+      
+      // Use /download-docx endpoint which always uses latest data
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
+      
+      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
+      
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📄 Content-Type: ${contentType}`);
+        
+        const expectedTypes = [
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/octet-stream',
+          'application/zip'
+        ];
+        
+        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
+          // Try to get error message from response
+          const text = await response.text();
+          console.error('❌ Response is not DOCX:', text.substring(0, 200));
+          try {
+            const error = JSON.parse(text);
+            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
+          } catch {
+            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          alert('Word dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
+        const urlObj = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.href = urlObj;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
         link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlObj);
+        
+        console.log('✅ DOCX downloaded successfully');
       } else {
-        const error = await response.json().catch(() => ({} as any));
-        alert('Word indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+          console.error('❌ DOCX download error:', error);
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+          console.error('❌ DOCX download error (text):', text.substring(0, 200));
+        }
+        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
       }
     } catch (error: any) {
-      console.error('Error downloading Word:', error);
-      alert('Word indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+      console.error('❌ Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      // Restore button state
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
     }
   };
 
@@ -2291,55 +2450,197 @@ function ReportsTab({ projects, currentUser, users }: any) {
     }
   };
 
-  // Download report as PDF
+  // Download report as PDF (full dashboard report with charts - always uses latest data)
   const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    
+    // Show loading state
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
     try {
-      const response = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      if (!reportId) {
+        alert('Rapor ID bulunamadı.');
+        return;
+      }
+      
+      console.log(`📥 [ReportsTab] Downloading PDF for report: ${reportId}, user: ${userId}`);
+      
+      // Use /download-pdf endpoint which generates full dashboard report with charts (always uses latest data)
+      const response = await fetch(api(`/api/reports/${reportId}/download-pdf?userId=${userId}`));
+      
+      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
+      
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📄 Content-Type: ${contentType}`);
+        
+        if (!contentType || !contentType.includes('application/pdf')) {
+          // Try to get error message from response
+          const text = await response.text();
+          console.error('❌ Response is not PDF:', text.substring(0, 200));
+          try {
+            const error = JSON.parse(text);
+            alert('PDF indirilemedi: ' + (error.error || 'Sunucu PDF formatında yanıt döndürmedi'));
+          } catch {
+            alert('PDF indirilemedi: Sunucu PDF formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
         const blob = await response.blob();
+        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          alert('PDF dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
         link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
+        
+        console.log('✅ PDF downloaded successfully');
       } else {
-        const error = await response.json().catch(() => ({} as any));
-        alert('PDF indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+          console.error('❌ PDF download error:', error);
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+          console.error('❌ PDF download error (text):', text.substring(0, 200));
+        }
+        alert(`PDF indirilemedi (${response.status}): ${errorMessage}`);
       }
     } catch (error: any) {
-      console.error('Error downloading PDF:', error);
-      alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+      console.error('❌ Error downloading PDF:', error);
+      alert('PDF indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      // Restore button state
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
     }
   };
 
-  // Download report as Word (DOCX)
+  // Download report as Word (DOCX) - always uses latest data
   const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    
+    // Show loading state
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
     try {
-      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${currentUser.id}`));
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      if (!reportId) {
+        alert('Rapor ID bulunamadı.');
+        return;
+      }
+      
+      console.log(`📥 [ReportsTab] Downloading DOCX for report: ${reportId}, user: ${userId}`);
+      
+      // Use /download-docx endpoint which always uses latest data
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
+      
+      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
+      
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📄 Content-Type: ${contentType}`);
+        
+        const expectedTypes = [
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/octet-stream',
+          'application/zip'
+        ];
+        
+        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
+          // Try to get error message from response
+          const text = await response.text();
+          console.error('❌ Response is not DOCX:', text.substring(0, 200));
+          try {
+            const error = JSON.parse(text);
+            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
+          } catch {
+            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
         const blob = await response.blob();
+        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          alert('Word dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
         link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
+        
+        console.log('✅ DOCX downloaded successfully');
       } else {
-        const error = await response.json().catch(() => ({} as any));
-        alert('Word indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+          console.error('❌ DOCX download error:', error);
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+          console.error('❌ DOCX download error (text):', text.substring(0, 200));
+        }
+        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
       }
     } catch (error: any) {
-      console.error('Error downloading Word:', error);
-      alert('Word indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+      console.error('❌ Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      // Restore button state
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
     }
   };
 
