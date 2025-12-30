@@ -657,6 +657,128 @@ async function validateSubmission(projectId, userId, questionnaireKey) {
   }
 }
 
+/**
+ * Calculate project progress based on current assignments and individual user progress
+ * Single source of truth for progress calculation
+ * Formula: Average of individual user progress (answered questions / total questions for each user)
+ * 
+ * This matches the calculation used in ProjectDetail component:
+ * - Each user's progress is calculated individually (answered/total questions)
+ * - Project progress = average of all assigned users' individual progress
+ * 
+ * @param {string|ObjectId} projectId - Project ID
+ * @returns {Promise<number>} Progress percentage (0-100)
+ */
+async function calculateProjectProgress(projectId) {
+  try {
+    const Question = require('../models/question');
+    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+    
+    // Get all current assignments for this project (single source of truth)
+    const assignments = await ProjectAssignment.find({ projectId: projectIdObj }).lean();
+    
+    if (assignments.length === 0) {
+      return 0; // No assignments = 0% progress
+    }
+    
+    // Collect all unique questionnaire keys
+    const allQuestionnaireKeys = new Set();
+    assignments.forEach(a => {
+      if (a.questionnaires && Array.isArray(a.questionnaires)) {
+        a.questionnaires.forEach(q => allQuestionnaireKeys.add(q));
+      }
+    });
+    
+    // Pre-fetch all questions for all questionnaires (optimization)
+    const allQuestions = await Question.find({ 
+      questionnaireKey: { $in: Array.from(allQuestionnaireKeys) } 
+    }).lean();
+    
+    // Group questions by questionnaire key
+    const questionsByQuestionnaire = {};
+    allQuestions.forEach(q => {
+      if (!questionsByQuestionnaire[q.questionnaireKey]) {
+        questionsByQuestionnaire[q.questionnaireKey] = [];
+      }
+      questionsByQuestionnaire[q.questionnaireKey].push(q);
+    });
+    
+    // Get all responses for all assigned users in one query
+    const assignedUserIds = assignments.map(a => a.userId);
+    const allResponses = await Response.find({
+      projectId: projectIdObj,
+      userId: { $in: assignedUserIds }
+    }).lean();
+    
+    // Group responses by userId and questionnaireKey
+    const responsesByUser = {};
+    allResponses.forEach(r => {
+      const userIdStr = r.userId.toString();
+      if (!responsesByUser[userIdStr]) {
+        responsesByUser[userIdStr] = {};
+      }
+      responsesByUser[userIdStr][r.questionnaireKey] = r;
+    });
+    
+    // Calculate individual progress for each assigned user
+    let totalProgress = 0;
+    let validUserCount = 0;
+    
+    for (const assignment of assignments) {
+      const userId = assignment.userId;
+      const userIdStr = userId.toString();
+      const questionnaires = assignment.questionnaires || [];
+      
+      if (questionnaires.length === 0) {
+        continue; // No questionnaires assigned, skip
+      }
+      
+      // Calculate total questions and answered questions across all questionnaires
+      let totalQuestions = 0;
+      let answeredQuestions = 0;
+      
+      const userResponses = responsesByUser[userIdStr] || {};
+      
+      for (const qKey of questionnaires) {
+        // Get total questions for this questionnaire
+        const questions = questionsByQuestionnaire[qKey] || [];
+        totalQuestions += questions.length;
+        
+        // Get answered questions for this questionnaire
+        const response = userResponses[qKey];
+        if (response && response.answers && Array.isArray(response.answers)) {
+          // Count answered questions (those with actual answers)
+          const answered = response.answers.filter(a => {
+            if (!a.answer) return false;
+            const ans = a.answer;
+            return (ans.choiceKey !== null && ans.choiceKey !== undefined && ans.choiceKey !== '') ||
+                   (ans.text !== null && ans.text !== undefined && String(ans.text).trim().length > 0) ||
+                   (ans.numeric !== null && ans.numeric !== undefined) ||
+                   (Array.isArray(ans.multiChoiceKeys) && ans.multiChoiceKeys.length > 0);
+          }).length;
+          answeredQuestions += answered;
+        }
+      }
+      
+      if (totalQuestions > 0) {
+        const userProgress = (answeredQuestions / totalQuestions) * 100;
+        totalProgress += userProgress;
+        validUserCount++;
+      }
+    }
+    
+    // Calculate average progress across all assigned users (same as ProjectDetail)
+    const progress = validUserCount > 0 
+      ? Math.round(totalProgress / validUserCount)
+      : 0;
+    
+    return Math.max(0, Math.min(100, progress)); // Clamp between 0-100
+  } catch (error) {
+    console.error('Error calculating project progress:', error);
+    return 0; // Return 0 on error
+  }
+}
+
 module.exports = {
   createAssignment,
   saveDraftResponse,
@@ -665,6 +787,7 @@ module.exports = {
   getHotspotQuestions,
   initializeResponses,
   ensureAllQuestionsPresent,
-  validateSubmission
+  validateSubmission,
+  calculateProjectProgress
 };
 

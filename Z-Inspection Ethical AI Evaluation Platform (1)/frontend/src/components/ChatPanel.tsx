@@ -483,7 +483,7 @@ export function ChatPanel({
 
   // Layout classes
   const containerClasses = inline
-    ? `w-full max-w-full bg-white border border-gray-200 min-h-0 h-full max-h-full overflow-hidden flex flex-col`
+    ? `w-full max-w-full bg-white border border-gray-200 overflow-hidden flex flex-col`
     : `fixed ${isFullscreen ? 'inset-0' : 'bottom-4 right-4 w-96'} bg-white shadow-2xl z-50 border border-gray-200 rounded-lg flex flex-col min-h-0`;
   
   const fixedHeight = isFullscreen ? '100vh' : `min(600px, calc(100vh - 2rem))`;
@@ -496,10 +496,10 @@ export function ChatPanel({
           ? { 
               display: 'flex', 
               flexDirection: 'column', 
-              minHeight: 0, 
-              height: '100%', 
+              height: '100%',
               maxHeight: '100%',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              position: 'relative'
             }
           : (!isFullscreen ? { 
               height: fixedHeight, 
@@ -551,13 +551,14 @@ export function ChatPanel({
       {/* Messages (scroll area) - Scrollable container with flex: 1 */}
       <div 
         ref={messagesContainerRef}
-        className="min-h-0 bg-gray-50 overscroll-contain touch-pan-y chat-messages-scroll"
+        className="bg-gray-50 overscroll-contain touch-pan-y chat-messages-scroll"
         tabIndex={0}
         aria-label="Chat messages"
         style={{ 
-          flex: '1 1 auto',
+          flex: '1 1 0%',
           minHeight: 0,
-          overflowY: 'scroll', // Always show scrollbar
+          height: 0, // Force flex child to respect parent height constraints
+          overflowY: 'auto', // Auto shows scrollbar only when needed
           overflowX: 'hidden',
           WebkitOverflowScrolling: 'touch',
           scrollbarGutter: 'stable',

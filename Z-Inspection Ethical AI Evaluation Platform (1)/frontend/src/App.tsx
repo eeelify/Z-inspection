@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { X } from "lucide-react";
 import { LoginScreen } from "./components/LoginScreen";
 import { AdminDashboardEnhanced } from "./components/AdminDashboardEnhanced";
 import { UserDashboard } from "./components/UserDashboard";
@@ -14,6 +15,7 @@ import { SharedArea } from "./components/SharedArea";
 import { OtherMembers } from "./components/OtherMembers";
 import { PreconditionApproval } from "./components/PreconditionApproval";
 import { ReportReview } from "./components/ReportReview";
+import { ChatPanel } from "./components/ChatPanel";
 import {
   User,
   Project,
@@ -30,6 +32,8 @@ function App() {
   const [selectedOwner, setSelectedOwner] = useState<User | null>(null);
   const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [chatProject, setChatProject] = useState<Project | null>(null);
+  const [chatOtherUser, setChatOtherUser] = useState<User | null>(null);
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
@@ -255,6 +259,14 @@ function App() {
     setSelectedOwner(null);
     setSelectedUseCase(null);
     setSelectedReportId(null);
+    setChatProject(null);
+    setChatOtherUser(null);
+  };
+
+  const handleOpenChat = (project: Project, otherUser: User) => {
+    setChatProject(project);
+    setChatOtherUser(otherUser);
+    setCurrentView("chat");
   };
 
   const handleReviewReport = (reportId: string) => {
@@ -559,6 +571,7 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -643,6 +656,7 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -726,6 +740,7 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -831,6 +846,25 @@ function App() {
             onBack={handleBackToDashboard}
           />
         ) : null;
+      case "chat":
+        return chatProject && chatOtherUser ? (
+          <div className="min-h-screen bg-gray-50 flex flex-col">
+            <div className="max-w-4xl mx-auto w-full h-screen flex flex-col">
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <ChatPanel
+                  project={chatProject}
+                  currentUser={currentUser}
+                  otherUser={chatOtherUser}
+                  onClose={handleBackToDashboard}
+                  inline={true}
+                  onMessageSent={() => {
+                    window.dispatchEvent(new Event('message-sent'));
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null;
       default:
         if (currentUser.role === "use-case-owner") {
           return (
@@ -844,6 +878,7 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              onOpenChat={handleOpenChat}
             />
           );
         } else if (currentUser.role === "admin") {
@@ -906,6 +941,7 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced

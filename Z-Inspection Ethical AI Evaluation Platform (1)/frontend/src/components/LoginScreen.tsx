@@ -219,7 +219,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                     <option value="admin">Admin</option>
                     <option value="ethical-expert">Ethical Expert</option>
                     <option value="medical-expert">Medical Expert</option>
-                    <option value="use-case-owner">Use Case Expert</option>
+                    <option value="use-case-owner">Use Case Owner</option>
                     <option value="education-expert">Education Expert</option>
                     <option value="technical-expert">Technical Expert</option>
                     <option value="legal-expert">Legal Expert</option>
@@ -289,7 +289,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 <option value="admin">Admin</option>
                 <option value="ethical-expert">Ethical Expert</option>
                 <option value="medical-expert">Medical Expert</option>
-                <option value="use-case-owner">Use Case Expert</option>
+                <option value="use-case-owner">Use Case Owner</option>
                 <option value="education-expert">Education Expert</option>
                 <option value="technical-expert">Technical Expert</option>
                 <option value="legal-expert">Legal Expert</option>

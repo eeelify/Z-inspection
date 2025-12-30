@@ -385,9 +385,9 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
                   Last updated: {new Date(uc.updatedAt).toLocaleDateString()}
                 </span>
                 <span
-                  className={`px-3 py-1 text-xs rounded-full ${statusColors[displayStatus].bg} ${statusColors[displayStatus].text}`}
+                  className={`px-3 py-1 text-xs rounded-full ${statusColors[displayStatus]?.bg || statusColors['assigned'].bg} ${statusColors[displayStatus]?.text || statusColors['assigned'].text}`}
                 >
-                  {statusLabels[displayStatus]}
+                  {statusLabels[displayStatus] || statusLabels['assigned']}
                 </span>
                 {loadingDetails && <span className="text-xs text-gray-500">(Loading details...)</span>}
               </div>

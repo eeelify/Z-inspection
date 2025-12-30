@@ -273,15 +273,48 @@ const fetchConversations = async () => {
   }, [activeTab]);
 
   const handleOpenChat = (conversation: any) => {
-    const otherUser = users.find(u => u.id === conversation.otherUserId);
-    const project = projects.find(p => p.id === conversation.projectId);
-    if (otherUser && project) {
-      // Always set project/user (keeps ChatPanel mounted)
-      setChatOtherUser(otherUser);
-      setChatProject(project);
-      setSelectedConversation(conversation);
-      setChatPanelOpen(true);
+    const otherUser = users.find(u => {
+      const userId = u.id || (u as any)._id;
+      const convUserId = conversation.otherUserId?.id || conversation.otherUserId?._id || conversation.otherUserId;
+      return String(userId) === String(convUserId);
+    });
+    
+    const project = projects.find(p => {
+      const projectId = p.id || (p as any)._id;
+      const convProjectId = conversation.projectId?.id || conversation.projectId?._id || conversation.projectId;
+      return String(projectId) === String(convProjectId);
+    });
+    
+    if (!otherUser) {
+      console.error('User not found for conversation:', conversation);
+      alert('User not found. Please refresh the page.');
+      return;
     }
+    
+    if (!project) {
+      console.error('Project not found for conversation:', conversation);
+      // Try to get communication project as fallback
+      getCommunicationProject(otherUser).then(commProject => {
+        if (commProject) {
+          setChatOtherUser(otherUser);
+          setChatProject(commProject);
+          setSelectedConversation(conversation);
+          setChatPanelOpen(true);
+        } else {
+          alert('Project not found. Cannot open chat.');
+        }
+      }).catch(err => {
+        console.error('Error getting communication project:', err);
+        alert('Cannot open chat: Project not found.');
+      });
+      return;
+    }
+    
+    // Always set project/user (keeps ChatPanel mounted)
+    setChatOtherUser(otherUser);
+    setChatProject(project);
+    setSelectedConversation(conversation);
+    setChatPanelOpen(true);
   };
 
   const formatTime = (dateString: string) => {
@@ -363,7 +396,7 @@ const fetchConversations = async () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
           {activeTab === 'members' ? (
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -418,8 +451,16 @@ const fetchConversations = async () => {
                   </div>
                   <div className="space-y-1">
                     {userProjects.length > 0 ? (
-                      <div className="text-xs text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100">
-                        Active projects: {userProjects.length}
+                      <div className="space-y-1.5">
+                        {userProjects.map((project) => (
+                          <div
+                            key={project.id || (project as any)._id}
+                            className="text-xs text-gray-700 bg-gray-50 px-2 py-1.5 rounded border border-gray-100 truncate"
+                            title={project.title}
+                          >
+                            {project.title}
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="text-xs text-gray-400 italic">
@@ -459,11 +500,11 @@ const fetchConversations = async () => {
         </div>
       ) : (
         /* Chats - WhatsApp style layout */
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div className="flex flex-1 min-h-0 border-t border-gray-200">
+        <div className="flex-1 min-h-0 flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
+          <div className="flex flex-1 min-h-0 border-t border-gray-200" style={{ maxHeight: 'calc(100vh - 140px)' }}>
             {/* Conversation list */}
-            <div className="w-80 border-r border-gray-200 bg-white flex flex-col min-h-0">
-              <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="w-64 border-r border-gray-200 bg-white flex flex-col overflow-hidden" style={{ height: '100%', maxHeight: 'calc(100vh - 140px)' }}>
+              <div className="flex-1 overflow-y-auto overscroll-contain" style={{ height: '100%' }}>
               {conversationList.length === 0 ? (
                 <div className="text-center py-12">
                   <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-4" />
@@ -473,15 +514,25 @@ const fetchConversations = async () => {
               ) : (
                 <div className="space-y-2 p-3">
                   {conversationList.map((conv) => {
-                    const otherUser = users.find(u => u.id === conv.otherUserId);
-                    const project = projects.find(p => p.id === conv.projectId);
+                    const otherUser = users.find(u => {
+                      const userId = u.id || (u as any)._id;
+                      const convUserId = conv.otherUserId?.id || conv.otherUserId?._id || conv.otherUserId;
+                      return String(userId) === String(convUserId);
+                    });
+                    const project = projects.find(p => {
+                      const projectId = p.id || (p as any)._id;
+                      const convProjectId = conv.projectId?.id || conv.projectId?._id || conv.projectId;
+                      return String(projectId) === String(convProjectId);
+                    });
                     if (!otherUser) return null;
                     const userColor = roleColors[otherUser.role as keyof typeof roleColors] || '#1F2937';
                     const hasUnread = conv.unreadCount > 0;
-                    const isSelected = selectedConversation && selectedConversation.projectId === conv.projectId && selectedConversation.otherUserId === conv.otherUserId;
+                    const isSelected = selectedConversation && 
+                      String(selectedConversation.projectId?.id || selectedConversation.projectId?._id || selectedConversation.projectId) === String(conv.projectId?.id || conv.projectId?._id || conv.projectId) && 
+                      String(selectedConversation.otherUserId?.id || selectedConversation.otherUserId?._id || selectedConversation.otherUserId) === String(conv.otherUserId?.id || conv.otherUserId?._id || conv.otherUserId);
                     return (
                       <div
-                        key={`${conv.projectId}-${conv.otherUserId}`}
+                        key={`${conv.projectId?.id || conv.projectId?._id || conv.projectId}-${conv.otherUserId?.id || conv.otherUserId?._id || conv.otherUserId}`}
                         onClick={() => handleOpenChat(conv)}
                         className={`rounded-lg border p-3 cursor-pointer transition-all ${
                           isSelected ? 'border-blue-500 bg-blue-50' : hasUnread ? 'border-blue-500 border-l-4 bg-white' : 'border-gray-200 bg-white hover:shadow-sm'
@@ -514,7 +565,7 @@ const fetchConversations = async () => {
                               </div>
                             </div>
                             <p className={`text-sm truncate ${hasUnread ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
-                              {conv.lastMessage}
+                              {conv.lastMessage || 'No messages yet'}
                             </p>
                           </div>
                         </div>
@@ -527,23 +578,24 @@ const fetchConversations = async () => {
             </div>
 
             {/* Chat area */}
-            <div className="flex-1 bg-white flex flex-col min-h-0">
+            <div className="flex-1 bg-white flex flex-col overflow-hidden" style={{ height: '100%', maxHeight: 'calc(100vh - 140px)' }}>
               {/* Empty state - shown when no chat selected */}
               {!chatPanelOpen || !chatOtherUser || !chatProject ? (
-                <div className="flex-1 flex items-center justify-center text-gray-500">
+                <div className="flex-1 flex items-center justify-center text-gray-500" style={{ height: '100%' }}>
                   Select a conversation to start chatting.
                 </div>
               ) : null}
               
               {/* ChatPanel - Always mounted when project/user exist, shown inline when activeTab === 'chats' */}
               {chatProject && chatOtherUser ? (
-                <div className={`flex-1 min-h-0 ${chatPanelOpen && activeTab === 'chats' ? '' : 'hidden'}`}>
+                <div className={`flex-1 overflow-hidden ${chatPanelOpen && activeTab === 'chats' ? '' : 'hidden'}`} style={{ height: '100%', maxHeight: 'calc(100vh - 140px)' }}>
                   <ChatPanel
                     project={chatProject}
                     currentUser={currentUser}
                     otherUser={chatOtherUser}
                     inline={true}
                     defaultFullscreen={false}
+                    showProjectTitle={true}
                     onClose={() => {
                       setChatPanelOpen(false);
                       // Keep project/user so ChatPanel stays mounted
@@ -592,6 +644,7 @@ const fetchConversations = async () => {
               otherUser={chatOtherUser}
               inline={true}
               defaultFullscreen={true}
+              showProjectTitle={true}
               onClose={() => {
                 setChatPanelOpen(false);
                 // Keep project/user so ChatPanel stays mounted

@@ -4083,12 +4083,39 @@ app.post('/api/users/:id/precondition-approval', async (req, res) => {
 
 app.get('/api/projects', async (req, res) => {
   try {
+    const ProjectAssignment = require('./models/projectAssignment');
+    const { calculateProjectProgress } = require('./services/evaluationService');
+    
     const projects = await Project.find()
       .select('-fullDescription') // Exclude large description for list view
       .lean()
       .maxTimeMS(5000)
       .limit(1000);
-    res.json(projects);
+    
+    // Calculate progress and get current assigned users for each project
+    const projectsWithProgress = await Promise.all(
+      projects.map(async (project) => {
+        const projectIdObj = project._id;
+        
+        // Get current assignments (single source of truth)
+        const assignments = await ProjectAssignment.find({ projectId: projectIdObj })
+          .select('userId')
+          .lean();
+        
+        const currentAssignedUserIds = assignments.map(a => a.userId.toString());
+        
+        // Calculate progress based on current assignments
+        const computedProgress = await calculateProjectProgress(projectIdObj);
+        
+        return {
+          ...project,
+          progress: computedProgress, // Override stored progress with computed value
+          assignedUsers: currentAssignedUserIds // Override with current assignments
+        };
+      })
+    );
+    
+    res.json(projectsWithProgress);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

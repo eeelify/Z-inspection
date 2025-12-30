@@ -19,6 +19,7 @@ interface UseCaseOwnerDashboardProps {
   onDeleteUseCase: (useCaseId: string) => void;
   onLogout: () => void;
   onUpdateUser?: (user: User) => void;
+  onOpenChat?: (project: Project, otherUser: User) => void;
 }
 
 const statusColors = {
@@ -42,7 +43,8 @@ export function UseCaseOwnerDashboard({
   onViewUseCase,
   onDeleteUseCase,
   onLogout,
-  onUpdateUser
+  onUpdateUser,
+  onOpenChat
 }: UseCaseOwnerDashboardProps) {
   const [showNewUseCaseModal, setShowNewUseCaseModal] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
@@ -78,7 +80,7 @@ export function UseCaseOwnerDashboard({
     } finally {
       setLoadingUseCases(false);
     }
-  }, [currentUser.id, useCases]);
+  }, [currentUser.id]); // Removed useCases from dependencies to prevent infinite loop
 
   useEffect(() => {
     fetchMyUseCases();
@@ -255,10 +257,15 @@ export function UseCaseOwnerDashboard({
         } as any);
       
       if (project && otherUser) {
-        setChatAdmin(otherUser);
-        setChatProject(project);
-        setChatPanelOpen(true);
-        setShowNotifications(false);
+        if (onOpenChat) {
+          onOpenChat(project, otherUser);
+          setShowNotifications(false);
+        } else {
+          setChatAdmin(otherUser);
+          setChatProject(project);
+          setChatPanelOpen(true);
+          setShowNotifications(false);
+        }
       }
     }
   };
@@ -319,9 +326,13 @@ export function UseCaseOwnerDashboard({
     if (adminUser) {
       const project = await getAdminProject();
       console.log('Opening chat with admin', { adminUser, project });
-      setChatAdmin(adminUser);
-      setChatProject(project);
-      setChatPanelOpen(true);
+      if (onOpenChat) {
+        onOpenChat(project, adminUser);
+      } else {
+        setChatAdmin(adminUser);
+        setChatProject(project);
+        setChatPanelOpen(true);
+      }
     } else {
       console.error('Admin user not found. Available users:', users.map(u => ({ id: u.id, name: u.name, role: u.role })));
       alert('Admin user not found. Please contact support.');
@@ -547,9 +558,9 @@ export function UseCaseOwnerDashboard({
                       <div className="flex items-center space-x-2">
                         {showStatusBadge && (
                           <span
-                            className={`px-2 py-1 text-xs rounded-full ${statusColors[displayStatus].bg} ${statusColors[displayStatus].text}`}
+                            className={`px-2 py-1 text-xs rounded-full ${statusColors[displayStatus]?.bg || statusColors['assigned'].bg} ${statusColors[displayStatus]?.text || statusColors['assigned'].text}`}
                           >
-                            {statusLabels[displayStatus]}
+                            {statusLabels[displayStatus] || statusLabels['assigned']}
                           </span>
                         )}
                         <button
@@ -683,9 +694,13 @@ export function UseCaseOwnerDashboard({
               onClose={() => setExpandedNotification(null)}
               onOpenChat={(project, otherUser) => {
                 setExpandedNotification(null);
-                setChatAdmin(otherUser);
-                setChatProject(project);
-                setChatPanelOpen(true);
+                if (onOpenChat) {
+                  onOpenChat(project, otherUser);
+                } else {
+                  setChatAdmin(otherUser);
+                  setChatProject(project);
+                  setChatPanelOpen(true);
+                }
               }}
             />
           </div>
