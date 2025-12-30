@@ -202,7 +202,11 @@ function App() {
       });
       
       if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed to fetch'))) {
-        alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
+        if (import.meta.env.PROD) {
+          alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend servisi çalışıyor mu?\n2. VITE_API_URL environment variable doğru yapılandırılmış mı?\n3. CORS ayarları doğru mu?");
+        } else {
+          alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
+        }
       } else {
         alert(`Giriş hatası: ${error.message || 'Bilinmeyen hata'}\n\nBackend'in çalıştığından emin olun.`);
       }
