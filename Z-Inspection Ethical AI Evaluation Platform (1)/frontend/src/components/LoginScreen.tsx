@@ -147,35 +147,18 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     setCode('');
   };
 
-  const demoCredentials = [
-    { role: 'admin',             email: 'admin@zinspection.com',     name: 'Admin User',         displayName: 'Admin' },
-    { role: 'ethical-expert',    email: 'ethical@zinspection.com',   name: 'Sarah Johnson',      displayName: 'Ethical Expert' },
-    { role: 'medical-expert',    email: 'medical@zinspection.com',   name: 'Dr. Emily Smith',    displayName: 'Medical Expert' },
-    { role: 'use-case-owner',    email: 'usecase@zinspection.com',   name: 'John Davis',         displayName: 'Use Case Expert' },
-    { role: 'education-expert',  email: 'education@zinspection.com', name: 'Prof. Maria Garcia', displayName: 'Education Expert' },
-    { role: 'technical-expert',  email: 'technical@zinspection.com', name: 'Alex Chen',          displayName: 'Technical Expert' },
-    { role: 'legal-expert',      email: 'legal@zinspection.com',     name: 'Robert Martinez',    displayName: 'Legal Expert' }
-  ] as const;
-
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Left Side - Form */}
       <div className="w-1/2 flex flex-col justify-center px-12 bg-white">
         <div className="max-w-md mx-auto w-full">
           <div className="mb-8">
-            <h1 className="text-4xl mb-2 text-gray-900 font-extrabold tracking-tight">Z-Inspection Platform</h1>
-            <p className="text-base text-gray-600">Ethical AI Evaluation System</p>
+            <h1 className="text-4xl mb-2 text-gray-900 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Z-Inspection Platform</h1>
+            <p className="text-xl text-gray-900 font-medium">Ethical AI Evaluation System</p>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-3xl mb-2 font-extrabold tracking-tight">
-              {isLogin 
-                ? 'Sign In' 
-                : step === 'email' 
-                  ? 'Create Account' 
-                  : 'Verify Email'}
-            </h2>
-            <p className="text-base text-gray-600">
+            <p className="text-base text-gray-900">
               {isLogin
                 ? 'Welcome back! Please sign in to continue.'
                 : step === 'email'
@@ -383,27 +366,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 : 'Already have an account? Sign in'}
             </button>
           </div>
-
-          {isLogin && (
-            <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
-              <h3 className="text-base mb-3 text-blue-900">Demo Credentials</h3>
-              <div className="space-y-2 text-sm">
-                {demoCredentials.map((cred) => (
-                  <div key={cred.role} className="flex justify-between items-center py-1">
-                    <span
-                      className="font-medium"
-                      style={{
-                        color: roleColors[cred.role as keyof typeof roleColors]
-                      }}
-                    >
-                      {cred.displayName}:
-                    </span>
-                    <span className="text-gray-700">{cred.email}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -423,7 +385,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </div>
 
           {/* Tagline */}
-          <h2 className="text-4xl mb-4 font-extrabold tracking-tight">Ethical AI Evaluation</h2>
+          <h2 className="text-4xl mb-4 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Ethical AI Evaluation</h2>
           <p className="text-xl opacity-90 mb-10 leading-relaxed">
             Comprehensive platform for conducting Z-Inspection methodology on AI systems.
           </p>
