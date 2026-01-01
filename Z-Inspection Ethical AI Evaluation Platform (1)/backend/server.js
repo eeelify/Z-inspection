@@ -4507,28 +4507,72 @@ app.post('/api/projects', async (req, res) => {
     const project = new Project(req.body);
     await project.save();
 
-    // Notify assigned users about the new project (non-blocking)
+    // Create ProjectAssignment documents for assigned users
     if (req.body.assignedUsers && Array.isArray(req.body.assignedUsers) && req.body.assignedUsers.length > 0) {
       try {
-        const { notifyProjectCreated } = require('./services/notificationService');
+        const { createAssignment } = require('./services/evaluationService');
+        const ProjectAssignment = require('./models/projectAssignment');
         const actorId = req.body.createdBy || req.body.ownerId || null;
         const actorRole = 'admin'; // Project creator is typically admin
         
-        // Get assigned user IDs (exclude admins)
+        // Get assigned user IDs and their roles
         const userIds = req.body.assignedUsers.map(String).filter(Boolean);
         const users = await User.find({ 
-          _id: { $in: userIds },
-          role: { $ne: 'admin' } // Exclude admins
-        }).select('_id').lean();
+          _id: { $in: userIds }
+        }).select('_id role').lean();
         
-        const expertIds = users.map(u => u._id);
+        const projectIdObj = project._id;
         
-        if (expertIds.length > 0) {
-          await notifyProjectCreated(project._id, expertIds, actorId, actorRole);
+        // Create assignments for each user (excluding admins)
+        for (const user of users) {
+          if (user.role === 'admin' || user.role === 'use-case-owner') {
+            // Skip admins and use-case-owners (they don't need assignments for evaluation)
+            continue;
+          }
+          
+          try {
+            const userIdObj = user._id;
+            const role = user.role || 'unknown';
+            
+            // Determine questionnaire key based on role
+            let roleQuestionnaireKey = 'general-v1';
+            if (role === 'ethical-expert') roleQuestionnaireKey = 'ethical-expert-v1';
+            else if (role === 'medical-expert') roleQuestionnaireKey = 'medical-expert-v1';
+            else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
+            else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
+            else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
+            
+            // Assign questionnaires: always include general-v1, add role-specific if applicable
+            const questionnaires = roleQuestionnaireKey !== 'general-v1' 
+              ? ['general-v1', roleQuestionnaireKey]
+              : ['general-v1'];
+            
+            // Create assignment using the service function
+            await createAssignment(projectIdObj, userIdObj, role, questionnaires, actorId, actorRole);
+          } catch (assignmentError) {
+            console.error(`Error creating assignment for user ${user._id}:`, assignmentError.message);
+            // Continue with other users even if one fails
+          }
         }
-      } catch (notifError) {
-        console.error('Error sending project created notification:', notifError);
-        // Don't fail project creation if notification fails
+        
+        // Notify assigned users about the new project (non-blocking)
+        try {
+          const { notifyProjectCreated } = require('./services/notificationService');
+          const expertIds = users
+            .filter(u => u.role !== 'admin' && u.role !== 'use-case-owner')
+            .map(u => u._id);
+          
+          if (expertIds.length > 0) {
+            await notifyProjectCreated(project._id, expertIds, actorId, actorRole);
+          }
+        } catch (notifError) {
+          console.error('Error sending project created notification:', notifError);
+          // Don't fail project creation if notification fails
+        }
+      } catch (assignmentError) {
+        console.error('Error creating project assignments:', assignmentError);
+        // Don't fail project creation if assignment creation fails
+        // Project is already saved, assignments can be created later if needed
       }
     }
 

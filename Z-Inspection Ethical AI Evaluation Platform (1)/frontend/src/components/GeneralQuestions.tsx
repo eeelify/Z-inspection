@@ -791,8 +791,8 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                     red: isSelected ? 'border-red-700 bg-red-100 shadow-md ring-2 ring-red-200 ring-offset-2' : 'border-gray-200 hover:border-red-300 hover:bg-red-50',
                     orange: isSelected ? 'border-orange-600 bg-orange-100 shadow-md ring-2 ring-orange-200 ring-offset-2' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50',
                     yellow: isSelected ? 'border-yellow-600 bg-yellow-100 shadow-md ring-2 ring-yellow-200 ring-offset-2' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
-                    blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
-                    green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
+                    blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-black ring-offset-2' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
+                    green: isSelected ? 'border-green-500 bg-green-50 shadow-md ring-2 ring-black ring-offset-2' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
                   };
                   const bgColorClasses = {
                     red: isSelected ? 'bg-red-200 text-red-900' : 'bg-gray-100 text-gray-400',
@@ -846,7 +846,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                       </span>
                       <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
                       <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {descTr || desc}
+                        {desc}
                       </span>
                     </label>
                   );
