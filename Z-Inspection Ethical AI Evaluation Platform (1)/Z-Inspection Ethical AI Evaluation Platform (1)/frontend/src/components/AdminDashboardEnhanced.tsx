@@ -1609,8 +1609,9 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download PDF"
+                          disabled={report.status !== 'FINALIZED'}
+                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent"
+                          title={report.status === 'FINALIZED' ? "Download FINAL PDF" : "PDF is available only after Finalize Report"}
                         >
                           <Download className="h-4 w-4" />
                           PDF
@@ -1624,12 +1625,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           Delete
                         </button>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          report.status === 'FINALIZED' ? 'bg-green-100 text-green-800' :
+                          report.status === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-800' :
                           report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
                           'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
+                          {report.status === 'FINALIZED' ? 'FINALIZED' :
+                           report.status === 'UNDER_REVIEW' ? 'UNDER REVIEW' :
+                           report.status === 'archived' ? 'ARCHIVED' : 'AI DRAFT'}
                         </span>
                       </div>
                     </div>
@@ -1665,10 +1668,11 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                   const sections = (selectedReport as any).sections;
                   if (Array.isArray(sections) && sections.length > 0) {
                     const s = sections[0];
-                    const expert = String(s?.expertEdit || "").trim();
-                    return expert.length > 0 ? expert : (s?.aiDraft || "");
+                    // Show finalText if available, otherwise aiDraft/aiText
+                    const final = String(s?.finalText || "").trim();
+                    return final.length > 0 ? final : (s?.aiText || s?.aiDraft || "");
                   }
-                  return (selectedReport as any).content;
+                  return (selectedReport as any).content || (selectedReport as any).aiDraft || "";
                 })()}
               </div>
             </div>
@@ -1681,7 +1685,9 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                       handleDownloadPDF(reportId, selectedReport.title);
                     }
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  disabled={selectedReport?.status !== 'FINALIZED'}
+                  title={selectedReport?.status === 'FINALIZED' ? 'Download FINAL PDF' : 'PDF is available only after Finalize Report'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-blue-600"
                 >
                   <Download className="h-4 w-4" />
                   Download PDF
@@ -1994,8 +2000,9 @@ function ReportsTab({ projects, currentUser, users }: any) {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => handleDownloadPDF(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download PDF"
+                          disabled={report.status !== 'FINALIZED'}
+                          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-transparent"
+                          title={report.status === 'FINALIZED' ? "Download FINAL PDF" : "PDF is available only after Finalize Report"}
                         >
                           <Download className="h-4 w-4" />
                           PDF
@@ -2009,12 +2016,14 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           Delete
                         </button>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          report.status === 'FINALIZED' ? 'bg-green-100 text-green-800' :
+                          report.status === 'UNDER_REVIEW' ? 'bg-blue-100 text-blue-800' :
                           report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
                           'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
+                          {report.status === 'FINALIZED' ? 'FINALIZED' :
+                           report.status === 'UNDER_REVIEW' ? 'UNDER REVIEW' :
+                           report.status === 'archived' ? 'ARCHIVED' : 'AI DRAFT'}
                         </span>
                       </div>
                     </div>
@@ -2050,10 +2059,11 @@ function ReportsTab({ projects, currentUser, users }: any) {
                   const sections = (selectedReport as any).sections;
                   if (Array.isArray(sections) && sections.length > 0) {
                     const s = sections[0];
-                    const expert = String(s?.expertEdit || "").trim();
-                    return expert.length > 0 ? expert : (s?.aiDraft || "");
+                    // Show finalText if available, otherwise aiDraft/aiText
+                    const final = String(s?.finalText || "").trim();
+                    return final.length > 0 ? final : (s?.aiText || s?.aiDraft || "");
                   }
-                  return (selectedReport as any).content;
+                  return (selectedReport as any).content || (selectedReport as any).aiDraft || "";
                 })()}
               </div>
             </div>
@@ -2066,7 +2076,9 @@ function ReportsTab({ projects, currentUser, users }: any) {
                       handleDownloadPDF(reportId, selectedReport.title);
                     }
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  disabled={selectedReport?.status !== 'FINALIZED'}
+                  title={selectedReport?.status === 'FINALIZED' ? 'Download FINAL PDF' : 'PDF is available only after Finalize Report'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-blue-600"
                 >
                   <Download className="h-4 w-4" />
                   Download PDF

@@ -4,9 +4,9 @@ const cors = require('cors');
 const nodemailer = require('nodemailer');
 const compression = require('compression');
 const path = require('path');
-// Load environment variables:
-// - Prefer `.env` (common convention)
-// - Fallback to `env` (some Windows setups omit dotfiles)
+// Load env vars:
+// - Prefer `.env`
+// - Fallback to `env` (some Windows setups avoid dotfiles)
 const dotenv = require('dotenv');
 const envPathDot = path.resolve(__dirname, '.env');
 const envPathNoDot = path.resolve(__dirname, 'env');
@@ -14,7 +14,6 @@ const dotResult = dotenv.config({ path: envPathDot });
 if (dotResult.error) {
   const noDotResult = dotenv.config({ path: envPathNoDot });
   if (noDotResult.error) {
-    // Keep running; platform env vars (Railway/Render) may still be present.
     console.warn(`⚠️  dotenv could not load ${envPathDot} or ${envPathNoDot}:`, noDotResult.error.message);
   }
 }
@@ -32,20 +31,6 @@ const PORT = process.env.PORT || 5000;
 
 // Enable compression for faster responses
 app.use(compression());
-
-// Basic health endpoint (safe: does not expose secrets)
-app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    time: new Date().toISOString(),
-    mongo: {
-      readyState: mongoose.connection.readyState, // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
-      connected: mongoose.connection.readyState === 1,
-      host: mongoose.connection.host || null,
-      name: mongoose.connection.name || null,
-    },
-  });
-});
 
 // --- GÜNCELLEME: Dosya yükleme limiti 300MB yapıldı ---
 app.use(express.json({ limit: '300mb' }));
@@ -142,19 +127,13 @@ const Project = mongoose.model('Project', ProjectSchema);
 // UseCaseQuestion - Sorular ayrı collection'da
 const UseCaseQuestionSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
-  key: { type: String }, // Stable string identifier (e.g., "S0_Q1")
   questionEn: { type: String, required: true },
   questionTr: { type: String, required: true },
   type: { type: String, required: true }, // 'text' or 'multiple-choice'
   options: { type: [String], default: [] }, // For multiple-choice questions
-  order: { type: Number, default: 0 }, // Sıralama için
-  tag: { type: String, default: '' }, // AI Act reference (e.g., "AI Act Art. 6")
-  placeholder: { type: String, default: '' }, // Placeholder text for input
-  helper: { type: String, default: '' }, // Helper text/example
-  isActive: { type: Boolean, default: true } // Whether question is active
+  order: { type: Number, default: 0 } // Sıralama için
 });
 UseCaseQuestionSchema.index({ order: 1 }); // Sıralama için index
-UseCaseQuestionSchema.index({ key: 1 }); // Index for key lookups
 const UseCaseQuestion = mongoose.model('UseCaseQuestion', UseCaseQuestionSchema);
 
 // UseCase - Sadece cevapları tutar
@@ -174,8 +153,7 @@ const UseCaseSchema = new mongoose.Schema({
     url: String
   }],
   answers: [{ // Sadece cevaplar - questionId ve answer
-    questionId: { type: String, required: true }, // Can be _id string or key
-    questionKey: { type: String }, // Optional: stable key (e.g., "S0_Q1") for future-proofing
+    questionId: { type: String, required: true },
     answer: { type: String, default: '' }
   }],
   createdAt: { type: Date, default: Date.now },
@@ -297,39 +275,8 @@ const TensionSchema = new mongoose.Schema({
     fileName: String,
     fileData: String, // Base64 Data
     uploadedBy: String,
-    uploadedAt: { type: Date, default: Date.now },
-    type: { type: String, required: false }, // Evidence type: Policy, Test, User feedback, Log, Incident, Other (optional)
-    comments: [{
-      userId: String,
-      text: String,
-      createdAt: { type: Date, default: Date.now }
-    }]
-  }],
-
-  // Impact & Stakeholders
-  impact: {
-    areas: [String],
-    affectedGroups: [String],
-    description: String
-  },
-
-  // Mitigation & Resolution
-  mitigation: {
-    proposed: String,
-    tradeoff: {
-      decision: String,
-      rationale: String
-    },
-    action: {
-      ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      ownerName: String,
-      dueDate: Date,
-      status: { type: String, default: 'Open' }
-    }
-  },
-
-  // Evidence Type (optional, backward compatible)
-  evidenceType: String
+    uploadedAt: { type: Date, default: Date.now }
+  }]
 });
 const Tension = mongoose.model('Tension', TensionSchema);
 
@@ -347,12 +294,29 @@ const MessageSchema = new mongoose.Schema({
 MessageSchema.index({ projectId: 1, fromUserId: 1, toUserId: 1, createdAt: -1 });
 const Message = mongoose.model('Message', MessageSchema);
 
-// Report - Analysis Reports (expert comment workflow)
-const ExpertCommentSchema = new mongoose.Schema({
-  expertId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  expertName: { type: String, default: '' },
-  commentText: { type: String, default: '' },
-  updatedAt: { type: Date, default: Date.now }
+// Report - AI Generated Analysis Reports (with expert review workflow)
+const ReportSectionSchema = new mongoose.Schema({
+  // Legacy fields (do not remove)
+  principle: { type: String, required: true },
+  aiDraft: { type: String, default: '' },
+  expertEdit: { type: String, default: '' },
+  comments: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userName: { type: String },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
+  // New single-final-report workflow fields
+  sectionKey: { type: String, index: true },
+  aiText: { type: String, default: '' },
+  expertEdits: [{
+    expertId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    editedText: { type: String, default: '' },
+    comment: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  finalText: { type: String, default: '' }
 }, { _id: false });
 
 const ReportSchema = new mongoose.Schema({
@@ -366,13 +330,17 @@ const ReportSchema = new mongoose.Schema({
   // Legacy single-body content (kept for backward compatibility)
   content: { type: String },
 
-  // Expert comments (one per expert)
-  expertComments: { type: [ExpertCommentSchema], default: [] },
+  // Raw AI output (draft; never authoritative)
+  aiDraft: { type: String, default: '' },
+
+  // New section-based workflow
+  sections: { type: [ReportSectionSchema], default: [] },
 
   generatedAt: { type: Date, default: Date.now, index: true },
   generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
-  status: { type: String, enum: ['draft', 'final', 'archived'], default: 'draft', index: true },
+  status: { type: String, enum: ['draft', 'final', 'archived', 'AI_DRAFT', 'UNDER_REVIEW', 'FINALIZED'], default: 'draft', index: true },
+  finalizedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   finalizedAt: { type: Date },
 
   metadata: {
@@ -420,8 +388,8 @@ app.get('/api/use-case-questions', async (req, res) => {
       return res.json(questionsCache);
     }
     
-    // Fetch from database - only active questions by default
-    const questions = await UseCaseQuestion.find({ isActive: { $ne: false } }).sort({ order: 1 }).lean();
+    // Fetch from database
+    const questions = await UseCaseQuestion.find().sort({ order: 1 }).lean();
     questionsCache = questions;
     questionsCacheTime = now;
     res.json(questions);
@@ -656,9 +624,8 @@ app.post('/api/tensions', async (req, res) => {
   try {
     const { 
       projectId, principle1, principle2, claimStatement, description, 
-      evidenceDescription, evidenceType, evidenceFileName, evidenceFileData,
-      severity, status, createdBy,
-      impact, mitigation
+      evidenceDescription, evidenceFileName, evidenceFileData,
+      severity, status, createdBy 
     } = req.body;
 
     const initialEvidences = [];
@@ -674,44 +641,12 @@ app.post('/api/tensions', async (req, res) => {
       });
     }
 
-    const tensionData = {
+    const tension = new Tension({
       projectId, principle1, principle2, claimStatement, description, 
       severity, status, createdBy,
       evidences: initialEvidences,
       comments: []
-    };
-
-    // Add evidenceType if provided (backward compatible)
-    if (evidenceType) {
-      tensionData.evidenceType = evidenceType;
-    }
-
-    // Add impact data if provided
-    if (impact) {
-      tensionData.impact = {
-        areas: impact.areas || [],
-        affectedGroups: impact.affectedGroups || [],
-        description: impact.description
-      };
-    }
-
-    // Add mitigation data if provided
-    if (mitigation) {
-      tensionData.mitigation = {
-        proposed: mitigation.proposed,
-        tradeoff: {
-          decision: mitigation.tradeoff?.decision,
-          rationale: mitigation.tradeoff?.rationale
-        },
-        action: {
-          ownerName: mitigation.action?.ownerName,
-          dueDate: mitigation.action?.dueDate ? new Date(mitigation.action.dueDate) : undefined,
-          status: mitigation.action?.status || 'Open'
-        }
-      };
-    }
-
-    const tension = new Tension(tensionData);
+    });
 
     await tension.save();
     console.log("⚡ Yeni Tension eklendi:", tension._id);
@@ -843,95 +778,20 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
 // EVIDENCE EKLEME (Sonradan ekleme)
 app.post('/api/tensions/:id/evidence', async (req, res) => {
   try {
-    const { title, description, fileName, fileData, uploadedBy, type } = req.body;
+    const { title, description, fileName, fileData, uploadedBy } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
 
     if (!tension.evidences) tension.evidences = [];
-    
-    // Build evidence object - only include type if it's a non-empty string
-    const evidenceObj = {
-      title,
-      description,
-      fileName,
-      fileData,
-      uploadedBy,
-      uploadedAt: new Date(),
-      comments: []
-    };
-    
-    // Only add type if it's a valid string
-    if (type && typeof type === 'string' && type.trim().length > 0) {
-      evidenceObj.type = type.trim();
-    }
-
-    tension.evidences.push(evidenceObj);
+    tension.evidences.push({
+      title, description, fileName, fileData, uploadedBy, uploadedAt: new Date()
+    });
 
     await tension.save();
     res.json(tension.evidences);
   } catch (err) { 
     console.error(err);
     res.status(500).json({ error: err.message }); 
-  }
-});
-
-// EVIDENCE COMMENT EKLEME
-app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, res) => {
-  try {
-    const { tensionId, evidenceId } = req.params;
-    const { text, userId } = req.body;
-
-    // Validation
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      return res.status(400).json({ error: 'Comment text is required' });
-    }
-    if (text.length > 2000) {
-      return res.status(400).json({ error: 'Comment text must be 2000 characters or less' });
-    }
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const tension = await Tension.findById(tensionId);
-    if (!tension) return res.status(404).json({ error: 'Tension not found' });
-
-    if (!tension.evidences || !Array.isArray(tension.evidences)) {
-      return res.status(404).json({ error: 'Evidence array not found' });
-    }
-
-    // Find evidence by index (evidenceId is the array index as string)
-    const evidenceIndex = parseInt(evidenceId, 10);
-    
-    if (isNaN(evidenceIndex) || evidenceIndex < 0 || evidenceIndex >= tension.evidences.length) {
-      return res.status(404).json({ error: 'Evidence not found' });
-    }
-
-    const evidence = tension.evidences[evidenceIndex];
-
-    if (!evidence) {
-      return res.status(404).json({ error: 'Evidence not found' });
-    }
-
-    // Initialize comments array if not exists
-    if (!evidence.comments) {
-      evidence.comments = [];
-    }
-
-    // Add comment
-    evidence.comments.push({
-      userId,
-      text: text.trim(),
-      createdAt: new Date()
-    });
-
-    await tension.save();
-
-    // Return updated evidence
-    const updatedEvidence = tension.evidences[evidenceIndex];
-    res.json(updatedEvidence);
-  } catch (err) {
-    console.error('Error adding evidence comment:', err);
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3301,46 +3161,30 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const reqId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-    const safeEmail = typeof req.body?.email === 'string' ? req.body.email : null;
-    const safeRole = typeof req.body?.role === 'string' ? req.body.role : null;
-    console.log(`[login:${reqId}] start`, { email: safeEmail, role: safeRole });
-
-    // Check MongoDB connection state
-    if (mongoose.connection.readyState !== 1) {
-      console.warn(`[login:${reqId}] mongo not ready`, { readyState: mongoose.connection.readyState });
-      return res.status(503).json({ 
-        error: 'Veritabanı bağlantısı hazır değil. Lütfen birkaç saniye bekleyip tekrar deneyin.' 
-      });
-    }
-
-    // Add timeout to prevent hanging - increased to 15 seconds for better reliability
+    // Add timeout to prevent hanging
     const loginPromise = User.findOne({ 
       email: req.body.email, 
       password: req.body.password, 
       role: req.body.role 
-    }).select('-profileImage').lean().maxTimeMS(15000); // Exclude large profileImage, add timeout
+    }).select('-profileImage').lean().maxTimeMS(5000); // Exclude large profileImage, add timeout
     
     const user = await Promise.race([
       loginPromise,
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Login timeout')), 15000)
+        setTimeout(() => reject(new Error('Login timeout')), 5000)
       )
     ]);
     
     if (user) {
-      console.log(`[login:${reqId}] success`, { userId: String(user._id || user.id || '') });
       res.json(user);
     } else {
-      console.log(`[login:${reqId}] invalid credentials`);
-      res.status(401).json({ message: "Geçersiz kullanıcı adı, şifre veya rol." });
+      res.status(401).json({ message: "Invalid credentials" });
     }
   } catch (err) {
     if (err.message === 'Login timeout') {
-      res.status(504).json({ error: 'Giriş isteği zaman aşımına uğradı. Lütfen tekrar deneyin.' });
+      res.status(504).json({ error: 'Login request timed out. Please try again.' });
     } else {
-      console.error('Login error:', err);
-      res.status(500).json({ error: 'Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.' });
+      res.status(500).json({ error: err.message });
     }
   }
 });
