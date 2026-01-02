@@ -8,6 +8,7 @@ import { NotificationBell } from './NotificationBell';
 import { ProfileModal } from './ProfileModal';
 import { api } from '../api';
 import { Spinner } from './Spinner';
+import { toast } from 'sonner';
 
 interface AdminDashboardEnhancedProps {
   currentUser: User;
@@ -950,29 +951,60 @@ export function AdminDashboardEnhanced({
                  })
                });
 
+               const responseData = await response.json();
+
                if (response.ok) {
-                 // Reload projects to reflect updated assignments
-                 try {
-                   const userId = currentUser?.id || (currentUser as any)?._id;
-                   const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
-                   if (projectsRes.ok) {
-                     const data = await projectsRes.json();
-                     const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
-                     // Update projects in parent component via window event
-                     window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
-                   }
-                 } catch (reloadError) {
-                   console.error("Error reloading projects:", reloadError);
-                 }
+                 // Close modal immediately for better UX
+                 setShowAssignExpertsModal(false);
+                 setSelectedUseCaseForAssignment(null);
                  
-                 alert("Experts assigned successfully!");
+                 // Show success message
+                 toast.success("Experts assigned successfully!");
+                 
+                 // Reload projects and use cases in parallel for better performance
+                 const userId = currentUser?.id || (currentUser as any)?._id;
+                 Promise.all([
+                   fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`))
+                     .then(projectsRes => {
+                       if (projectsRes.ok) {
+                         return projectsRes.json().then(data => {
+                           const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+                           window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
+                         });
+                       }
+                     })
+                     .catch(reloadError => {
+                       console.error("Error reloading projects:", reloadError);
+                     }),
+                   fetch(api('/api/use-cases'))
+                     .then(useCasesRes => {
+                       if (useCasesRes.ok) {
+                         return useCasesRes.json().then(data => {
+                           const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
+                           window.dispatchEvent(new CustomEvent('usecases-updated', { detail: formattedUseCases }));
+                         });
+                       }
+                     })
+                     .catch(reloadError => {
+                       console.error("Error reloading use cases:", reloadError);
+                     })
+                 ]).catch(error => {
+                   console.error("Error during parallel reload:", error);
+                 });
+               } else {
+                 // Show error message from backend
+                 const errorMessage = responseData.error || 'Failed to assign experts';
+                 console.error("Assignment error:", errorMessage);
+                 toast.error(`Failed to assign experts: ${errorMessage}`);
+                 // Throw error so modal stays open
+                 throw new Error(errorMessage);
                }
-             } catch (error) {
+             } catch (error: any) {
                console.error("Assignment error:", error);
-               alert("Failed to assign experts.");
+               toast.error(`Failed to assign experts: ${error.message || 'Network error'}`);
+               // Re-throw error so modal stays open
+               throw error;
              }
-             setShowAssignExpertsModal(false);
-             setSelectedUseCaseForAssignment(null);
            }}
         />
       )}
@@ -2644,6 +2676,49 @@ function ReportsTab({ projects, currentUser, users }: any) {
     }
   };
 
+  // Analyze expert comments
+  const handleAnalyzeComments = async () => {
+    if (!detailsReport?.expertComments || detailsReport.expertComments.length === 0) {
+      alert("No expert comments to analyze.");
+      return;
+    }
+
+    setAnalyzing(true);
+    setAnalysisResult(null);
+    try {
+      const comments = detailsReport.expertComments
+        .map((c: any) => c.commentText)
+        .filter((text: string) => text && text.trim());
+
+      if (comments.length === 0) {
+        alert("No valid comments to analyze.");
+        return;
+      }
+
+      const res = await fetch(api("/api/reports/analyze-expert-comments"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expertComments: comments }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as any));
+        throw new Error(err.error || "Failed to analyze comments");
+      }
+
+      const data = await res.json();
+      if (data.success && data.analysis) {
+        setAnalysisResult(data.analysis);
+      } else {
+        throw new Error("Invalid response format");
+      }
+    } catch (e: any) {
+      alert(e?.message || "Failed to analyze expert comments");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -3123,7 +3198,7 @@ interface AssignExpertsModalProps {
   users: User[];
   projects?: Project[];
   onClose: () => void;
-  onAssign: (expertIds: string[], notes: string) => void;
+  onAssign: (expertIds: string[], notes: string) => Promise<void>;
 }
 
 function AssignExpertsModal({ useCase, users, projects = [], onClose, onAssign }: AssignExpertsModalProps) {
@@ -3154,7 +3229,8 @@ function AssignExpertsModal({ useCase, users, projects = [], onClose, onAssign }
   
   const [selectedExperts, setSelectedExperts] = useState<string[]>(Array.from(allAssignedUserIds));
   const [adminNotes, setAdminNotes] = useState(useCase.adminNotes || '');
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const experts = users.filter(u => u.role !== 'admin' && u.role !== 'use-case-owner');
 
   const toggleExpert = (expertId: string) => {
@@ -3165,9 +3241,18 @@ function AssignExpertsModal({ useCase, users, projects = [], onClose, onAssign }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAssign(selectedExperts, adminNotes);
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      await onAssign(selectedExperts, adminNotes);
+      // Modal will be closed by parent component on success
+    } catch (error) {
+      // Error handling is done in parent component
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -3232,15 +3317,18 @@ function AssignExpertsModal({ useCase, users, projects = [], onClose, onAssign }
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Confirm Assignment
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Assigning...' : 'Confirm Assignment'}
             </button>
           </div>
         </form>

@@ -30,7 +30,7 @@ const isValidObjectId = (id) => {
 };
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
 
 // Enable compression for faster responses
 app.use(compression());
@@ -52,10 +52,39 @@ app.get('/api/health', (req, res) => {
 // --- GÜNCELLEME: Dosya yükleme limiti 300MB yapıldı ---
 app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ limit: '300mb', extended: true }));
+
+// CORS Configuration with CLIENT_URL support
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Configure allowed origins
+const allowedOrigins = isProduction 
+  ? [CLIENT_URL].filter(Boolean)  // Production: only CLIENT_URL
+  : ['*'];  // Development: allow all
+
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    // Development'ta veya origin yoksa (Postman, curl gibi) izin ver
+    if (allowedOrigins.includes('*') || !origin) {
+      return callback(null, true);
+    }
+    // Production'da sadece CLIENT_URL'den gelen isteklere izin ver
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // CORS hatası
+    console.warn(`⚠️  CORS blocked request from origin: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
+
+// Log CORS configuration
+if (isProduction) {
+  console.log(`🔒 CORS configured for production: ${CLIENT_URL}`);
+} else {
+  console.log(`🔓 CORS configured for development: allowing all origins`);
+}
 
 // Set keep-alive timeout
 app.use((req, res, next) => {
@@ -983,55 +1012,86 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
     // Also create ProjectAssignment records so experts can see the projects
     try {
       const ProjectAssignment = require('./models/projectAssignment');
-      const linkedProjects = await Project.find({ useCase: useCaseId });
+      const linkedProjects = await Project.find({ useCase: useCaseId }).lean();
       
-      for (const project of linkedProjects) {
-        if (!project.assignedUsers) {
-          project.assignedUsers = [];
-        }
+      if (linkedProjects.length > 0 && validAssignedExperts.length > 0) {
+        // OPTIMIZATION: Get all expert roles in a single query (avoid N+1)
+        const expertUsers = await User.find({
+          _id: { $in: validAssignedExperts },
+          role: { $ne: 'admin' }
+        }).select('_id role').lean();
         
-        // Add new experts to project.assignedUsers (avoid duplicates)
-        const currentAssigned = project.assignedUsers.map((id) => id.toString());
-        const newExpertIds = validAssignedExperts.map((id) => id.toString());
+        // Create a map of expertId -> role for quick lookup
+        const expertRoleMap = new Map();
+        expertUsers.forEach(user => {
+          expertRoleMap.set(user._id.toString(), user.role);
+        });
         
-        // Combine and deduplicate
-        const allAssignedIds = Array.from(new Set([...currentAssigned, ...newExpertIds]));
-        project.assignedUsers = allAssignedIds.map(id => new mongoose.Types.ObjectId(id));
+        // OPTIMIZATION: Prepare all project updates and ProjectAssignment operations in parallel
+        const projectUpdates = [];
+        const assignmentOperations = [];
         
-        await project.save();
-        
-        // Create or update ProjectAssignment records for each expert
-        for (const expertId of validAssignedExperts) {
-          try {
-            // Get user to determine role
-            const expertUser = await User.findById(expertId).select('role').lean();
-            if (!expertUser || expertUser.role === 'admin') continue;
+        for (const project of linkedProjects) {
+          // Prepare project update
+          const currentAssigned = (project.assignedUsers || []).map((id) => id.toString());
+          const newExpertIds = validAssignedExperts.map((id) => id.toString());
+          const allAssignedIds = Array.from(new Set([...currentAssigned, ...newExpertIds]));
+          
+          projectUpdates.push(
+            Project.findByIdAndUpdate(
+              project._id,
+              { assignedUsers: allAssignedIds.map(id => new mongoose.Types.ObjectId(id)) },
+              { new: true }
+            )
+          );
+          
+          // Prepare ProjectAssignment operations for each expert
+          for (const expertId of validAssignedExperts) {
+            const expertIdStr = expertId.toString();
+            const role = expertRoleMap.get(expertIdStr);
+            if (!role) continue; // Skip if expert not found or is admin
             
-            // Create or update ProjectAssignment
-            await ProjectAssignment.findOneAndUpdate(
-              { projectId: project._id, userId: expertId },
-              {
-                projectId: project._id,
-                userId: expertId,
-                role: expertUser.role, // e.g., "medical-expert", "technical-expert"
-                questionnaires: [], // Will be populated when questionnaires are assigned
-                status: 'assigned',
-                assignedAt: new Date()
-              },
-              { new: true, upsert: true }
-            );
-          } catch (assignmentError) {
-            console.error(`Error creating ProjectAssignment for expert ${expertId} on project ${project._id}:`, assignmentError);
-            // Continue with other experts even if one fails
+            assignmentOperations.push({
+              updateOne: {
+                filter: { projectId: project._id, userId: expertId },
+                update: {
+                  $set: {
+                    projectId: project._id,
+                    userId: expertId,
+                    role: role,
+                    status: 'assigned',
+                    assignedAt: new Date()
+                  },
+                  $setOnInsert: {
+                    questionnaires: []
+                  }
+                },
+                upsert: true
+              }
+            });
           }
         }
+        
+        // OPTIMIZATION: Execute all updates in parallel
+        await Promise.all([
+          Promise.all(projectUpdates),
+          assignmentOperations.length > 0 
+            ? ProjectAssignment.bulkWrite(assignmentOperations, { ordered: false })
+            : Promise.resolve()
+        ]);
       }
     } catch (projectUpdateError) {
       console.error('Error updating linked projects:', projectUpdateError);
       // Don't fail the assignment if project update fails, but log it
     }
     
-    res.json(updated);
+    // Return updated use case with assigned experts info (skip expensive resolver call)
+    // We already have the count and IDs from the validation step above
+    res.json({
+      ...updated.toObject(),
+      assignedExpertsCount: assignedExpertsCount,
+      assignedExperts: validAssignedExperts.map(id => id.toString())
+    });
   } catch (err) {
     console.error('Error in /api/use-cases/:id/assign:', err);
     res.status(500).json({ error: err.message || 'Failed to assign experts to use case' });
@@ -4222,15 +4282,28 @@ app.post('/api/auth/request-code', async (req, res) => {
       console.log(`📧 From: ${process.env.EMAIL_USER}`);
       console.log(`📧 Email credentials configured: ${!!process.env.EMAIL_USER && !!process.env.EMAIL_PASS}`);
       
+      // CLIENT_URL is already defined at line 57
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: email,
         subject: 'Email Verification Code',
         html: `
-          <p>Hello,</p>
-          <p>Your verification code for Z-Inspection platform registration:</p>
-          <h2>${code}</h2>
-          <p>This code is valid for 10 minutes.</p>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1F2937;">Email Verification</h2>
+            <p>Hello,</p>
+            <p>Your verification code for Z-Inspection platform registration:</p>
+            <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #3B82F6; font-size: 32px; margin: 0; letter-spacing: 4px;">${code}</h1>
+            </div>
+            <p>This code is valid for 10 minutes.</p>
+            <p style="margin-top: 30px;">
+              <a href="${CLIENT_URL}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                Go to Platform
+              </a>
+            </p>
+            <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+            <p style="color: #9CA3AF; font-size: 12px;">This is an automated email from Z-Inspection Platform.</p>
+          </div>
         `
       };
 
@@ -4304,14 +4377,25 @@ app.post('/api/auth/verify-code-and-register', async (req, res) => {
     try {
       if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
         const transporter = require('./config/mailer');
+        // CLIENT_URL is already defined at line 57
         const mailOptions = {
           from: process.env.EMAIL_USER,
           to: email,
           subject: 'Welcome to Z-Inspection Platform',
           html: `
-            <p>Hello ${name},</p>
-            <p>Welcome to Z-Inspection Ethical AI Evaluation Platform.</p>
-            <p>You can now sign in with your account and start adding your projects.</p>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #1F2937;">Welcome to Z-Inspection Platform!</h2>
+              <p>Hello ${name},</p>
+              <p>Welcome to Z-Inspection Ethical AI Evaluation Platform.</p>
+              <p>You can now sign in with your account and start adding your projects.</p>
+              <p style="margin-top: 30px;">
+                <a href="${CLIENT_URL}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  Sign In to Platform
+                </a>
+              </p>
+              <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+              <p style="color: #9CA3AF; font-size: 12px;">This is an automated email from Z-Inspection Platform.</p>
+            </div>
           `
         };
         await transporter.sendMail(mailOptions);
@@ -4689,23 +4773,30 @@ app.post('/api/messages', async (req, res) => {
 
           // Only send email if credentials are configured
           if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+            // CLIENT_URL is already defined at line 57
+            const projectUrl = `${CLIENT_URL}?project=${project._id}`;
             await transporter.sendMail({
               from: `"Z-Inspection Platform" <${process.env.EMAIL_USER}>`,
               to: toUser.email,
               subject: `New message from ${fromUser.name} - ${project.title}`,
               html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                   <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
                   <p>You have received a new message from <strong>${fromUser.name}</strong> regarding project <strong>"${project.title}"</strong>.</p>
                   <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
                     <p style="margin: 0; color: #374151;">${text.replace(/\n/g, '<br>')}</p>
                   </div>
-                  <p style="color: #6B7280; font-size: 14px;">Please log in to the platform to respond.</p>
-                  <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
+                  <p style="margin-top: 30px;">
+                    <a href="${projectUrl}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                      View Project & Respond
+                    </a>
+                  </p>
+                  <p style="color: #6B7280; font-size: 14px; margin-top: 20px;">Or log in to the platform to respond.</p>
+                  <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
                   <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
                 </div>
               `,
-              text: `You have received a new message from ${fromUser.name} regarding project "${project.title}":\n\n${text}\n\nPlease log in to the platform to respond.`
+              text: `You have received a new message from ${fromUser.name} regarding project "${project.title}":\n\n${text}\n\nView project: ${projectUrl}\n\nPlease log in to the platform to respond.`
             });
             console.log('📧 Email sent successfully to:', toUser.email);
           } else {
@@ -4747,23 +4838,30 @@ app.post('/api/messages/send-email', async (req, res) => {
 
     // Only send email if credentials are configured
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      // CLIENT_URL is already defined at line 57
+      const projectUrl = projectId ? `${CLIENT_URL}?project=${projectId}` : CLIENT_URL;
       await transporter.sendMail({
         from: `"Z-Inspection Platform" <${process.env.EMAIL_USER}>`,
         to: to,
         subject: `New message from ${fromName} - ${projectTitle}`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
             <p>You have received a new message from <strong>${fromName}</strong> regarding project <strong>"${projectTitle}"</strong>.</p>
             <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 0; color: #374151;">${message.replace(/\n/g, '<br>')}</p>
             </div>
-            <p style="color: #6B7280; font-size: 14px;">Please log in to the platform to respond.</p>
-            <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
+            <p style="margin-top: 30px;">
+              <a href="${projectUrl}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                View Project & Respond
+              </a>
+            </p>
+            <p style="color: #6B7280; font-size: 14px; margin-top: 20px;">Or log in to the platform to respond.</p>
+            <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
             <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
           </div>
         `,
-        text: `You have received a new message from ${fromName} regarding project "${projectTitle}":\n\n${message}\n\nPlease log in to the platform to respond.`
+        text: `You have received a new message from ${fromName} regarding project "${projectTitle}":\n\n${message}\n\nView project: ${projectUrl}\n\nPlease log in to the platform to respond.`
       });
       console.log('📧 Email sent successfully to:', to);
       res.json({ success: true, message: 'Email sent successfully' });
@@ -5492,13 +5590,14 @@ app.get('/api/health', (req, res) => {
 
 // Check if email credentials are loaded (for debugging)
 const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-const isProduction = process.env.NODE_ENV === 'production';
+// isProduction is already defined at line 58 - using the global one
 console.log(`📧 Email service: ${emailConfigured ? '✅ Configured' : '⚠️  Not configured'}`);
 if (emailConfigured) {
   console.log(`📧 Email user: ${process.env.EMAIL_USER}`);
   console.log(`📧 Email pass: ${process.env.EMAIL_PASS ? '***' + process.env.EMAIL_PASS.slice(-4) : 'NOT SET'}`);
 } else {
-  if (isProduction) {
+  // Use the isProduction variable defined at line 58
+  if (process.env.NODE_ENV === 'development') {
     console.log(`⚠️  EMAIL_USER or EMAIL_PASS not found in environment variables`);
     console.log(`⚠️  Please configure EMAIL_USER and EMAIL_PASS in Railway environment variables`);
   } else {

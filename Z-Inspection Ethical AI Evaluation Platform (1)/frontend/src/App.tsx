@@ -16,6 +16,7 @@ import { OtherMembers } from "./components/OtherMembers";
 import { PreconditionApproval } from "./components/PreconditionApproval";
 import { ReportReview } from "./components/ReportReview";
 import { ChatPanel } from "./components/ChatPanel";
+import { Toaster } from "sonner";
 import {
   User,
   Project,
@@ -23,6 +24,18 @@ import {
   UseCase,
 } from "./types";
 import { api } from "./api";
+
+// Navigation history entry type
+interface NavigationEntry {
+  view: string;
+  selectedProject?: Project | null;
+  selectedTension?: Tension | null;
+  selectedOwner?: User | null;
+  selectedUseCase?: UseCase | null;
+  selectedReportId?: string | null;
+  chatProject?: Project | null;
+  chatOtherUser?: User | null;
+}
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -42,6 +55,9 @@ function App() {
   const [needsPrecondition, setNeedsPrecondition] = useState(false);
   const [dashboardPreferredTab, setDashboardPreferredTab] = useState<"assigned" | "finished" | null>(null);
   const [assignmentsRefreshToken, setAssignmentsRefreshToken] = useState(0);
+  
+  // Navigation history stack
+  const [navigationHistory, setNavigationHistory] = useState<NavigationEntry[]>([]);
 
   // --- VERİ ÇEKME (FETCH) ---
   // Only fetch heavy dashboard data AFTER login to avoid stressing the backend while on the login screen.
@@ -97,7 +113,13 @@ function App() {
       setProjects(event.detail);
     };
     
+    // Listen for use cases update events (e.g., after assignment)
+    const handleUseCasesUpdate = (event: CustomEvent) => {
+      setUseCases(event.detail);
+    };
+    
     window.addEventListener('projects-updated', handleProjectsUpdate as EventListener);
+    window.addEventListener('usecases-updated', handleUseCasesUpdate as EventListener);
     
     // Periodically refresh projects (every 10 seconds) to catch assignment updates
     const refreshInterval = setInterval(() => {
@@ -112,11 +134,23 @@ function App() {
             }
           })
           .catch(err => console.error('Error refreshing projects:', err));
+        
+        // Also refresh use cases periodically
+        fetch(api('/api/use-cases'))
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) {
+              const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
+              setUseCases(formattedUseCases);
+            }
+          })
+          .catch(err => console.error('Error refreshing use cases:', err));
       }
     }, 10000); // Refresh every 10 seconds
     
     return () => {
       window.removeEventListener('projects-updated', handleProjectsUpdate as EventListener);
+      window.removeEventListener('usecases-updated', handleUseCasesUpdate as EventListener);
       clearInterval(refreshInterval);
     };
   }, [currentUser]);
@@ -127,8 +161,7 @@ function App() {
       const path = window.location.pathname || "";
       const m = path.match(/^\/reports\/([^/]+)\/review\/?$/);
       if (m && m[1]) {
-        setSelectedReportId(m[1]);
-        setCurrentView("report-review");
+        navigateToView("report-review", { selectedReportId: m[1], skipHistory: true });
       }
     };
 
@@ -243,22 +276,91 @@ function App() {
   };
 
   // --- NAVIGATION ---
+  // Helper function to save current state to history before navigation
+  const navigateToView = (view: string, options?: {
+    selectedProject?: Project | null;
+    selectedTension?: Tension | null;
+    selectedOwner?: User | null;
+    selectedUseCase?: UseCase | null;
+    selectedReportId?: string | null;
+    chatProject?: Project | null;
+    chatOtherUser?: User | null;
+    skipHistory?: boolean; // Skip adding to history (for back navigation)
+  }) => {
+    // Save current state to history (unless we're going back)
+    if (!options?.skipHistory && currentView !== "dashboard") {
+      setNavigationHistory(prev => {
+        const newEntry: NavigationEntry = {
+          view: currentView,
+          selectedProject,
+          selectedTension,
+          selectedOwner,
+          selectedUseCase,
+          selectedReportId,
+          chatProject,
+          chatOtherUser
+        };
+        // Don't add duplicate consecutive entries
+        if (prev.length > 0) {
+          const last = prev[prev.length - 1];
+          if (last.view === newEntry.view && 
+              last.selectedProject?.id === newEntry.selectedProject?.id) {
+            return prev; // Skip duplicate
+          }
+        }
+        return [...prev, newEntry];
+      });
+    }
+    
+    // Update state
+    setCurrentView(view);
+    if (options?.selectedProject !== undefined) setSelectedProject(options.selectedProject);
+    if (options?.selectedTension !== undefined) setSelectedTension(options.selectedTension);
+    if (options?.selectedOwner !== undefined) setSelectedOwner(options.selectedOwner);
+    if (options?.selectedUseCase !== undefined) setSelectedUseCase(options.selectedUseCase);
+    if (options?.selectedReportId !== undefined) setSelectedReportId(options.selectedReportId);
+    if (options?.chatProject !== undefined) setChatProject(options.chatProject);
+    if (options?.chatOtherUser !== undefined) setChatOtherUser(options.chatOtherUser);
+  };
+
+  // Navigate back using history
+  const navigateBack = () => {
+    if (navigationHistory.length > 0) {
+      const previous = navigationHistory[navigationHistory.length - 1];
+      setNavigationHistory(prev => prev.slice(0, -1)); // Remove last entry
+      
+      // Restore previous state
+      navigateToView(previous.view, {
+        selectedProject: previous.selectedProject,
+        selectedTension: previous.selectedTension,
+        selectedOwner: previous.selectedOwner,
+        selectedUseCase: previous.selectedUseCase,
+        selectedReportId: previous.selectedReportId,
+        chatProject: previous.chatProject,
+        chatOtherUser: previous.chatOtherUser,
+        skipHistory: true
+      });
+    } else {
+      // No history, go to dashboard
+      handleBackToDashboard();
+    }
+  };
+
   const handleViewProject = (project: Project) => {
-    setSelectedProject(project);
-    setCurrentView("project-detail");
+    navigateToView("project-detail", { selectedProject: project });
   };
 
   const handleStartEvaluation = (project: Project) => {
-    setSelectedProject(project);
     // Show general questions first for non-usecase and non-admin users
     if (currentUser && currentUser.role !== 'use-case-owner' && currentUser.role !== 'admin') {
-      setCurrentView("general-questions");
+      navigateToView("general-questions", { selectedProject: project });
     } else {
-      setCurrentView("evaluation");
+      navigateToView("evaluation", { selectedProject: project });
     }
   };
 
   const handleBackToDashboard = () => {
+    setNavigationHistory([]); // Clear history when going to dashboard
     setCurrentView("dashboard");
     setSelectedProject(null);
     setSelectedTension(null);
@@ -270,14 +372,11 @@ function App() {
   };
 
   const handleOpenChat = (project: Project, otherUser: User) => {
-    setChatProject(project);
-    setChatOtherUser(otherUser);
-    setCurrentView("chat");
+    navigateToView("chat", { chatProject: project, chatOtherUser: otherUser });
   };
 
   const handleReviewReport = (reportId: string) => {
-    setSelectedReportId(reportId);
-    setCurrentView("report-review");
+    navigateToView("report-review", { selectedReportId: reportId });
     try {
       window.history.pushState({}, "", `/reports/${reportId}/review`);
     } catch {
@@ -335,29 +434,20 @@ function App() {
   };
 
   const handleViewTension = (tension: Tension) => {
-    setSelectedTension(tension);
-    setCurrentView("tension-detail");
+    navigateToView("tension-detail", { selectedTension: tension });
   };
 
   const handleBackToProject = () => {
-    // Clear openTensionsTab flag when going back
-    if (selectedProject) {
-      const { openTensionsTab, ...projectWithoutFlag } = selectedProject as any;
-      setSelectedProject(projectWithoutFlag);
-    }
-    setCurrentView("project-detail");
-    setSelectedTension(null);
-    setSelectedOwner(null);
+    // Use navigateBack which will restore previous state
+    navigateBack();
   };
 
   const handleViewOwner = (owner: User) => {
-    setSelectedOwner(owner);
-    setCurrentView("owner-detail");
+    navigateToView("owner-detail", { selectedOwner: owner });
   };
 
   const handleViewUseCase = (useCase: UseCase) => {
-    setSelectedUseCase(useCase);
-    setCurrentView("usecase-detail");
+    navigateToView("usecase-detail", { selectedUseCase: useCase });
   };
 
   // --- CREATION HANDLERS (BACKEND'E KAYIT) ---
@@ -520,15 +610,7 @@ function App() {
         <ReportReview
           reportId={selectedReportId}
           currentUser={currentUser}
-          onBack={() => {
-            try {
-              window.history.pushState({}, "", "/");
-            } catch {
-              // ignore
-            }
-            setSelectedReportId(null);
-            setCurrentView("dashboard");
-          }}
+          onBack={navigateBack}
         />
       );
     }
@@ -540,7 +622,7 @@ function App() {
             project={selectedProject}
             currentUser={currentUser}
             users={users}
-            onBack={handleBackToDashboard}
+            onBack={navigateBack}
             onStartEvaluation={() => handleStartEvaluation(selectedProject)}
             onFinishEvolution={() => handleFinishEvolution(selectedProject)}
             onViewTension={handleViewTension}
@@ -594,7 +676,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
@@ -607,7 +689,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onViewUseCase={handleViewUseCase}
               onReviewReport={handleReviewReport}
               onLogout={handleLogout}
@@ -622,33 +704,18 @@ function App() {
           <GeneralQuestions
             project={selectedProject}
             currentUser={currentUser}
-            onBack={() => {
-              try {
-                // Always go to dashboard first, then navigate to project-detail if project exists
-                if (selectedProject) {
-                  // Preserve selectedProject and go to project detail
-                  setCurrentView("project-detail");
-                } else {
-                  // No project selected, go to dashboard
-                  setCurrentView("dashboard");
-                }
-              } catch (error) {
-                console.error('Error in general-questions onBack:', error);
-                // On error, always go to dashboard
-                setCurrentView("dashboard");
-              }
-            }}
+            onBack={navigateBack}
             onComplete={() => {
               try {
                 const projectToUse = selectedProject;
                 if (projectToUse) {
-                  setCurrentView("add-general-question");
+                  navigateToView("add-general-question", { selectedProject: projectToUse });
                 } else {
-                  setCurrentView("dashboard");
+                  handleBackToDashboard();
                 }
               } catch (error) {
                 console.error('Error in general-questions onComplete:', error);
-                setCurrentView("dashboard");
+                handleBackToDashboard();
               }
             }}
           />
@@ -679,7 +746,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
@@ -692,7 +759,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onViewUseCase={handleViewUseCase}
               onReviewReport={handleReviewReport}
               onLogout={handleLogout}
@@ -707,31 +774,19 @@ function App() {
           <AddGeneralQuestion
             project={selectedProject}
             currentUser={currentUser}
-            onBack={() => {
-              try {
-                const projectToUse = selectedProject;
-                if (projectToUse) {
-                  setCurrentView("general-questions");
-                } else {
-                  setCurrentView("dashboard");
-                }
-              } catch (error) {
-                console.error('Error in add-general-question onBack:', error);
-                setCurrentView("dashboard");
-              }
-            }}
+            onBack={navigateBack}
             onComplete={() => {
               try {
                 const projectToUse = selectedProject;
                 if (projectToUse) {
-                  setSelectedProject({ ...projectToUse, openTensionsTab: true } as any);
-                  setCurrentView("project-detail");
+                  const projectWithTab = { ...projectToUse, openTensionsTab: true } as any;
+                  navigateToView("project-detail", { selectedProject: projectWithTab });
                 } else {
-                  setCurrentView("dashboard");
+                  handleBackToDashboard();
                 }
               } catch (error) {
                 console.error('Error in add-general-question onComplete:', error);
-                setCurrentView("dashboard");
+                handleBackToDashboard();
               }
             }}
           />
@@ -763,7 +818,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
@@ -776,7 +831,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onViewUseCase={handleViewUseCase}
               onReviewReport={handleReviewReport}
               onLogout={handleLogout}
@@ -791,41 +846,21 @@ function App() {
           <EvaluationForm
             project={selectedProject}
             currentUser={currentUser}
-            onBack={() => {
-              try {
-                // Preserve selectedProject when going back
-                const projectToUse = selectedProject;
-                if (!projectToUse) {
-                  console.warn('⚠️ selectedProject is null in onBack, going to dashboard');
-                  setCurrentView("dashboard");
-                  return;
-                }
-                // If user came from general questions, go back to general questions
-                // Otherwise go back to project detail
-                if (currentUser && currentUser.role !== 'use-case-owner' && currentUser.role !== 'admin') {
-                  setCurrentView("general-questions");
-                } else {
-                  setCurrentView("project-detail");
-                }
-              } catch (error) {
-                console.error('Error in evaluation onBack:', error);
-                setCurrentView("dashboard");
-              }
-            }}
+            onBack={navigateBack}
             onSubmit={() => {
               try {
                 // Assessment finished: mark progress and return to project detail
                 const projectToUse = selectedProject;
                 if (projectToUse) {
-                  setProjects(prev => prev.map(p => p.id === projectToUse.id ? { ...p, progress: 100 } : p));
-                  setSelectedProject(prev => prev ? { ...prev, progress: 100 } : prev);
-                  setCurrentView("project-detail");
+                  const updatedProject = { ...projectToUse, progress: 100 };
+                  setProjects(prev => prev.map(p => p.id === projectToUse.id ? updatedProject : p));
+                  navigateToView("project-detail", { selectedProject: updatedProject });
                 } else {
-                  setCurrentView("dashboard");
+                  handleBackToDashboard();
                 }
               } catch (error) {
                 console.error('Error in evaluation onSubmit:', error);
-                setCurrentView("dashboard");
+                handleBackToDashboard();
               }
             }}
           />
@@ -836,7 +871,7 @@ function App() {
             currentUser={currentUser}
             projects={projects}
             users={users}
-            onBack={handleBackToDashboard}
+            onBack={navigateBack}
           />
         );
       case "other-members":
@@ -845,7 +880,7 @@ function App() {
             currentUser={currentUser}
             users={users}
             projects={projects}
-            onBack={handleBackToDashboard}
+            onBack={navigateBack}
           />
         );
       case "usecase-detail":
@@ -854,7 +889,7 @@ function App() {
             useCase={selectedUseCase}
             currentUser={currentUser}
             users={users}
-            onBack={handleBackToDashboard}
+            onBack={navigateBack}
           />
         ) : null;
       case "chat":
@@ -866,7 +901,7 @@ function App() {
                   project={chatProject}
                   currentUser={currentUser}
                   otherUser={chatOtherUser}
-                  onClose={handleBackToDashboard}
+                  onClose={navigateBack}
                   inline={true}
                   onMessageSent={() => {
                     window.dispatchEvent(new Event('message-sent'));
@@ -903,7 +938,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
@@ -918,7 +953,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onViewUseCase={handleViewUseCase}
               onReviewReport={handleReviewReport}
               onLogout={handleLogout}
@@ -964,7 +999,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
             />
@@ -977,7 +1012,7 @@ function App() {
               onStartEvaluation={handleStartEvaluation}
               onFinishEvolution={handleFinishEvolution}
               onDeleteProject={handleDeleteProject}
-              onNavigate={setCurrentView}
+              onNavigate={(view: string) => navigateToView(view)}
               onViewUseCase={handleViewUseCase}
               onReviewReport={handleReviewReport}
               onLogout={handleLogout}
@@ -1003,6 +1038,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       {content}
+      <Toaster position="top-right" />
     </div>
   );
 }

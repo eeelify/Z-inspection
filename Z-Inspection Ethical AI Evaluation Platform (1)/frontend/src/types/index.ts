@@ -183,6 +183,7 @@ export interface UseCase {
     contentType?: string;
   }[];
   assignedExperts?: string[];
+  assignedExpertsCount?: number; // Backend returns this from unified resolver
   adminNotes?: string;
   adminReflections?: {
     id: string;
