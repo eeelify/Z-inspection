@@ -5,6 +5,8 @@ import { fetchUserProgress } from '../utils/userProgress';
 import { ChatPanel } from './ChatPanel';
 import { ProfileModal } from './ProfileModal';
 import { api } from '../api';
+import { Spinner } from './Spinner';
+import { toast } from 'sonner';
 
 interface AdminDashboardEnhancedProps {
   currentUser: User;
@@ -782,15 +784,64 @@ export function AdminDashboardEnhanced({
                  })
                });
 
+               const responseData = await response.json();
+
                if (response.ok) {
+<<<<<<< HEAD
                  alert("Experts assigned successfully!");
+=======
+                 // Close modal immediately for better UX
+                 setShowAssignExpertsModal(false);
+                 setSelectedUseCaseForAssignment(null);
+                 
+                 // Show success message
+                 toast.success("Experts assigned successfully!");
+                 
+                 // Reload projects and use cases in parallel for better performance
+                 const userId = currentUser?.id || (currentUser as any)?._id;
+                 Promise.all([
+                   fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`))
+                     .then(projectsRes => {
+                       if (projectsRes.ok) {
+                         return projectsRes.json().then(data => {
+                           const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+                           window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
+                         });
+                       }
+                     })
+                     .catch(reloadError => {
+                       console.error("Error reloading projects:", reloadError);
+                     }),
+                   fetch(api('/api/use-cases'))
+                     .then(useCasesRes => {
+                       if (useCasesRes.ok) {
+                         return useCasesRes.json().then(data => {
+                           const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
+                           window.dispatchEvent(new CustomEvent('usecases-updated', { detail: formattedUseCases }));
+                         });
+                       }
+                     })
+                     .catch(reloadError => {
+                       console.error("Error reloading use cases:", reloadError);
+                     })
+                 ]).catch(error => {
+                   console.error("Error during parallel reload:", error);
+                 });
+               } else {
+                 // Show error message from backend
+                 const errorMessage = responseData.error || 'Failed to assign experts';
+                 console.error("Assignment error:", errorMessage);
+                 toast.error(`Failed to assign experts: ${errorMessage}`);
+                 // Throw error so modal stays open
+                 throw new Error(errorMessage);
+>>>>>>> b5d5550e40d821027faee73b3c45776ea946219f
                }
-             } catch (error) {
+             } catch (error: any) {
                console.error("Assignment error:", error);
-               alert("Failed to assign experts.");
+               toast.error(`Failed to assign experts: ${error.message || 'Network error'}`);
+               // Re-throw error so modal stays open
+               throw error;
              }
-             setShowAssignExpertsModal(false);
-             setSelectedUseCaseForAssignment(null);
            }}
         />
       )}
@@ -1790,7 +1841,276 @@ function ReportsTab({ projects, currentUser, users }: any) {
     }
   };
 
+<<<<<<< HEAD
   // Fetch progress for all projects
+=======
+  // Download report as PDF (full dashboard report with charts - always uses latest data)
+  const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    // Show loading state
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
+    try {
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      if (!reportId) {
+        alert('Rapor ID bulunamadı.');
+        return;
+      }
+      
+      console.log(`📥 [ReportsTab] Downloading PDF for report: ${reportId}, user: ${userId}`);
+      
+      // Use /download-pdf endpoint which generates full dashboard report with charts (always uses latest data)
+      const response = await fetch(api(`/api/reports/${reportId}/download-pdf?userId=${userId}`));
+      
+      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
+      
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📄 Content-Type: ${contentType}`);
+        
+        if (!contentType || !contentType.includes('application/pdf')) {
+          // Try to get error message from response
+          const text = await response.text();
+          console.error('❌ Response is not PDF:', text.substring(0, 200));
+          try {
+            const error = JSON.parse(text);
+            alert('PDF indirilemedi: ' + (error.error || 'Sunucu PDF formatında yanıt döndürmedi'));
+          } catch {
+            alert('PDF indirilemedi: Sunucu PDF formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
+        const blob = await response.blob();
+        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          alert('PDF dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ PDF downloaded successfully');
+      } else {
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+          console.error('❌ PDF download error:', error);
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+          console.error('❌ PDF download error (text):', text.substring(0, 200));
+        }
+        alert(`PDF indirilemedi (${response.status}): ${errorMessage}`);
+      }
+    } catch (error: any) {
+      console.error('❌ Error downloading PDF:', error);
+      alert('PDF indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      // Restore button state
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
+    }
+  };
+
+  // Download report as Word (DOCX) - always uses latest data
+  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    // Show loading state
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
+    try {
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      if (!reportId) {
+        alert('Rapor ID bulunamadı.');
+        return;
+      }
+      
+      console.log(`📥 [ReportsTab] Downloading DOCX for report: ${reportId}, user: ${userId}`);
+      
+      // Use /download-docx endpoint which always uses latest data
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
+      
+      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
+      
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`📄 Content-Type: ${contentType}`);
+        
+        const expectedTypes = [
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/octet-stream',
+          'application/zip'
+        ];
+        
+        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
+          // Try to get error message from response
+          const text = await response.text();
+          console.error('❌ Response is not DOCX:', text.substring(0, 200));
+          try {
+            const error = JSON.parse(text);
+            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
+          } catch {
+            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
+        const blob = await response.blob();
+        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
+        
+        if (blob.size === 0) {
+          alert('Word dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('✅ DOCX downloaded successfully');
+      } else {
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+          console.error('❌ DOCX download error:', error);
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+          console.error('❌ DOCX download error (text):', text.substring(0, 200));
+        }
+        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
+      }
+    } catch (error: any) {
+      console.error('❌ Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      // Restore button state
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
+    }
+  };
+
+  // Analyze expert comments
+  const handleAnalyzeComments = async () => {
+    if (!detailsReport?.expertComments || detailsReport.expertComments.length === 0) {
+      alert("No expert comments to analyze.");
+      return;
+    }
+
+    setAnalyzing(true);
+    setAnalysisResult(null);
+    try {
+      const comments = detailsReport.expertComments
+        .map((c: any) => c.commentText)
+        .filter((text: string) => text && text.trim());
+
+      if (comments.length === 0) {
+        alert("No valid comments to analyze.");
+        return;
+      }
+
+      const res = await fetch(api("/api/reports/analyze-expert-comments"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expertComments: comments }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as any));
+        throw new Error(err.error || "Failed to analyze comments");
+      }
+
+      const data = await res.json();
+      if (data.success && data.analysis) {
+        setAnalysisResult(data.analysis);
+      } else {
+        throw new Error("Invalid response format");
+      }
+    } catch (e: any) {
+      alert(e?.message || "Failed to analyze expert comments");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // Delete report
+  const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the report "${reportTitle}"? This action cannot be undone.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`), {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        alert('✅ Report deleted successfully');
+        fetchReports();
+        if (detailsReport && (detailsReport._id === reportId || detailsReport.id === reportId)) {
+          setDetailsReport(null);
+        }
+      } else {
+        const error = await response.json().catch(() => ({} as any));
+        alert('❌ Error: ' + (error.error || 'Failed to delete report'));
+      }
+    } catch (error: any) {
+      console.error('Error deleting report:', error);
+      alert('❌ Error: ' + (error.message || 'Failed to delete report'));
+    }
+  };
+
+  // Fetch progress for all projects (same calculation as ProjectDetail's Team Average Progress)
+>>>>>>> b5d5550e40d821027faee73b3c45776ea946219f
   useEffect(() => {
     const fetchAllProgresses = async () => {
       if (!users || users.length === 0) return;
@@ -2103,13 +2423,14 @@ interface AssignExpertsModalProps {
   useCase: UseCase;
   users: User[];
   onClose: () => void;
-  onAssign: (expertIds: string[], notes: string) => void;
+  onAssign: (expertIds: string[], notes: string) => Promise<void>;
 }
 
 function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExpertsModalProps) {
   const [selectedExperts, setSelectedExperts] = useState<string[]>(useCase.assignedExperts || []);
   const [adminNotes, setAdminNotes] = useState(useCase.adminNotes || '');
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const experts = users.filter(u => u.role !== 'admin' && u.role !== 'use-case-owner');
 
   const toggleExpert = (expertId: string) => {
@@ -2120,9 +2441,18 @@ function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExperts
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAssign(selectedExperts, adminNotes);
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      await onAssign(selectedExperts, adminNotes);
+      // Modal will be closed by parent component on success
+    } catch (error) {
+      // Error handling is done in parent component
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -2187,15 +2517,18 @@ function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExperts
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Confirm Assignment
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Assigning...' : 'Confirm Assignment'}
             </button>
           </div>
         </form>

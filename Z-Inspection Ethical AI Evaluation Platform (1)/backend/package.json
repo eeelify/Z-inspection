@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "engines": {
-    "node": ">=18.0.0",
+    "node": "20.x",
     "npm": ">=9.0.0"
   },
   "scripts": {
@@ -22,7 +22,6 @@
     "@google/genai": "^1.33.0",
     "@google/generative-ai": "^0.24.1",
     "chartjs-node-canvas": "^4.1.6",
-    "_comment_chartjs": "chartjs-node-canvas requires native compilation. Use chartGenerationServicePuppeteer.js on Windows if build tools unavailable",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "docx": "^9.5.1",

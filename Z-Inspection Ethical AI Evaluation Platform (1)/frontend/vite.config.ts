@@ -50,7 +50,6 @@
       },
     },
     build: {
-      target: 'esnext',
       outDir: 'build',
     },
     server: {
@@ -59,7 +58,7 @@
       proxy: {
         // Forward API calls to local backend in dev
         '/api': {
-          target: 'http://localhost:5000',
+          target: 'https://z-inspection-production.up.railway.app',
           changeOrigin: true,
           secure: false,
         },
