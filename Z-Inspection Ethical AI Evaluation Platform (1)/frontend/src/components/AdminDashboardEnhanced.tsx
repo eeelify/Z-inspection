@@ -784,6 +784,22 @@ export function AdminDashboardEnhanced({
 
                if (response.ok) {
                  alert("Experts assigned successfully!");
+                 
+                 // Refresh projects to reflect the updated assignedUsers
+                 try {
+                   const projectsRes = await fetch(api('/api/projects'));
+                   if (projectsRes.ok) {
+                     const projectsData = await projectsRes.json();
+                     const formattedProjects = projectsData.map((p: any) => ({ ...p, id: p._id }));
+                     
+                     // Trigger projects-updated event to update App.tsx
+                     window.dispatchEvent(new CustomEvent('projects-updated', { 
+                       detail: formattedProjects 
+                     }));
+                   }
+                 } catch (refreshError) {
+                   console.error("Error refreshing projects:", refreshError);
+                 }
                }
              } catch (error) {
                console.error("Assignment error:", error);
@@ -1790,6 +1806,62 @@ function ReportsTab({ projects, currentUser, users }: any) {
     }
   };
 
+  // Download report as PDF
+  const handleDownloadPDF = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent card click event
+    }
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.pdf`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json();
+        alert('PDF indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading PDF:', error);
+      alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
+  // Delete report
+  const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent card click event
+    }
+    const confirmDelete = window.confirm(`Are you sure you want to delete the report "${reportTitle}"? This action cannot be undone.`);
+    if (!confirmDelete) return;
+
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`), {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        alert('✅ Report deleted successfully');
+        fetchReports(); // Refresh reports list
+        if (selectedReport && (selectedReport._id === reportId || selectedReport.id === reportId)) {
+          setSelectedReport(null); // Close modal if deleted report is being viewed
+        }
+      } else {
+        const error = await response.json();
+        alert('❌ Error: ' + (error.error || 'Failed to delete report'));
+      }
+    } catch (error: any) {
+      console.error('Error deleting report:', error);
+      alert('❌ Error: ' + (error.message || 'Failed to delete report'));
+    }
+  };
+
   // Fetch progress for all projects
   useEffect(() => {
     const fetchAllProgresses = async () => {
@@ -2127,15 +2199,15 @@ function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExperts
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-900">Assign Evaluation Team</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           <div>
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Target Use Case</div>
             <div className="text-base font-medium text-gray-900">{useCase.title}</div>

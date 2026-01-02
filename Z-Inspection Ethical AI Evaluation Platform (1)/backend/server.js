@@ -540,12 +540,67 @@ app.delete('/api/use-cases/:id', async (req, res) => {
 app.put('/api/use-cases/:id/assign', async (req, res) => {
   try {
     const { assignedExperts = [], adminNotes = '' } = req.body;
+    const useCaseId = req.params.id;
+    
+    // Update the use case
     const updated = await UseCase.findByIdAndUpdate(
-      req.params.id,
+      useCaseId,
       { assignedExperts, adminNotes },
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: 'Not found' });
+    
+    // Find all projects linked to this use case
+    const linkedProjects = await Project.find({ useCase: useCaseId }).lean();
+    
+    // Prepare the list of users to assign: use case owner + assigned experts
+    const usersToAssign = new Set();
+    
+    // Add use case owner if exists
+    if (updated.ownerId) {
+      usersToAssign.add(updated.ownerId.toString());
+    }
+    
+    // Add all assigned experts
+    if (Array.isArray(assignedExperts)) {
+      assignedExperts.forEach(expertId => {
+        if (expertId) {
+          usersToAssign.add(expertId.toString());
+        }
+      });
+    }
+    
+    // Update all linked projects' assignedUsers
+    // Sync project assignedUsers with use case owner + assignedExperts
+    if (linkedProjects.length > 0) {
+      const usersToAssignArray = Array.from(usersToAssign);
+      
+      await Promise.all(
+        linkedProjects.map(async (project) => {
+          const currentAssignedUsers = (project.assignedUsers || []).map(id => id.toString());
+          
+          // Get the previous use case assignedExperts to know what to remove
+          // We need to find users that were in the old list but not in the new list
+          // For now, we'll sync: keep only use case owner + new assignedExperts
+          // (This ensures removed experts are also removed from projects)
+          
+          // Create new list: use case owner + assignedExperts only
+          // Remove any users that are not in the new use case assignment
+          const newAssignedUsers = new Set(usersToAssignArray);
+          
+          // Also keep any users that were manually added to the project (not from use case)
+          // But for now, let's keep it simple: only use case owner + assignedExperts
+          // If you need to preserve manually added users, we'd need to track that separately
+          
+          await Project.findByIdAndUpdate(
+            project._id,
+            { assignedUsers: Array.from(newAssignedUsers) },
+            { new: true }
+          );
+        })
+      );
+    }
+    
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
