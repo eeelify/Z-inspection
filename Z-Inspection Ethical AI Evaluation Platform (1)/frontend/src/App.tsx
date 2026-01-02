@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { X } from "lucide-react";
 import { LoginScreen } from "./components/LoginScreen";
 import { AdminDashboardEnhanced } from "./components/AdminDashboardEnhanced";
 import { UserDashboard } from "./components/UserDashboard";
@@ -15,7 +14,6 @@ import { SharedArea } from "./components/SharedArea";
 import { OtherMembers } from "./components/OtherMembers";
 import { PreconditionApproval } from "./components/PreconditionApproval";
 import { ReportReview } from "./components/ReportReview";
-import { ChatPanel } from "./components/ChatPanel";
 import {
   User,
   Project,
@@ -32,8 +30,6 @@ function App() {
   const [selectedOwner, setSelectedOwner] = useState<User | null>(null);
   const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
-  const [chatProject, setChatProject] = useState<Project | null>(null);
-  const [chatOtherUser, setChatOtherUser] = useState<User | null>(null);
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
@@ -54,9 +50,8 @@ function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
-        const userId = currentUser?.id || (currentUser as any)?._id;
         const [projectsRes, usersRes, useCasesRes] = await Promise.all([
-          fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`), { signal: controller.signal }),
+          fetch(api('/api/projects'), { signal: controller.signal }),
           fetch(api('/api/users'), { signal: controller.signal }),
           fetch(api('/api/use-cases'), { signal: controller.signal })
         ]);
@@ -102,8 +97,7 @@ function App() {
     // Periodically refresh projects (every 10 seconds) to catch assignment updates
     const refreshInterval = setInterval(() => {
       if (currentUser) {
-        const userId = currentUser?.id || (currentUser as any)?._id;
-        fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`))
+        fetch(api('/api/projects'))
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) {
@@ -202,11 +196,7 @@ function App() {
       });
       
       if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed to fetch'))) {
-        if (import.meta.env.PROD) {
-          alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend servisi çalışıyor mu?\n2. VITE_API_URL environment variable doğru yapılandırılmış mı?\n3. CORS ayarları doğru mu?");
-        } else {
-          alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
-        }
+        alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
       } else {
         alert(`Giriş hatası: ${error.message || 'Bilinmeyen hata'}\n\nBackend'in çalıştığından emin olun.`);
       }
@@ -265,14 +255,6 @@ function App() {
     setSelectedOwner(null);
     setSelectedUseCase(null);
     setSelectedReportId(null);
-    setChatProject(null);
-    setChatOtherUser(null);
-  };
-
-  const handleOpenChat = (project: Project, otherUser: User) => {
-    setChatProject(project);
-    setChatOtherUser(otherUser);
-    setCurrentView("chat");
   };
 
   const handleReviewReport = (reportId: string) => {
@@ -308,10 +290,7 @@ function App() {
         })();
 
         if ((err as any)?.error === "NOT_ALL_TENSIONS_VOTED") {
-          const errorData = err as any;
-          const message = errorData.message || 
-            `Please vote on all tensions you can vote on. You have voted on ${errorData.votedTensions || 0} out of ${errorData.totalVotableTensions || 0} votable tensions. (Note: You cannot vote on your own tensions.)`;
-          alert(message);
+          alert("Please make sure you have voted on all tensions.");
           return;
         }
         const details = rawText && rawText.length < 500 ? rawText : "";
@@ -399,12 +378,7 @@ function App() {
 
   const handleDeleteProject = async (projectId: string) => {
     try {
-      const userId = currentUser?.id || (currentUser as any)?._id;
-      if (!userId) {
-        alert('User ID is required');
-        return;
-      }
-      const response = await fetch(api(`/api/projects/${projectId}?userId=${userId}`), {
+      const response = await fetch(api(`/api/projects/${projectId}`), {
         method: 'DELETE'
       });
 
@@ -582,7 +556,6 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
-              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -667,7 +640,6 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
-              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -751,7 +723,6 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
-              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced
@@ -857,25 +828,6 @@ function App() {
             onBack={handleBackToDashboard}
           />
         ) : null;
-      case "chat":
-        return chatProject && chatOtherUser ? (
-          <div className="min-h-screen bg-gray-50 flex flex-col">
-            <div className="max-w-4xl mx-auto w-full h-screen flex flex-col">
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <ChatPanel
-                  project={chatProject}
-                  currentUser={currentUser}
-                  otherUser={chatOtherUser}
-                  onClose={handleBackToDashboard}
-                  inline={true}
-                  onMessageSent={() => {
-                    window.dispatchEvent(new Event('message-sent'));
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        ) : null;
       default:
         if (currentUser.role === "use-case-owner") {
           return (
@@ -889,7 +841,6 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
-              onOpenChat={handleOpenChat}
             />
           );
         } else if (currentUser.role === "admin") {
@@ -952,7 +903,6 @@ function App() {
               onDeleteUseCase={handleDeleteUseCase}
               onLogout={handleLogout}
               onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
-              onOpenChat={handleOpenChat}
             />
           ) : currentUser?.role === "admin" ? (
             <AdminDashboardEnhanced

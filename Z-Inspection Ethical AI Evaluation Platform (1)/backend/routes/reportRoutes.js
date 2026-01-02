@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const reportController = require('../controllers/reportController');
-const { testApiKey, analyzeExpertComments } = require('../services/geminiService');
+const { testApiKey } = require('../services/geminiService');
 
 // GET /api/reports/list-models - List available Gemini models (must be before /:id route)
 router.get('/list-models', async (req, res) => {
@@ -34,37 +34,8 @@ router.get('/test-api-key', async (req, res) => {
   }
 });
 
-// POST /api/reports/generate - Generate AI report (legacy)
+// POST /api/reports/generate - Generate AI report
 router.post('/generate', reportController.generateReport);
-
-// POST /api/reports/generate-dashboard-narrative - Generate dashboard narrative synthesis
-router.post('/generate-dashboard-narrative', reportController.generateDashboardNarrative);
-
-// POST /api/reports/analyze-expert-comments - Analyze expert comments using Gemini AI (must be before /:id route)
-router.post('/analyze-expert-comments', async (req, res) => {
-  try {
-    const { expertComments } = req.body;
-
-    if (!expertComments) {
-      return res.status(400).json({ 
-        error: 'expertComments is required. Can be a string or array of strings.' 
-      });
-    }
-
-    const analysis = await analyzeExpertComments(expertComments);
-    
-    res.json({
-      success: true,
-      analysis
-    });
-  } catch (error) {
-    console.error('Error analyzing expert comments:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message || 'Failed to analyze expert comments'
-    });
-  }
-});
 
 // GET /api/reports/assigned-to-me - Reports for projects assigned to user (must be before /:id route)
 router.get('/assigned-to-me', reportController.getAssignedToMe);
@@ -78,20 +49,14 @@ router.get('/', reportController.getAllReports);
 // POST /api/reports/:id/finalize - Finalize & lock report (admin only)
 router.post('/:id/finalize', reportController.finalizeReport);
 
-// POST /api/reports/:id/expert-comment - Upsert expert comment (expert/admin)
-router.post('/:id/expert-comment', reportController.saveExpertComment);
+// PATCH /api/reports/:id/sections/:principle/expert-edit - Update expert edit for a section (expert/admin)
+router.patch('/:id/sections/:principle/expert-edit', reportController.updateSectionExpertEdit);
+
+// POST /api/reports/:id/sections/:principle/comments - Add comment to a section (expert/admin)
+router.post('/:id/sections/:principle/comments', reportController.addSectionComment);
 
 // GET /api/reports/:id/download - Download report as PDF (must be before /:id route)
 router.get('/:id/download', reportController.downloadReportPDF);
-
-// GET /api/reports/:id/download-docx - Download report as DOCX (Word) (must be before /:id route)
-router.get('/:id/download-docx', reportController.downloadReportDOCX);
-
-// GET /api/reports/:id/download-pdf - Download report as PDF (dashboard style) (must be before /:id route)
-router.get('/:id/download-pdf', reportController.downloadPDFReport);
-
-// GET /api/reports/:id/file - Serve stored report file (must be before /:id route)
-router.get('/:id/file', reportController.getReportFile);
 
 // GET /api/reports/:id - Get specific report
 router.get('/:id', reportController.getReportById);

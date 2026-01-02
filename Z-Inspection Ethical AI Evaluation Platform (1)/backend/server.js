@@ -19,8 +19,6 @@ if (dotResult.error) {
   }
 }
 
-// Notification service is defined inline after Notification model (see below)
-
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
   if (typeof mongoose.isValidObjectId === 'function') {
@@ -137,8 +135,6 @@ const ProjectSchema = new mongoose.Schema({
     resultsUsage: String,
     resultsSharing: String,
   },
-  // Soft delete: Users who have hidden this project (only visible to them)
-  hiddenForUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now }
 });
 const Project = mongoose.model('Project', ProjectSchema);
@@ -337,329 +333,6 @@ const TensionSchema = new mongoose.Schema({
 });
 const Tension = mongoose.model('Tension', TensionSchema);
 
-// Notification Schema - using model file
-const Notification = require('./models/Notification');
-
-// Notification Service Functions (defined after models are created)
-const notificationService = {
-  async createNotifications(recipients, payload, options = {}) {
-    const {
-      dedupeWindow = 60000, // 60 seconds default
-      mergeSimilar = false
-    } = options;
-
-    if (!recipients || recipients.length === 0) {
-      return [];
-    }
-
-    const notifications = [];
-    const now = Date.now();
-
-    for (const recipientId of recipients) {
-      // Skip if recipient is the actor
-      if (recipientId.toString() === payload.actorId.toString()) {
-        continue;
-      }
-
-      // Deduplication check: same recipient, type, entityId within time window
-      if (dedupeWindow > 0) {
-        const existing = await Notification.findOne({
-          recipientId,
-          type: payload.type,
-          entityId: payload.entityId,
-          createdAt: { $gte: new Date(now - dedupeWindow) },
-          ...(payload.metadata?.voteType ? { 'metadata.voteType': payload.metadata.voteType } : {})
-        });
-
-        if (existing) {
-          // Skip duplicate notification
-          continue;
-        }
-      }
-
-      const notification = new Notification({
-        recipientId,
-        projectId: payload.projectId,
-        entityType: payload.entityType,
-        entityId: payload.entityId,
-        type: payload.type,
-        title: payload.title,
-        message: payload.message,
-        actorId: payload.actorId,
-        actorRole: payload.actorRole,
-        metadata: payload.metadata || {},
-        url: payload.url,
-        isRead: false
-      });
-
-      notifications.push(notification);
-    }
-
-    if (notifications.length > 0) {
-      await Notification.insertMany(notifications);
-    }
-
-    return notifications;
-  },
-
-  async getAssignedExperts(projectId) {
-    try {
-      // Use ProjectAssignment to get experts (excludes admins)
-      const ProjectAssignment = require('./models/projectAssignment');
-      const assignments = await ProjectAssignment.find({ 
-        projectId,
-        status: { $in: ['assigned', 'in_progress', 'submitted'] }
-      }).select('userId').lean();
-      
-      if (assignments && assignments.length > 0) {
-        // Get all user IDs from assignments
-        const userIds = assignments.map(a => a.userId).filter(Boolean);
-        
-        // Check user roles in bulk to exclude admins
-        const users = await User.find({ 
-          _id: { $in: userIds },
-          role: { $ne: 'admin' } // Exclude admins
-        }).select('_id').lean();
-        
-        return users.map(u => u._id);
-      }
-
-      // Fallback to Project.assignedUsers (but filter out admins)
-      const project = await Project.findById(projectId).populate('assignedUsers');
-      if (!project) return [];
-
-      // Get assigned user IDs
-      const userIds = (project.assignedUsers || [])
-        .map(u => u._id || u.id || u)
-        .filter(Boolean);
-
-      if (userIds.length === 0) return [];
-
-      // Check user roles in bulk to exclude admins
-      const users = await User.find({ 
-        _id: { $in: userIds },
-        role: { $ne: 'admin' } // Exclude admins
-      }).select('_id').lean();
-
-      return users.map(u => u._id);
-    } catch (error) {
-      console.error('Error getting assigned experts:', error);
-      return [];
-    }
-  },
-
-  async getAllAdmins() {
-    try {
-      const admins = await User.find({ role: 'admin' }).select('_id');
-      return admins.map(u => u._id);
-    } catch (error) {
-      console.error('Error getting admins:', error);
-      return [];
-    }
-  },
-
-  async getTensionParticipants(tensionId) {
-    try {
-      const tension = await Tension.findById(tensionId);
-      if (!tension) return [];
-
-      const participants = new Set();
-
-      if (tension.createdBy) {
-        participants.add(tension.createdBy.toString());
-      }
-
-      if (tension.comments && Array.isArray(tension.comments)) {
-        tension.comments.forEach(comment => {
-          if (comment.authorId) {
-            participants.add(comment.authorId.toString());
-          }
-        });
-      }
-
-      if (tension.votes && Array.isArray(tension.votes)) {
-        tension.votes.forEach(vote => {
-          if (vote.userId) {
-            participants.add(vote.userId.toString());
-          }
-        });
-      }
-
-      if (tension.evidences && Array.isArray(tension.evidences)) {
-        tension.evidences.forEach(evidence => {
-          if (evidence.uploadedBy) {
-            participants.add(evidence.uploadedBy.toString());
-          }
-        });
-      }
-
-      return Array.from(participants).map(id => {
-        try {
-          return mongoose.Types.ObjectId(id);
-        } catch {
-          return id;
-        }
-      });
-    } catch (error) {
-      console.error('Error getting tension participants:', error);
-      return [];
-    }
-  },
-
-  async notifyTensionCreated(tension, actorId, actorRole) {
-    try {
-      const projectId = tension.projectId;
-      const assignedExperts = await this.getAssignedExperts(projectId);
-
-      const payload = {
-        projectId,
-        entityType: 'tension',
-        entityId: tension._id,
-        type: 'tension_created',
-        title: 'New ethical tension added',
-        message: `${actorRole || 'User'} added a tension: ${tension.claimStatement || tension.description || 'Untitled'} (Conflict: ${tension.principle1 || 'P1'} ↔ ${tension.principle2 || 'P2'})`,
-        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
-        actorRole,
-        metadata: {
-          tensionId: tension._id,
-          tensionTitle: tension.claimStatement || tension.description || 'Untitled'
-        },
-        url: `/projects/${projectId}/tensions/${tension._id}?tab=evidence`
-      };
-
-      await this.createNotifications(assignedExperts, payload);
-    } catch (error) {
-      console.error('Error notifying tension created:', error);
-    }
-  },
-
-  async notifyTensionCommented(tension, actorId, actorRole) {
-    try {
-      const projectId = tension.projectId;
-      const participants = await this.getTensionParticipants(tension._id);
-
-      const payload = {
-        projectId,
-        entityType: 'tension',
-        entityId: tension._id,
-        type: 'tension_commented',
-        title: 'New comment on tension',
-        message: `${actorRole || 'User'} commented on ${tension.claimStatement || tension.description || 'Untitled'}`,
-        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
-        actorRole,
-        metadata: {
-          tensionId: tension._id,
-          tensionTitle: tension.claimStatement || tension.description || 'Untitled'
-        },
-        url: `/projects/${projectId}/tensions/${tension._id}?tab=discussion`
-      };
-
-      await this.createNotifications(participants, payload);
-    } catch (error) {
-      console.error('Error notifying tension commented:', error);
-    }
-  },
-
-  async notifyTensionEvidenceAdded(tension, evidence, actorId, actorRole) {
-    try {
-      const projectId = tension.projectId;
-      const participants = await this.getTensionParticipants(tension._id);
-
-      const payload = {
-        projectId,
-        entityType: 'tension',
-        entityId: tension._id,
-        type: 'tension_evidence_added',
-        title: 'New evidence added',
-        message: `${actorRole || 'User'} added evidence${evidence.type ? ` (${evidence.type})` : ''} to ${tension.claimStatement || tension.description || 'Untitled'}`,
-        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
-        actorRole,
-        metadata: {
-          tensionId: tension._id,
-          tensionTitle: tension.claimStatement || tension.description || 'Untitled',
-          evidenceType: evidence.type
-        },
-        url: `/projects/${projectId}/tensions/${tension._id}?tab=evidence`
-      };
-
-      await this.createNotifications(participants, payload);
-    } catch (error) {
-      console.error('Error notifying tension evidence added:', error);
-    }
-  },
-
-  async notifyTensionVoted(tension, voteType, actorId, actorRole) {
-    try {
-      const projectId = tension.projectId;
-      const participants = await this.getTensionParticipants(tension._id);
-
-      const payload = {
-        projectId,
-        entityType: 'tension',
-        entityId: tension._id,
-        type: 'tension_voted',
-        title: 'New vote on tension',
-        message: `${actorRole || 'User'} voted ${voteType} on ${tension.claimStatement || tension.description || 'Untitled'}`,
-        actorId: typeof actorId === 'string' ? actorId : actorId._id || actorId,
-        actorRole,
-        metadata: {
-          tensionId: tension._id,
-          tensionTitle: tension.claimStatement || tension.description || 'Untitled',
-          voteType
-        },
-        url: `/projects/${projectId}/tensions/${tension._id}?tab=discussion`
-      };
-
-      await this.createNotifications(participants, payload, { dedupeWindow: 60000 }); // 60 second dedupe
-    } catch (error) {
-      console.error('Error notifying tension voted:', error);
-    }
-  },
-
-  async notifyEvaluationStarted(projectId, userId, questionnaireKey, actorRole, userName) {
-    try {
-      // Check if already notified for this combination
-      const existing = await Notification.findOne({
-        type: 'evaluation_started',
-        projectId,
-        'metadata.questionnaireKey': questionnaireKey,
-        actorId: userId,
-        createdAt: { $gte: new Date(Date.now() - 86400000) } // Check last 24 hours
-      });
-
-      if (existing) {
-        // Already notified, skip
-        return;
-      }
-
-      const admins = await this.getAllAdmins();
-      if (admins.length === 0) return;
-
-      const project = await Project.findById(projectId);
-      const projectTitle = project?.title || 'Project';
-
-      const payload = {
-        projectId,
-        entityType: 'evaluation',
-        entityId: userId, // Using userId as entityId for evaluation_started
-        type: 'evaluation_started',
-        title: 'Evaluation started',
-        message: `${actorRole || 'Expert'} (${userName || 'User'}) started evaluation for project ${projectTitle}.`,
-        actorId: userId,
-        actorRole,
-        metadata: {
-          questionnaireKey
-        },
-        url: `/admin/projects/${projectId}/evaluations`
-      };
-
-      await this.createNotifications(admins, payload);
-    } catch (error) {
-      console.error('Error notifying evaluation started:', error);
-    }
-  }
-};
-
 // Message
 const MessageSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
@@ -814,79 +487,9 @@ app.get('/api/use-cases', async (req, res) => {
       .lean()
       .limit(1000) // Limit results for performance
       .sort({ createdAt: -1 }); // Sort by newest first
-    
-    // Use unified assignment resolver to get assigned experts from ALL sources
-    const { getAssignedExpertsForUseCase } = require('./services/useCaseAssignmentService');
-    
-    const useCasesWithCount = await Promise.all(useCases.map(async (useCase) => {
-      try {
-        // Get assigned experts using unified resolver
-        const assignmentData = await getAssignedExpertsForUseCase(useCase._id);
-        
-        const assignedExpertsCount = assignmentData.assignedExpertsCount;
-        
-        // Override status based on assignedExpertsCount
-        // If at least one expert is assigned, status must be ASSIGNED
-        // This ensures consistency even if stored status is incorrect
-        const computedStatus = assignedExpertsCount > 0 ? 'ASSIGNED' : 'UNASSIGNED';
-        
-        // Debug log
-        if (assignedExpertsCount > 0) {
-          console.log(`[Unified Resolver] UseCase ${useCase._id} (${useCase.title}): assignedExpertsCount=${assignedExpertsCount}, storedStatus=${useCase.status}, computedStatus=${computedStatus}, sources=${assignmentData.assignedUserIds.length} unique IDs`);
-        }
-        
-        return {
-          ...useCase,
-          // Override status based on assignment count
-          status: computedStatus,
-          // Include assignedExpertsCount for frontend to use
-          assignedExpertsCount,
-          // Include assigned experts list for frontend (for avatars)
-          assignedExperts: assignmentData.assignedExperts.map(e => e.userId)
-        };
-      } catch (err) {
-        console.error(`Error computing assignedExpertsCount for use case ${useCase._id}:`, err);
-        // Return use case with default values if computation fails
-        return {
-          ...useCase,
-          status: useCase.status || 'UNASSIGNED',
-          assignedExpertsCount: 0,
-          assignedExperts: []
-        };
-      }
-    }));
-    
-    res.json(useCasesWithCount);
+    res.json(useCases);
   } catch (err) {
-    console.error('Error in GET /api/use-cases:', err);
-    // Even if status computation fails, try to return basic use cases
-    try {
-      const { ownerId } = req.query;
-      let query = UseCase.find();
-      if (ownerId) {
-        query = query.where('ownerId').equals(ownerId);
-      }
-      const basicUseCases = await query
-        .select('-answers -extendedInfo -supportingFiles.data')
-        .lean()
-        .limit(1000)
-        .sort({ createdAt: -1 });
-      
-      // Return basic use cases with default status
-      const fallbackUseCases = basicUseCases.map(uc => ({
-        ...uc,
-        status: uc.status || 'UNASSIGNED',
-        assignedExpertsCount: 0,
-        startedCount: 0,
-        completedCount: 0,
-        hasProjects: false
-      }));
-      
-      res.json(fallbackUseCases);
-    } catch (fallbackErr) {
-      console.error('Fallback also failed:', fallbackErr);
-      res.status(500).json({ error: err.message });
-    }
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -937,104 +540,15 @@ app.delete('/api/use-cases/:id', async (req, res) => {
 app.put('/api/use-cases/:id/assign', async (req, res) => {
   try {
     const { assignedExperts = [], adminNotes = '' } = req.body;
-    const useCaseId = req.params.id;
-    
-    // Validate useCaseId
-    if (!isValidObjectId(useCaseId)) {
-      return res.status(400).json({ error: 'Invalid use case ID' });
-    }
-    
-    // Count assigned experts (excluding admins) and convert to ObjectIds
-    let assignedExpertsCount = 0;
-    let validAssignedExperts = [];
-    
-    if (assignedExperts && Array.isArray(assignedExperts) && assignedExperts.length > 0) {
-      // Filter and convert to valid ObjectIds
-      validAssignedExperts = assignedExperts
-        .map(id => {
-          if (!id) return null;
-          const idStr = id.toString();
-          return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : null;
-        })
-        .filter(Boolean);
-      
-      if (validAssignedExperts.length > 0) {
-        const experts = await User.find({
-          _id: { $in: validAssignedExperts },
-          role: { $ne: 'admin' }
-        }).select('_id').lean();
-        assignedExpertsCount = experts.length;
-        // Use only the valid expert IDs that were found
-        validAssignedExperts = experts.map(e => e._id);
-      }
-    }
-    
-    // Set status based on assignment count
-    const newStatus = assignedExpertsCount > 0 ? 'ASSIGNED' : 'UNASSIGNED';
-    
     const updated = await UseCase.findByIdAndUpdate(
-      useCaseId,
-      { assignedExperts: validAssignedExperts, adminNotes, status: newStatus },
+      req.params.id,
+      { assignedExperts, adminNotes },
       { new: true }
     );
-    if (!updated) return res.status(404).json({ error: 'Use case not found' });
-    
-    // Update all projects linked to this use case: add assigned experts to project.assignedUsers
-    // Also create ProjectAssignment records so experts can see the projects
-    try {
-      const ProjectAssignment = require('./models/projectAssignment');
-      const linkedProjects = await Project.find({ useCase: useCaseId });
-      
-      for (const project of linkedProjects) {
-        if (!project.assignedUsers) {
-          project.assignedUsers = [];
-        }
-        
-        // Add new experts to project.assignedUsers (avoid duplicates)
-        const currentAssigned = project.assignedUsers.map((id) => id.toString());
-        const newExpertIds = validAssignedExperts.map((id) => id.toString());
-        
-        // Combine and deduplicate
-        const allAssignedIds = Array.from(new Set([...currentAssigned, ...newExpertIds]));
-        project.assignedUsers = allAssignedIds.map(id => new mongoose.Types.ObjectId(id));
-        
-        await project.save();
-        
-        // Create or update ProjectAssignment records for each expert
-        for (const expertId of validAssignedExperts) {
-          try {
-            // Get user to determine role
-            const expertUser = await User.findById(expertId).select('role').lean();
-            if (!expertUser || expertUser.role === 'admin') continue;
-            
-            // Create or update ProjectAssignment
-            await ProjectAssignment.findOneAndUpdate(
-              { projectId: project._id, userId: expertId },
-              {
-                projectId: project._id,
-                userId: expertId,
-                role: expertUser.role, // e.g., "medical-expert", "technical-expert"
-                questionnaires: [], // Will be populated when questionnaires are assigned
-                status: 'assigned',
-                assignedAt: new Date()
-              },
-              { new: true, upsert: true }
-            );
-          } catch (assignmentError) {
-            console.error(`Error creating ProjectAssignment for expert ${expertId} on project ${project._id}:`, assignmentError);
-            // Continue with other experts even if one fails
-          }
-        }
-      }
-    } catch (projectUpdateError) {
-      console.error('Error updating linked projects:', projectUpdateError);
-      // Don't fail the assignment if project update fails, but log it
-    }
-    
+    if (!updated) return res.status(404).json({ error: 'Not found' });
     res.json(updated);
   } catch (err) {
-    console.error('Error in /api/use-cases/:id/assign:', err);
-    res.status(500).json({ error: err.message || 'Failed to assign experts to use case' });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1201,21 +715,6 @@ app.post('/api/tensions', async (req, res) => {
 
     await tension.save();
     console.log("⚡ Yeni Tension eklendi:", tension._id);
-    
-    // Get actor info for notification
-    let actorRole = 'User';
-    try {
-      const actor = await User.findById(createdBy);
-      if (actor) actorRole = actor.role || 'User';
-    } catch (e) {
-      // Ignore error
-    }
-    
-    // Notify assigned experts (async, don't block response)
-    notificationService.notifyTensionCreated(tension, createdBy, actorRole).catch(err => {
-      console.error('Error sending tension created notification:', err);
-    });
-    
     res.json(tension);
   } catch (err) {
     console.error("❌ Tension Ekleme Hatası:", err);
@@ -1309,17 +808,6 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
     const { userId, voteType } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
-    
-    // Prevent users from voting on their own tensions
-    const tensionCreatorId = tension.createdBy ? String(tension.createdBy) : null;
-    const userIdStr = String(userId);
-    if (tensionCreatorId === userIdStr) {
-      return res.status(403).json({ 
-        error: 'CANNOT_VOTE_OWN_TENSION',
-        message: 'You cannot vote on your own tension.'
-      });
-    }
-    
     if (!tension.votes) tension.votes = [];
     const existingVoteIndex = tension.votes.findIndex(v => v.userId === userId);
     if (existingVoteIndex > -1) {
@@ -1329,23 +817,6 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
       tension.votes.push({ userId, voteType });
     }
     await tension.save();
-    
-    // Get actor info for notification
-    let actorRole = 'User';
-    try {
-      const actor = await User.findById(userId);
-      if (actor) actorRole = actor.role || 'User';
-    } catch (e) {
-      // Ignore error
-    }
-    
-    // Notify participants (async, don't block response) - only if vote was added/changed
-    if (voteType) {
-      notificationService.notifyTensionVoted(tension, voteType, userId, actorRole).catch(err => {
-        console.error('Error sending tension voted notification:', err);
-      });
-    }
-    
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1356,17 +827,6 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
 app.post('/api/tensions/:id/comment', async (req, res) => {
   try {
     const { text, authorId, authorName } = req.body;
-    
-    // Check if user is admin - admins cannot add comments
-    try {
-      const user = await User.findById(authorId);
-      if (user && user.role === 'admin') {
-        return res.status(403).json({ error: 'Admins cannot add comments to tensions.' });
-      }
-    } catch (e) {
-      // If user lookup fails, continue (but should not happen)
-    }
-    
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
     
@@ -1374,21 +834,6 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
     tension.comments.push({ text, authorId, authorName, date: new Date() });
     
     await tension.save();
-    
-    // Get actor info for notification
-    let actorRole = 'User';
-    try {
-      const actor = await User.findById(authorId);
-      if (actor) actorRole = actor.role || 'User';
-    } catch (e) {
-      // Ignore error
-    }
-    
-    // Notify participants (async, don't block response)
-    notificationService.notifyTensionCommented(tension, authorId, actorRole).catch(err => {
-      console.error('Error sending tension commented notification:', err);
-    });
-    
     res.json(tension.comments);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1399,17 +844,6 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
 app.post('/api/tensions/:id/evidence', async (req, res) => {
   try {
     const { title, description, fileName, fileData, uploadedBy, type } = req.body;
-    
-    // Check if user is admin - admins cannot add evidence
-    try {
-      const user = await User.findById(uploadedBy);
-      if (user && user.role === 'admin') {
-        return res.status(403).json({ error: 'Admins cannot add evidence to tensions.' });
-      }
-    } catch (e) {
-      // If user lookup fails, continue (but should not happen)
-    }
-    
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
 
@@ -1434,21 +868,6 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
     tension.evidences.push(evidenceObj);
 
     await tension.save();
-    
-    // Get actor info for notification
-    let actorRole = 'User';
-    try {
-      const actor = await User.findById(uploadedBy);
-      if (actor) actorRole = actor.role || 'User';
-    } catch (e) {
-      // Ignore error
-    }
-    
-    // Notify participants (async, don't block response)
-    notificationService.notifyTensionEvidenceAdded(tension, evidenceObj, uploadedBy, actorRole).catch(err => {
-      console.error('Error sending tension evidence added notification:', err);
-    });
-    
     res.json(tension.evidences);
   } catch (err) { 
     console.error(err);
@@ -1461,16 +880,6 @@ app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, r
   try {
     const { tensionId, evidenceId } = req.params;
     const { text, userId } = req.body;
-    
-    // Check if user is admin - admins cannot add evidence comments
-    try {
-      const user = await User.findById(userId);
-      if (user && user.role === 'admin') {
-        return res.status(403).json({ error: 'Admins cannot add comments to evidence.' });
-      }
-    } catch (e) {
-      // If user lookup fails, continue (but should not happen)
-    }
 
     // Validation
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -1576,29 +985,18 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     // Check tension votes
-    // IMPORTANT: User cannot vote on their own tensions, so we exclude them from the requirement
-    const tensions = await Tension.find({ projectId: projectIdObj }).select('votes createdBy').lean();
-    
-    // Filter out tensions created by the current user (they can't vote on their own tensions)
-    const votableTensions = tensions.filter((t) => {
-      const createdBy = t.createdBy ? String(t.createdBy) : null;
-      return createdBy !== userIdStr;
-    });
-    
-    const totalVotableTensions = votableTensions.length;
-    const votedTensions = votableTensions.filter((t) => {
+    const tensions = await Tension.find({ projectId: projectIdObj }).select('votes').lean();
+    const totalTensions = tensions.length;
+    const votedTensions = tensions.filter((t) => {
       const votes = Array.isArray(t.votes) ? t.votes : [];
       return votes.some((v) => String(v.userId) === userIdStr);
     }).length;
 
-    // User must vote on all tensions they CAN vote on (excluding their own)
-    if (totalVotableTensions > 0 && votedTensions < totalVotableTensions) {
+    if (totalTensions > 0 && votedTensions < totalTensions) {
       return res.status(400).json({
         error: 'NOT_ALL_TENSIONS_VOTED',
-        totalTensions: tensions.length,
-        totalVotableTensions,
+        totalTensions,
         votedTensions,
-        message: `You must vote on all tensions you can vote on (excluding your own tensions). You have voted on ${votedTensions} out of ${totalVotableTensions} votable tensions.`
       });
     }
 
@@ -1662,8 +1060,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     res.json({
       success: true,
       alreadyCompleted: false,
-      totalTensions: tensions.length,
-      totalVotableTensions,
+      totalTensions,
       votedTensions,
       evolutionCompletedAt: assignment.evolutionCompletedAt,
     });
@@ -1851,28 +1248,23 @@ app.post('/api/evaluations', async (req, res) => {
               .lean();
             
             for (const [questionKey, answerValue] of Object.entries(generalAnswersMap)) {
-              // questionKey could be code or _id
+              // questionKey is now questionCode (from the map above)
               let question = generalQuestions.find(q => 
-                q.code === questionKey || q._id.toString() === questionKey
+                q.code === questionKey
               );
               
               if (!question) {
-                // Try database lookup with both code and _id
-                const query = isValidObjectId(questionKey)
-                  ? { $or: [
-                      { _id: new mongoose.Types.ObjectId(questionKey) },
-                      { code: questionKey },
-                      { questionnaireKey: 'general-v1', code: questionKey }
-                    ]}
-                  : { $or: [
-                      { code: questionKey },
-                      { questionnaireKey: 'general-v1', code: questionKey }
-                    ]};
-                question = await Question.findOne(query).lean();
+                // Try to find by code
+                question = await Question.findOne({
+                  $or: [
+                    { code: questionKey },
+                    { questionnaireKey: 'general-v1', code: questionKey }
+                  ]
+                }).lean();
               }
               
               if (!question) {
-                console.warn(`⚠️ General question with key "${questionKey}" not found in database, skipping`);
+                console.warn(`⚠️ General question with code ${questionKey} not found in database, skipping`);
                 continue;
               }
               
@@ -2010,28 +1402,22 @@ app.post('/api/evaluations', async (req, res) => {
               .lean();
             
             for (const [questionKey, answerValue] of Object.entries(roleSpecificAnswersMap)) {
-              // questionKey could be code or _id
+              // questionKey is now questionCode (from the map above)
               let question = roleQuestions.find(q => 
-                q.code === questionKey || q._id.toString() === questionKey
+                q.code === questionKey
               );
               
               if (!question) {
-                // Try database lookup with both code and _id
-                const query = isValidObjectId(questionKey)
-                  ? { $or: [
-                      { _id: new mongoose.Types.ObjectId(questionKey) },
-                      { code: questionKey },
-                      { questionnaireKey: roleQuestionnaireKey, code: questionKey }
-                    ]}
-                  : { $or: [
-                      { code: questionKey },
-                      { questionnaireKey: roleQuestionnaireKey, code: questionKey }
-                    ]};
-                question = await Question.findOne(query).lean();
+                question = await Question.findOne({
+                  $or: [
+                    { code: questionKey },
+                    { questionnaireKey: roleQuestionnaireKey, code: questionKey }
+                  ]
+                }).lean();
               }
               
               if (!question) {
-                console.warn(`⚠️ Role-specific question with key "${questionKey}" not found in database, skipping`);
+                console.warn(`⚠️ Role-specific question with code ${questionKey} not found in database, skipping`);
                 continue;
               }
               
@@ -2149,83 +1535,6 @@ app.post('/api/evaluations', async (req, res) => {
           try {
             await Promise.all(saveTasks.map(task => task()));
             console.log(`✅ All save tasks completed successfully`);
-            
-            // Check if this is the first answer (evaluation started)
-            // Get user info for notification
-            let actorRole = userRole || 'unknown';
-            let userName = 'User';
-            try {
-              const user = await User.findById(userIdObj);
-              if (user) {
-                actorRole = user.role || actorRole;
-                userName = user.name || user.email || userName;
-              }
-            } catch (e) {
-              // Ignore error
-            }
-            
-            // Check if any responses were just created (first time answering)
-            // This indicates evaluation started
-            if (Object.keys(generalAnswersMap).length > 0 || Object.keys(roleSpecificAnswersMap).length > 0) {
-              // Check if this is the first time user is answering for this project
-              const Response = require('./models/response');
-              
-              // Check for general-v1 first answer
-              if (Object.keys(generalAnswersMap).length > 0) {
-                const generalResponse = await Response.findOne({
-                  projectId: projectIdObj,
-                  userId: userIdObj,
-                  questionnaireKey: 'general-v1'
-                });
-                
-                // If response exists and has answers, check if this is the first time (answers.length was 0 before)
-                // We check by looking at the response before save - if it had 0 answers, this is the first
-                const wasFirstAnswer = !generalResponse || !generalResponse.answers || generalResponse.answers.length === 0;
-                
-                if (wasFirstAnswer) {
-                  // This is the first time answering general-v1 - notify admins
-                  const { notifyEvaluationStarted } = require('./services/notificationService');
-                  const generalQuestionnaire = await Questionnaire.findOne({ key: 'general-v1', isActive: true });
-                  notifyEvaluationStarted(
-                    projectIdObj,
-                    userIdObj,
-                    'general-v1',
-                    generalQuestionnaire?.version || 1,
-                    actorRole,
-                    userName
-                  ).catch(err => {
-                    console.error('Error sending evaluation started notification:', err);
-                  });
-                }
-              }
-              
-              // Check for role-specific first answer
-              if (roleQuestionnaireKey !== 'general-v1' && Object.keys(roleSpecificAnswersMap).length > 0) {
-                const roleResponse = await Response.findOne({
-                  projectId: projectIdObj,
-                  userId: userIdObj,
-                  questionnaireKey: roleQuestionnaireKey
-                });
-                
-                const wasFirstAnswer = !roleResponse || !roleResponse.answers || roleResponse.answers.length === 0;
-                
-                if (wasFirstAnswer) {
-                  // This is the first time answering role-specific questionnaire - notify admins
-                  const { notifyEvaluationStarted } = require('./services/notificationService');
-                  const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
-                  notifyEvaluationStarted(
-                    projectIdObj,
-                    userIdObj,
-                    roleQuestionnaireKey,
-                    roleQuestionnaire?.version || 1,
-                    actorRole,
-                    userName
-                  ).catch(err => {
-                    console.error('Error sending evaluation started notification:', err);
-                  });
-                }
-              }
-            }
           } catch (saveError) {
             console.error(`❌ Error in save tasks:`, saveError);
             console.error(`❌ Save error stack:`, saveError.stack);
@@ -2514,61 +1823,34 @@ app.post('/api/general-questions', async (req, res) => {
       else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
       
       // Get all questions to determine which questionnaire they belong to
-      const allGeneralQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code _id').lean();
-      const generalCodes = new Set(allGeneralQuestions.map(q => q.code).filter(Boolean));
-      const generalIds = new Set(allGeneralQuestions.map(q => q._id.toString()).filter(Boolean));
-      // Create a map from any possible key format to questionnaire key
-      const generalQuestionKeyMap = new Map();
-      allGeneralQuestions.forEach(q => {
-        if (q.code) generalQuestionKeyMap.set(q.code, 'general-v1');
-        generalQuestionKeyMap.set(q._id.toString(), 'general-v1');
-      });
+      const allGeneralQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code').lean();
+      const generalCodes = new Set(allGeneralQuestions.map(q => q.code));
       
       const allRoleQuestions = roleQuestionnaireKey !== 'general-v1' 
-        ? await Question.find({ questionnaireKey: roleQuestionnaireKey }).select('code _id').lean()
+        ? await Question.find({ questionnaireKey: roleQuestionnaireKey }).select('code').lean()
         : [];
-      const roleCodes = new Set(allRoleQuestions.map(q => q.code).filter(Boolean));
-      const roleIds = new Set(allRoleQuestions.map(q => q._id.toString()).filter(Boolean));
-      // Create a map from any possible key format to questionnaire key
-      const roleQuestionKeyMap = new Map();
-      allRoleQuestions.forEach(q => {
-        if (q.code) roleQuestionKeyMap.set(q.code, roleQuestionnaireKey);
-        roleQuestionKeyMap.set(q._id.toString(), roleQuestionnaireKey);
-      });
+      const roleCodes = new Set(allRoleQuestions.map(q => q.code));
       
       // Separate answers and risks by questionnaire
-      // Check both code and _id formats
       if (flatAnswers) {
         Object.keys(flatAnswers).forEach(qId => {
-          // Try to find question by code or _id
-          if (generalCodes.has(qId) || generalIds.has(qId) || generalQuestionKeyMap.has(qId)) {
+          if (generalCodes.has(qId)) {
             generalAnswersMap[qId] = flatAnswers[qId];
-          } else if (roleCodes.has(qId) || roleIds.has(qId) || roleQuestionKeyMap.has(qId)) {
+          } else if (roleCodes.has(qId)) {
             roleSpecificAnswersMap[qId] = flatAnswers[qId];
-          } else {
-            // Try database lookup as fallback (for cases where key format doesn't match)
-            // This will be handled in the response saving logic below
-            console.log(`⚠️ Answer key "${qId}" not found in code/id sets, will try DB lookup during save`);
           }
         });
       }
       
       if (flatRisks) {
         Object.keys(flatRisks).forEach(qId => {
-          // Try to find question by code or _id
-          if (generalCodes.has(qId) || generalIds.has(qId) || generalQuestionKeyMap.has(qId)) {
+          if (generalCodes.has(qId)) {
             generalRisksMap[qId] = flatRisks[qId];
-          } else if (roleCodes.has(qId) || roleIds.has(qId) || roleQuestionKeyMap.has(qId)) {
+          } else if (roleCodes.has(qId)) {
             roleSpecificRisksMap[qId] = flatRisks[qId];
-          } else {
-            // Try database lookup as fallback
-            console.log(`⚠️ Risk key "${qId}" not found in code/id sets, will try DB lookup during save`);
           }
         });
       }
-      
-      console.log(`📊 Separated answers: ${Object.keys(generalAnswersMap).length} general, ${Object.keys(roleSpecificAnswersMap).length} role-specific`);
-      console.log(`📊 Separated risks: ${Object.keys(generalRisksMap).length} general, ${Object.keys(roleSpecificRisksMap).length} role-specific`);
       
       // Prepare response saving tasks (parallel execution)
       const saveTasks = [];
@@ -2582,28 +1864,12 @@ app.post('/api/general-questions', async (req, res) => {
             const generalQuestions = await Question.find({ questionnaireKey: 'general-v1' })
               .select('_id code answerType options')
               .lean();
-            // Create map with both code and _id as keys
-            const generalQuestionMap = new Map();
-            generalQuestions.forEach(q => {
-              if (q.code) generalQuestionMap.set(q.code, q);
-              generalQuestionMap.set(q._id.toString(), q);
-            });
+            const generalQuestionMap = new Map(generalQuestions.map(q => [q.code, q]));
             
             const generalResponseAnswers = [];
             
             for (const [qId, answerValue] of Object.entries(generalAnswersMap)) {
-              // Try to find question by code or _id
-              let question = generalQuestionMap.get(qId);
-              
-              // If not found, try database lookup
-              if (!question) {
-                if (isValidObjectId(qId)) {
-                  question = generalQuestions.find(q => q._id.toString() === qId);
-                } else {
-                  question = generalQuestions.find(q => q.code === qId);
-                }
-              }
-              
+              const question = generalQuestionMap.get(qId);
               if (question) {
                 let score = 0;
                 let answerFormat = {};
@@ -2700,28 +1966,12 @@ app.post('/api/general-questions', async (req, res) => {
               const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
                 .select('_id code answerType options')
                 .lean();
-              // Create map with both code and _id as keys
-              const roleQuestionMap = new Map();
-              roleQuestions.forEach(q => {
-                if (q.code) roleQuestionMap.set(q.code, q);
-                roleQuestionMap.set(q._id.toString(), q);
-              });
+              const roleQuestionMap = new Map(roleQuestions.map(q => [q.code, q]));
               
               const roleResponseAnswers = [];
               
               for (const [qId, answerValue] of Object.entries(roleSpecificAnswersMap)) {
-                // Try to find question by code or _id
-                let question = roleQuestionMap.get(qId);
-                
-                // If not found, try database lookup
-                if (!question) {
-                  if (isValidObjectId(qId)) {
-                    question = roleQuestions.find(q => q._id.toString() === qId);
-                  } else {
-                    question = roleQuestions.find(q => q.code === qId);
-                  }
-                }
-                
+                const question = roleQuestionMap.get(qId);
                 if (question) {
                   let score = 0;
                   let answerFormat = {};
@@ -2901,71 +2151,27 @@ app.get('/api/user-progress', async (req, res) => {
 
     // Prefer assigned questionnaires from assignment; keep it cheap (no DB probing).
     let assignedQuestionnaireKeys = Array.isArray(assignment.questionnaires) ? assignment.questionnaires.slice() : [];
-    console.log(`   Raw assignment.questionnaires: ${JSON.stringify(assignment.questionnaires)}`);
-    
     if (!assignedQuestionnaireKeys.includes('general-v1')) {
       assignedQuestionnaireKeys.unshift('general-v1');
-      console.log(`   Added general-v1 (was missing)`);
     }
 
-    // CRITICAL FIX: Always add role-specific questionnaire if role is known
-    // Even if assignment.questionnaires has values, we need to ensure role-specific is included
-    const role = String(assignment.role || '').toLowerCase();
-    const roleMap = {
-      'ethical-expert': 'ethical-expert-v1',
-      'medical-expert': 'medical-expert-v1',
-      'technical-expert': 'technical-expert-v1',
-      'legal-expert': 'legal-expert-v1',
-      'education-expert': 'education-expert-v1',
-    };
-    const roleKey = roleMap[role] || null;
-    
-    // If questionnaires are empty, derive from role
+    // If questionnaires are empty, derive from role (best-effort).
     if (assignedQuestionnaireKeys.length === 0) {
+      const role = String(assignment.role || '').toLowerCase();
+      const roleMap = {
+        'ethical-expert': 'ethical-expert-v1',
+        'medical-expert': 'medical-expert-v1',
+        'technical-expert': 'technical-expert-v1',
+        'legal-expert': 'legal-expert-v1',
+        'education-expert': 'education-expert-v1',
+      };
+      const roleKey = roleMap[role] || null;
       assignedQuestionnaireKeys = roleKey ? ['general-v1', roleKey] : ['general-v1'];
-      console.log(`   Questionnaires empty, derived from role: ${assignedQuestionnaireKeys.join(', ')}`);
-    } else if (roleKey && !assignedQuestionnaireKeys.includes(roleKey)) {
-      // If role-specific questionnaire is missing, add it
-      assignedQuestionnaireKeys.push(roleKey);
-      console.log(`   Added missing role-specific questionnaire: ${roleKey} for role ${role}`);
-    }
-    
-    // Final check: if we only have general-v1 and role is known, ensure role-specific is added
-    if (assignedQuestionnaireKeys.length === 1 && assignedQuestionnaireKeys[0] === 'general-v1' && roleKey) {
-      assignedQuestionnaireKeys.push(roleKey);
-      console.log(`   ⚠️ Only general-v1 found, added role-specific: ${roleKey}`);
     }
 
-    // Get all assigned questions - count ALL questions (not just required)
-    // This ensures progress reaches 100% when all questions are answered
-    const assignedQuestions = await Question.find({
+    const totalQuestions = await Question.countDocuments({
       questionnaireKey: { $in: assignedQuestionnaireKeys }
-    }).select('_id code questionnaireKey required order').lean();
-
-    // Group questions by questionnaire
-    const questionsByQuestionnaire = {};
-    assignedQuestions.forEach(q => {
-      const key = q.questionnaireKey || 'unknown';
-      if (!questionsByQuestionnaire[key]) {
-        questionsByQuestionnaire[key] = [];
-      }
-      questionsByQuestionnaire[key].push(q);
     });
-
-    // Debug: Log question counts by questionnaire
-    console.log(`   📊 Question counts by questionnaire:`);
-    Object.entries(questionsByQuestionnaire).forEach(([key, qs]) => {
-      console.log(`      ${key}: ${qs.length} questions`);
-    });
-
-    // Use question _id as the unique key for consistency
-    const totalQuestionsSet = new Set(assignedQuestions.map(q => String(q._id)).filter(Boolean));
-    let totalQuestions = totalQuestionsSet.size;
-    console.log(`   📊 Total questions: ${totalQuestions} (from ${assignedQuestionnaireKeys.length} questionnaires)`);
-
-    // NOTE: Use case questions are NOT assigned to experts individually.
-    // They are project-level questions and should NOT be included in expert progress calculation.
-    // Experts only need to answer their assigned questionnaires (general-v1 + role-specific).
 
     if (totalQuestions === 0) {
       return res.json({ progress: 0, answered: 0, total: 0, questionnaires: assignedQuestionnaireKeys, responseCount: 0 });
@@ -2975,176 +2181,44 @@ app.get('/api/user-progress', async (req, res) => {
       projectId: projectIdObj,
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
-    }).select('questionnaireKey answers status').lean();
+    }).select('questionnaireKey answers').lean();
 
-    // Debug: Log response counts by questionnaire
-    console.log(`   📊 Response counts by questionnaire:`);
-    const responsesByQuestionnaire = {};
-    responses.forEach(r => {
-      const key = r.questionnaireKey || 'unknown';
-      if (!responsesByQuestionnaire[key]) {
-        responsesByQuestionnaire[key] = { count: 0, answerCount: 0 };
-      }
-      responsesByQuestionnaire[key].count++;
-      responsesByQuestionnaire[key].answerCount += (r.answers && Array.isArray(r.answers)) ? r.answers.length : 0;
-    });
-    Object.entries(responsesByQuestionnaire).forEach(([key, stats]) => {
-      console.log(`      ${key}: ${stats.count} response(s), ${stats.answerCount} answer(s)`);
-    });
-
-    // Use questionId as the primary key for matching (more reliable than questionCode)
-    // Also create a map from questionCode to questionId for fallback matching
     const answeredKeys = new Set();
-    const assignedQuestionIds = new Set(assignedQuestions.map(q => String(q._id)));
-    
-    // Create comprehensive maps for matching
-    const questionCodeToIdMap = new Map();
-    const questionIdToQuestion = new Map();
-    const questionCodeToQuestion = new Map();
-    
-    assignedQuestions.forEach(q => {
-      const qIdStr = String(q._id);
-      questionIdToQuestion.set(qIdStr, q);
-      
-      if (q.code) {
-        questionCodeToIdMap.set(q.code, qIdStr);
-        questionCodeToQuestion.set(q.code, q);
-      }
-      questionCodeToIdMap.set(qIdStr, qIdStr); // Also map _id to itself for consistency
-    });
 
-    // Process all responses and count answered questions
-    // CRITICAL: Count ALL answers that match assigned questions, regardless of answer content
-    // If an answer entry exists in the response, it means the user interacted with that question
     for (const r of (responses || [])) {
+      const qKey = r.questionnaireKey;
       const arr = Array.isArray(r.answers) ? r.answers : [];
-      
-      // Group questions by questionnaire for better matching
-      const questionsInThisQuestionnaire = assignedQuestions.filter(q => q.questionnaireKey === r.questionnaireKey);
-      const questionCodeMapForThisQuestionnaire = new Map();
-      questionsInThisQuestionnaire.forEach(q => {
-        if (q.code) {
-          questionCodeMapForThisQuestionnaire.set(q.code, String(q._id));
-        }
-      });
-      
       for (const a of arr) {
-        // Try multiple ways to identify the question
-        let questionId = null;
-        let matchedBy = null;
-        let question = null;
-        
-        // Method 1: Use questionId directly (most reliable)
-        if (a?.questionId) {
-          // Handle both ObjectId and string formats
-          let qId = null;
-          if (a.questionId.toString) {
-            qId = a.questionId.toString();
-          } else if (typeof a.questionId === 'object' && a.questionId._id) {
-            qId = String(a.questionId._id);
-          } else {
-            qId = String(a.questionId);
-          }
-          
-          if (assignedQuestionIds.has(qId)) {
-            questionId = qId;
-            matchedBy = 'questionId';
-            question = questionIdToQuestion.get(qId);
-          }
-        }
-        
-        // Method 2: Use questionCode within this questionnaire (FASTEST for role-specific)
-        if (!questionId && a?.questionCode && r.questionnaireKey) {
-          const mappedId = questionCodeMapForThisQuestionnaire.get(a.questionCode);
-          if (mappedId && assignedQuestionIds.has(mappedId)) {
-            questionId = mappedId;
-            matchedBy = 'questionCode-in-questionnaire';
-            question = questionCodeToQuestion.get(a.questionCode);
-          }
-        }
-        
-        // Method 3: Use questionCode from global map
-        if (!questionId && a?.questionCode) {
-          const mappedId = questionCodeToIdMap.get(a.questionCode);
-          if (mappedId && assignedQuestionIds.has(mappedId)) {
-            questionId = mappedId;
-            matchedBy = 'questionCode-global';
-            question = questionCodeToQuestion.get(a.questionCode);
-          }
-        }
-        
-        // Method 4: If still no match, try to find question by code across ALL questionnaires
-        // This handles cases where questionCode might be correct but questionnaireKey mismatch
-        if (!questionId && a?.questionCode) {
-          const foundQuestion = assignedQuestions.find(q => q.code === a.questionCode);
-          if (foundQuestion) {
-            questionId = String(foundQuestion._id);
-            matchedBy = 'questionCode-across-all';
-            question = foundQuestion;
-          }
-        }
-        
-        // Skip if we couldn't match this answer to an assigned question
-        if (!questionId) {
-          continue;
+        const idKey = a?.questionId ? String(a.questionId) : '';
+        const codeKey = a?.questionCode !== undefined && a?.questionCode !== null ? String(a.questionCode).trim() : '';
+        const key = idKey.length > 0 ? idKey : (codeKey.length > 0 ? `${qKey}:${codeKey}` : '');
+        if (!key || answeredKeys.has(key)) continue;
+
+        let hasAnswer = false;
+        if (a?.answer) {
+          if (a.answer.choiceKey !== null && a.answer.choiceKey !== undefined && a.answer.choiceKey !== '') hasAnswer = true;
+          else if (a.answer.text !== null && a.answer.text !== undefined && String(a.answer.text).trim().length > 0) hasAnswer = true;
+          else if (a.answer.numeric !== null && a.answer.numeric !== undefined) hasAnswer = true;
+          else if (Array.isArray(a.answer.multiChoiceKeys) && a.answer.multiChoiceKeys.length > 0) hasAnswer = true;
+        } else if (a.choiceKey || (a.text && String(a.text).trim().length > 0) || a.numeric !== undefined || (Array.isArray(a.multiChoiceKeys) && a.multiChoiceKeys.length > 0)) {
+          // Backward compatibility: direct fields
+          hasAnswer = true;
         }
 
-        // Skip if already counted
-        if (answeredKeys.has(questionId)) {
-          continue;
-        }
-
-        // CRITICAL: If answer entry exists and matches an assigned question, count it
-        // Don't validate answer content - if it's in the response, it means user answered it
-        const hasAnswerEntry = a !== null && a !== undefined;
-        
-        if (hasAnswerEntry) {
-          answeredKeys.add(questionId);
-        }
+        if (hasAnswer) answeredKeys.add(key);
       }
     }
-    
-    // Use case questions are NOT included in expert progress
-    // Experts only answer their assigned questionnaires (general-v1 + role-specific)
+
     const answeredCount = answeredKeys.size;
     const progress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
-    
-    console.log(`   📊 Progress calculation: ${answeredCount}/${totalQuestions} = ${progress}%`);
-    
-    if (progress < 100) {
-      // Find unanswered questions
-      const unansweredQuestionIds = Array.from(assignedQuestionIds).filter(id => !answeredKeys.has(id));
-      if (unansweredQuestionIds.length > 0) {
-        const unansweredQuestions = await Question.find({
-          _id: { $in: unansweredQuestionIds.map(id => new mongoose.Types.ObjectId(id)) }
-        }).select('code questionnaireKey order').lean();
-        
-        // Group by questionnaire
-        const unansweredByQuestionnaire = {};
-        unansweredQuestions.forEach(q => {
-          const key = q.questionnaireKey || 'unknown';
-          if (!unansweredByQuestionnaire[key]) {
-            unansweredByQuestionnaire[key] = [];
-          }
-          unansweredByQuestionnaire[key].push(q);
-        });
-        
-        console.log(`   ⚠️ Unanswered questions (${unansweredQuestionIds.length}):`);
-        Object.keys(unansweredByQuestionnaire).forEach(key => {
-          const questions = unansweredByQuestionnaire[key];
-          const codes = questions.map(q => `${q.code || q._id} (order: ${q.order || 'N/A'})`).join(', ');
-          console.log(`     ${key}: ${questions.length} questions - ${codes}`);
-        });
-      }
-    }
 
-            return res.json({
-              progress: Math.max(0, Math.min(100, progress)),
-              answered: answeredCount,
-              total: totalQuestions,
-              questionnaires: assignedQuestionnaireKeys,
-              responseCount: responses.length
-            });
+    return res.json({
+      progress: Math.max(0, Math.min(100, progress)),
+      answered: answeredCount,
+      total: totalQuestions,
+      questionnaires: assignedQuestionnaireKeys,
+      responseCount: responses.length
+    });
   } catch (err) {
     console.error('Error calculating user progress:', err);
     res.status(500).json({ error: err.message });
@@ -3405,6 +2479,9 @@ app.get('/api/user-progress/debug', async (req, res) => {
           
           if (hasAnswer) {
             answered.add(key);
+            console.log(`✅ Counted answered question: ${key} (score: ${answer.score})`);
+          } else {
+            console.log(`⚠️ Question ${key} not counted as answered`);
           }
         });
       } else {
@@ -3837,134 +2914,6 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
   }
 });
 
-// Debug endpoint to check role-specific answers after question 12
-app.get('/api/debug/role-specific-answers', async (req, res) => {
-  try {
-    const { projectId, userId } = req.query;
-    if (!projectId) {
-      return res.status(400).json({ error: 'projectId is required' });
-    }
-
-    const Response = require('./models/response');
-    const Question = require('./models/question');
-    const ProjectAssignment = require('./models/projectAssignment');
-    const User = require('./models/User');
-
-    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
-
-    // Get all assignments for this project
-    const assignments = await ProjectAssignment.find({ projectId: projectIdObj })
-      .populate('userId', 'name email role')
-      .lean();
-
-    const result = {
-      projectId: projectId,
-      assignments: []
-    };
-
-    for (const assignment of assignments) {
-      const userIdObj = assignment.userId._id || assignment.userId;
-      const user = await User.findById(userIdObj).lean();
-      const role = user?.role || assignment.role;
-
-      // Get assigned questionnaires
-      let assignedQuestionnaireKeys = Array.isArray(assignment.questionnaires) ? assignment.questionnaires.slice() : [];
-      if (!assignedQuestionnaireKeys.includes('general-v1')) {
-        assignedQuestionnaireKeys.unshift('general-v1');
-      }
-
-      // Get role-specific questionnaire
-      const roleMap = {
-        'ethical-expert': 'ethical-expert-v1',
-        'medical-expert': 'medical-expert-v1',
-        'technical-expert': 'technical-expert-v1',
-        'legal-expert': 'legal-expert-v1',
-        'education-expert': 'education-expert-v1',
-      };
-      const roleKey = roleMap[role?.toLowerCase()] || null;
-      if (roleKey && !assignedQuestionnaireKeys.includes(roleKey)) {
-        assignedQuestionnaireKeys.push(roleKey);
-      }
-
-      // Get all questions
-      const allQuestions = await Question.find({
-        questionnaireKey: { $in: assignedQuestionnaireKeys }
-      }).select('_id code questionnaireKey order').sort({ order: 1 }).lean();
-
-      // Get general questions (first 12)
-      const generalQuestions = allQuestions.filter(q => q.questionnaireKey === 'general-v1').slice(0, 12);
-      const roleSpecificQuestions = allQuestions.filter(q => q.questionnaireKey !== 'general-v1');
-
-      // Get responses
-      const responses = await Response.find({
-        projectId: projectIdObj,
-        userId: userIdObj,
-        questionnaireKey: { $in: assignedQuestionnaireKeys }
-      }).lean();
-
-      const assignmentResult = {
-        userId: String(userIdObj),
-        userName: user?.name || 'Unknown',
-        role: role,
-        questionnaires: assignedQuestionnaireKeys,
-        generalQuestions: {
-          total: generalQuestions.length,
-          questions: generalQuestions.map(q => ({
-            _id: String(q._id),
-            code: q.code,
-            order: q.order
-          }))
-        },
-        roleSpecificQuestions: {
-          total: roleSpecificQuestions.length,
-          questions: roleSpecificQuestions.map(q => ({
-            _id: String(q._id),
-            code: q.code,
-            questionnaireKey: q.questionnaireKey,
-            order: q.order
-          }))
-        },
-        responses: []
-      };
-
-      for (const response of responses) {
-        const responseData = {
-          questionnaireKey: response.questionnaireKey,
-          status: response.status,
-          answerCount: Array.isArray(response.answers) ? response.answers.length : 0,
-          answers: []
-        };
-
-        if (Array.isArray(response.answers)) {
-          for (const answer of response.answers) {
-            const questionId = answer.questionId ? String(answer.questionId) : null;
-            const question = allQuestions.find(q => String(q._id) === questionId);
-            
-            responseData.answers.push({
-              questionId: questionId,
-              questionCode: answer.questionCode || 'N/A',
-              questionOrder: question?.order || 'N/A',
-              questionnaireKey: question?.questionnaireKey || 'N/A',
-              hasAnswer: !!(answer.answer || answer.score !== undefined),
-              answerType: answer.answer ? Object.keys(answer.answer).join(', ') : 'none',
-              score: answer.score
-            });
-          }
-        }
-
-        assignmentResult.responses.push(responseData);
-      }
-
-      result.assignments.push(assignmentResult);
-    }
-
-    res.json(result);
-  } catch (err) {
-    console.error('Error in debug endpoint:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Debug endpoint to check answer structure
 app.get('/projects/:projectId/debug-answers', async (req, res) => {
   try {
@@ -4136,6 +3085,9 @@ app.get('/projects/:projectId/progress', async (req, res) => {
           if (hasAnswer) {
             answeredQuestionCodes.add(answer.questionCode);
             answeredCount++;
+            console.log(`✅ Counted answered question: ${answer.questionCode} (score: ${answer.score})`);
+          } else {
+            console.log(`⚠️ Question ${answer.questionCode} not counted as answered`);
           }
         });
       } else {
@@ -4414,49 +3366,12 @@ app.post('/api/users/:id/precondition-approval', async (req, res) => {
 
 app.get('/api/projects', async (req, res) => {
   try {
-    const ProjectAssignment = require('./models/projectAssignment');
-    const { calculateProjectProgress } = require('./services/evaluationService');
-    
-    // Get userId from query to filter out hidden projects
-    const { userId } = req.query;
-    const query = {};
-    
-    // If userId is provided, exclude projects hidden for this user
-    if (userId && isValidObjectId(userId)) {
-      const userIdObj = new mongoose.Types.ObjectId(userId);
-      query.hiddenForUsers = { $ne: userIdObj };
-    }
-    
-    const projects = await Project.find(query)
+    const projects = await Project.find()
       .select('-fullDescription') // Exclude large description for list view
       .lean()
       .maxTimeMS(5000)
       .limit(1000);
-    
-    // Calculate progress and get current assigned users for each project
-    const projectsWithProgress = await Promise.all(
-      projects.map(async (project) => {
-        const projectIdObj = project._id;
-        
-        // Get current assignments (single source of truth)
-        const assignments = await ProjectAssignment.find({ projectId: projectIdObj })
-          .select('userId')
-          .lean();
-        
-        const currentAssignedUserIds = assignments.map(a => a.userId.toString());
-        
-        // Calculate progress based on current assignments
-        const computedProgress = await calculateProjectProgress(projectIdObj);
-        
-        return {
-          ...project,
-          progress: computedProgress, // Override stored progress with computed value
-          assignedUsers: currentAssignedUserIds // Override with current assignments
-        };
-      })
-    );
-    
-    res.json(projectsWithProgress);
+    res.json(projects);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4506,76 +3421,6 @@ app.post('/api/projects', async (req, res) => {
 
     const project = new Project(req.body);
     await project.save();
-
-    // Create ProjectAssignment documents for assigned users
-    if (req.body.assignedUsers && Array.isArray(req.body.assignedUsers) && req.body.assignedUsers.length > 0) {
-      try {
-        const { createAssignment } = require('./services/evaluationService');
-        const ProjectAssignment = require('./models/projectAssignment');
-        const actorId = req.body.createdBy || req.body.ownerId || null;
-        const actorRole = 'admin'; // Project creator is typically admin
-        
-        // Get assigned user IDs and their roles
-        const userIds = req.body.assignedUsers.map(String).filter(Boolean);
-        const users = await User.find({ 
-          _id: { $in: userIds }
-        }).select('_id role').lean();
-        
-        const projectIdObj = project._id;
-        
-        // Create assignments for each user (excluding admins)
-        for (const user of users) {
-          if (user.role === 'admin' || user.role === 'use-case-owner') {
-            // Skip admins and use-case-owners (they don't need assignments for evaluation)
-            continue;
-          }
-          
-          try {
-            const userIdObj = user._id;
-            const role = user.role || 'unknown';
-            
-            // Determine questionnaire key based on role
-            let roleQuestionnaireKey = 'general-v1';
-            if (role === 'ethical-expert') roleQuestionnaireKey = 'ethical-expert-v1';
-            else if (role === 'medical-expert') roleQuestionnaireKey = 'medical-expert-v1';
-            else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
-            else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
-            else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
-            
-            // Assign questionnaires: always include general-v1, add role-specific if applicable
-            const questionnaires = roleQuestionnaireKey !== 'general-v1' 
-              ? ['general-v1', roleQuestionnaireKey]
-              : ['general-v1'];
-            
-            // Create assignment using the service function
-            await createAssignment(projectIdObj, userIdObj, role, questionnaires, actorId, actorRole);
-          } catch (assignmentError) {
-            console.error(`Error creating assignment for user ${user._id}:`, assignmentError.message);
-            // Continue with other users even if one fails
-          }
-        }
-        
-        // Notify assigned users about the new project (non-blocking)
-        try {
-          const { notifyProjectCreated } = require('./services/notificationService');
-          const expertIds = users
-            .filter(u => u.role !== 'admin' && u.role !== 'use-case-owner')
-            .map(u => u._id);
-          
-          if (expertIds.length > 0) {
-            await notifyProjectCreated(project._id, expertIds, actorId, actorRole);
-          }
-        } catch (notifError) {
-          console.error('Error sending project created notification:', notifError);
-          // Don't fail project creation if notification fails
-        }
-      } catch (assignmentError) {
-        console.error('Error creating project assignments:', assignmentError);
-        // Don't fail project creation if assignment creation fails
-        // Project is already saved, assignments can be created later if needed
-      }
-    }
-
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4584,36 +3429,11 @@ app.post('/api/projects', async (req, res) => {
 
 app.delete('/api/projects/:id', async (req, res) => {
   try {
-    const { userId } = req.query || req.body;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const projectIdObj = isValidObjectId(req.params.id) 
-      ? new mongoose.Types.ObjectId(req.params.id) 
-      : req.params.id;
-    const userIdObj = isValidObjectId(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
-      : userId;
-
-    const project = await Project.findById(projectIdObj);
-    if (!project) {
+    const deletedProject = await Project.findByIdAndDelete(req.params.id);
+    if (!deletedProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
-
-    // Soft delete: Add user to hiddenForUsers array (only hide for this user)
-    if (!project.hiddenForUsers) {
-      project.hiddenForUsers = [];
-    }
-    
-    // Only add if not already hidden for this user
-    const userIdStr = userIdObj.toString();
-    if (!project.hiddenForUsers.some(id => id.toString() === userIdStr)) {
-      project.hiddenForUsers.push(userIdObj);
-      await project.save();
-    }
-
-    res.json({ success: true, message: 'Project hidden for this user' });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4827,30 +3647,21 @@ app.get('/api/messages/unread-count', async (req, res) => {
     // Get unread messages grouped by project and sender.
     // IMPORTANT: Avoid populate() here because missing/deleted refs (project/user) can break the entire endpoint.
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    // Only get real user messages, exclude notifications (isNotification: true or [NOTIFICATION] prefix)
     const unreadMessages = await Message.find({
       toUserId: userIdObj,
-      readAt: null,
-      isNotification: { $ne: true } // Exclude notification messages
+      readAt: null
     })
     .populate('projectId', 'title')
     .populate('fromUserId', 'name email')
     .sort({ createdAt: -1 })
     .lean();
     
-    // Also filter out messages with [NOTIFICATION] prefix in text
-    const realMessages = unreadMessages.filter(msg => {
-      const text = String(msg.text || '');
-      return !text.startsWith('[NOTIFICATION]');
-    });
-    
     // Group by projectId and fromUserId
     const conversations = {};
-    let skippedCount = 0;
-    realMessages.forEach(msg => {
+    unreadMessages.forEach(msg => {
       // Skip messages with missing or null populated fields
       if (!msg || !msg.projectId || !msg.fromUserId) {
-        skippedCount++;
+        console.warn('Skipping message with missing projectId or fromUserId:', msg?._id);
         return;
       }
       
@@ -4858,7 +3669,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
       const fromUserIdRaw = msg.fromUserId._id || msg.fromUserId;
       
       if (!projectIdRaw || !fromUserIdRaw) {
-        skippedCount++;
+        console.warn('Skipping message with invalid projectId or fromUserId:', msg?._id);
         return;
       }
       
@@ -4889,13 +3700,8 @@ app.get('/api/messages/unread-count', async (req, res) => {
         conversations[key].isNotification = Boolean(msg.isNotification);
       }
     });
-    
-    // Log skipped messages only if there are many (to avoid spam)
-    if (skippedCount > 0) {
-      console.warn(`⚠️ Skipped ${skippedCount} message(s) with missing/invalid projectId or fromUserId (out of ${realMessages.length} total)`);
-    }
-    
-    const totalCount = realMessages.length;
+
+    const totalCount = unreadMessages.length;
     const conversationList = Object.values(conversations);
 
     // Hydrate titles/names (best-effort)
@@ -4930,98 +3736,6 @@ app.get('/api/messages/unread-count', async (req, res) => {
 });
 
 // GET /api/messages/conversations?userId=
-// ========== NOTIFICATION API ENDPOINTS ==========
-
-// GET /api/notifications - Get notifications for current user
-app.get('/api/notifications', async (req, res) => {
-  try {
-    const { userId, unreadOnly, limit = 50 } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const userIdObj = isValidObjectId(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
-      : userId;
-
-    const query = { recipientId: userIdObj };
-    if (unreadOnly === 'true') {
-      query.isRead = false;
-    }
-
-    const notifications = await Notification.find(query)
-      .populate('actorId', 'name email role')
-      .populate('projectId', 'title')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .lean();
-
-    // Get unread count
-    const unreadCount = await Notification.countDocuments({
-      recipientId: userIdObj,
-      isRead: false
-    });
-
-    res.json({
-      notifications,
-      unreadCount
-    });
-  } catch (err) {
-    console.error('Error fetching notifications:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/notifications/:id/read - Mark notification as read
-app.post('/api/notifications/:id/read', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const notification = await Notification.findByIdAndUpdate(
-      id,
-      { isRead: true, readAt: new Date() },
-      { new: true }
-    );
-
-    if (!notification) {
-      return res.status(404).json({ error: 'Notification not found' });
-    }
-
-    res.json({ success: true, notification });
-  } catch (err) {
-    console.error('Error marking notification as read:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/notifications/read-all - Mark all notifications as read for user
-app.post('/api/notifications/read-all', async (req, res) => {
-  try {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    const userIdObj = isValidObjectId(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
-      : userId;
-
-    const result = await Notification.updateMany(
-      { recipientId: userIdObj, isRead: false },
-      { isRead: true, readAt: new Date() }
-    );
-
-    res.json({ 
-      success: true, 
-      updatedCount: result.modifiedCount 
-    });
-  } catch (err) {
-    console.error('Error marking all notifications as read:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ========== END NOTIFICATION API ==========
-
 app.get('/api/messages/conversations', async (req, res) => {
   try {
     const { userId } = req.query;
@@ -5464,23 +4178,6 @@ app.use('/api/evaluations', evaluationRoutes);
 const reportRoutes = require('./routes/reportRoutes');
 app.use('/api/reports', reportRoutes);
 
-// Professional Report Generation (new structured approach)
-// POST /api/projects/:projectId/reports/generate?questionnaireKey=general-v1
-const reportController = require('./controllers/reportController');
-app.post('/api/projects/:projectId/reports/generate', reportController.generateProfessionalReport);
-
-// PDF Dashboard Report Generation
-// POST /api/projects/:projectId/reports/generate-pdf?questionnaireKey=general-v1
-app.post('/api/projects/:projectId/reports/generate-pdf', reportController.generatePDFReport);
-
-// Analytics Endpoint
-// GET /api/projects/:projectId/analytics?questionnaireKey=general-v1
-app.get('/api/projects/:projectId/analytics', reportController.getProjectAnalytics);
-
-// Latest Report Endpoint
-// GET /api/projects/:projectId/reports/latest
-app.get('/api/projects/:projectId/reports/latest', reportController.getLatestReport);
-
 // Health check endpoint for deployment platforms
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -5508,4 +4205,3 @@ if (emailConfigured) {
 }
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-

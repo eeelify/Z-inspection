@@ -1,11 +1,6 @@
 const mongoose = require('mongoose');
-const { generateReport, generateDashboardNarrative, generateReportNarrative } = require('../services/geminiService');
+const { generateReport } = require('../services/geminiService');
 const { generatePDFFromMarkdown } = require('../services/pdfService');
-const { generateDOCXFromMarkdown } = require('../services/docxService');
-const { generateProfessionalDOCX } = require('../services/professionalDocxService');
-const { buildReportMetrics, getProjectEvaluators } = require('../services/reportMetricsService');
-const { generatePDFReport: generatePDFReportService, generateAndSavePDFReport } = require('../services/pdfReportService');
-const { getProjectAnalytics } = require('../services/analyticsService');
 
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
@@ -23,6 +18,8 @@ const Evaluation = mongoose.model('Evaluation');
 const Tension = mongoose.model('Tension');
 const User = mongoose.model('User');
 const Score = require('../models/score'); // Score model (separate file)
+const Response = require('../models/response');
+const Question = require('../models/question');
 
 /**
  * ============================================================
@@ -99,26 +96,169 @@ const isUserAssignedToProject = async ({ userIdObj, projectIdObj }) => {
   return Boolean(project);
 };
 
+const chooseSectionContentForExport = (section) => {
+  const expert = (section?.expertEdit || '').trim();
+  if (expert.length > 0) return expert;
+  return section?.aiDraft || '';
+};
+
 const buildExportMarkdownFromReport = (report) => {
-  const title = report?.title || 'Report';
-  const content = String(report?.content || '').trim();
+  // New workflow: sections[]
+  if (Array.isArray(report?.sections) && report.sections.length > 0) {
+    let md = '';
+    md += `> **Note:** This report contains AI-generated draft content and has been reviewed/edited by human experts.\n\n`;
 
-  // Prefer exporting the Gemini-generated report body (legacy `content` field).
-  // Export should NOT include expert comments (requested).
-  let md = '';
+    // If there is a single FULL_REPORT section, export it directly (plus the note above)
+    const single = report.sections.length === 1 ? report.sections[0] : null;
+    if (single && String(single.principle || '').toUpperCase() === 'FULL_REPORT') {
+      md += `${chooseSectionContentForExport(single)}\n`;
+      return md;
+    }
 
-  if (content) {
-    // If the content already looks like markdown with a top-level heading, keep it as-is.
-    // Otherwise prepend the report title for a consistent export.
-    const startsWithHeading = /^#\s+\S/.test(content);
-    md = startsWithHeading ? `${content}\n\n` : `# ${title}\n\n${content}\n\n`;
-  } else {
-    // Fallback when content is missing (older drafts or partial saves)
-    md = `# ${title}\n\n`;
+    for (const section of report.sections) {
+      const principle = section?.principle || 'Section';
+      md += `## ${principle}\n\n`;
+      md += `${chooseSectionContentForExport(section)}\n\n`;
+    }
+
+    return md;
   }
 
-  return md;
+  // Legacy fallback: content
+  const legacy = report?.content || '';
+  if (!legacy) return '';
+  return `> **Note:** This report contains AI-generated draft content and has been reviewed/edited by human experts.\n\n${legacy}\n`;
 };
+
+/**
+ * Unified Answer Aggregation Layer
+ * Fetches answers from both responses and generalquestionanswers collections
+ * and normalizes them into a single structure
+ */
+async function aggregateUnifiedAnswers(projectIdObj) {
+  const unifiedAnswers = [];
+
+  // 1. Fetch from responses collection
+  const responses = await Response.find({ 
+    projectId: projectIdObj,
+    status: { $in: ['draft', 'submitted'] }
+  }).populate('answers.questionId').lean();
+
+  for (const response of responses) {
+    for (const answer of response.answers || []) {
+      const questionId = answer.questionId?._id?.toString() || answer.questionId?.toString() || answer.questionId;
+      const questionCode = answer.questionCode;
+      
+      // Extract text answer based on answer type
+      let textAnswer = '';
+      let selectedOption = '';
+      
+      if (answer.answer) {
+        if (answer.answer.text) {
+          textAnswer = answer.answer.text;
+        } else if (answer.answer.choiceKey) {
+          selectedOption = answer.answer.choiceKey;
+          // Try to get option label from question
+          const question = answer.questionId;
+          if (question && question.options) {
+            const option = question.options.find(opt => opt.key === answer.answer.choiceKey);
+            if (option) {
+              selectedOption = option.label?.en || option.label?.tr || option.label || selectedOption;
+            }
+          }
+        } else if (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0) {
+          selectedOption = answer.answer.multiChoiceKeys.join(', ');
+        } else if (answer.answer.numeric !== undefined) {
+          textAnswer = String(answer.answer.numeric);
+        }
+      }
+
+      unifiedAnswers.push({
+        questionId: questionId || questionCode,
+        questionCode: questionCode,
+        role: response.role,
+        questionnaireKey: response.questionnaireKey,
+        selectedOption: selectedOption || null,
+        score: answer.score !== undefined ? answer.score : null,
+        textAnswer: textAnswer || null,
+        principle: answer.questionId?.principle || null,
+        sourceCollection: 'responses',
+        userId: response.userId?.toString() || response.userId,
+        notes: answer.notes || null
+      });
+    }
+  }
+
+  // 2. Fetch from generalquestionanswers collection
+  const generalAnswersDocs = await GeneralQuestionsAnswers.find({ 
+    projectId: projectIdObj 
+  }).lean();
+
+  for (const gqa of generalAnswersDocs) {
+    const role = gqa.userRole || 'unknown';
+    
+    // Process principles structure
+    if (gqa.principles) {
+      for (const [principle, principleData] of Object.entries(gqa.principles)) {
+        const answers = principleData.answers || {};
+        const risks = principleData.risks || {};
+        
+        for (const [questionKey, answerValue] of Object.entries(answers)) {
+          const riskScore = risks[questionKey] !== undefined ? risks[questionKey] : null;
+          
+          unifiedAnswers.push({
+            questionId: questionKey,
+            questionCode: questionKey,
+            role: role,
+            questionnaireKey: 'general-v1', // General questions don't have questionnaireKey, use default
+            selectedOption: null, // General questions are typically text
+            score: riskScore,
+            textAnswer: typeof answerValue === 'string' ? answerValue : String(answerValue || ''),
+            principle: principle,
+            sourceCollection: 'generalquestionanswers',
+            userId: gqa.userId?.toString() || gqa.userId,
+            notes: null
+          });
+        }
+      }
+    }
+    
+    // Also process legacy flat structure for backward compatibility
+    if (gqa.answers && Object.keys(gqa.answers).length > 0) {
+      const answers = gqa.answers || {};
+      const risks = gqa.risks || {};
+      
+      for (const [questionKey, answerValue] of Object.entries(answers)) {
+        // Skip if already processed in principles structure
+        const alreadyProcessed = unifiedAnswers.some(ua => 
+          ua.questionId === questionKey && 
+          ua.sourceCollection === 'generalquestionanswers' &&
+          ua.userId === (gqa.userId?.toString() || gqa.userId)
+        );
+        
+        if (!alreadyProcessed) {
+          const riskScore = risks[questionKey] !== undefined ? risks[questionKey] : null;
+          
+          unifiedAnswers.push({
+            questionId: questionKey,
+            questionCode: questionKey,
+            role: role,
+            questionnaireKey: 'general-v1',
+            selectedOption: null,
+            score: riskScore,
+            textAnswer: typeof answerValue === 'string' ? answerValue : String(answerValue || ''),
+            principle: null, // Legacy structure doesn't have principle
+            sourceCollection: 'generalquestionanswers',
+            userId: gqa.userId?.toString() || gqa.userId,
+            notes: null
+          });
+        }
+      }
+    }
+  }
+
+  return unifiedAnswers;
+}
 
 /**
  * Helper function to collect all analysis data for a project
@@ -137,7 +277,6 @@ async function collectAnalysisData(projectId) {
 
     // Ensure all scores are computed before generating report
     // This ensures medical and education scores are included
-    const Response = require('../models/response');
     const { computeScores } = require('../services/evaluationService');
     
     // Get all unique userId/questionnaireKey combinations for this project
@@ -164,7 +303,11 @@ async function collectAnalysisData(projectId) {
     // Get all scores (now including newly computed ones)
     const scores = await Score.find({ projectId: projectIdObj }).lean();
 
-    // Get general questions answers
+    // Get unified answers from both collections
+    const unifiedAnswers = await aggregateUnifiedAnswers(projectIdObj);
+    console.log(`📊 Aggregated ${unifiedAnswers.length} unified answers (from responses and generalquestionanswers)`);
+
+    // Get general questions answers (keep for backward compatibility in prompt builder)
     const generalAnswers = await GeneralQuestionsAnswers.find({ 
       projectId: projectIdObj 
     }).lean();
@@ -174,7 +317,7 @@ async function collectAnalysisData(projectId) {
       projectId: projectIdObj 
     }).lean();
 
-    // Get tensions
+    // Get tensions (with ALL fields)
     const tensions = await Tension.find({ 
       projectId: projectIdObj 
     }).lean();
@@ -187,7 +330,8 @@ async function collectAnalysisData(projectId) {
     return {
       project,
       scores,
-      generalAnswers,
+      unifiedAnswers, // NEW: Unified answers from both collections
+      generalAnswers, // Keep for backward compatibility
       evaluations,
       tensions,
       users
@@ -220,9 +364,66 @@ exports.generateReport = async (req, res) => {
     // Collect all analysis data
     const analysisData = await collectAnalysisData(projectId);
 
+    // DEFENSIVE VALIDATION: Ensure all data is properly collected
+    const unifiedAnswers = analysisData.unifiedAnswers || [];
+    const tensions = analysisData.tensions || [];
+    const scores = analysisData.scores || [];
+    
+    console.log(`📊 Validation: ${unifiedAnswers.length} unified answers, ${tensions.length} tensions, ${scores.length} scores`);
+    
+    // Check for high-risk items that require detailed narratives
+    const highRiskAnswers = unifiedAnswers.filter(a => a.score !== null && a.score !== undefined && a.score < 3);
+    const highSeverityTensions = tensions.filter(t => {
+      const severity = String(t.severity || '').toLowerCase();
+      return severity.includes('high') || severity.includes('critical');
+    });
+    
+    if (highRiskAnswers.length > 0) {
+      console.log(`⚠️  ${highRiskAnswers.length} high-risk answers (score < 3) require detailed narrative`);
+    }
+    if (highSeverityTensions.length > 0) {
+      console.log(`⚠️  ${highSeverityTensions.length} high-severity tensions require detailed explanation`);
+    }
+    
+    // Validate that we have answers if any exist in database
+    if (unifiedAnswers.length === 0) {
+      console.warn('⚠️  WARNING: No unified answers found. Report may be incomplete.');
+    }
+    
+    // Validate tensions are included
+    if (tensions.length > 0) {
+      console.log(`✅ ${tensions.length} tensions will be analyzed in the report`);
+    }
+
     // Generate report using Gemini AI
     console.log('🤖 Calling Gemini API...');
     const reportContent = await generateReport(analysisData);
+    
+    // DEFENSIVE VALIDATION: Validate report quality
+    if (!reportContent || reportContent.trim().length === 0) {
+      const error = new Error('Report generation failed: Empty report generated');
+      error.statusCode = 500;
+      throw error;
+    }
+    
+    // Check if report has minimum content
+    const reportLength = reportContent.trim().length;
+    if (unifiedAnswers.length > 0 && reportLength < 500) {
+      console.error(`⚠️  WARNING: Report seems too short (${reportLength} chars) for ${unifiedAnswers.length} answers`);
+      // Don't throw error, but log warning
+    }
+    
+    // Check if tensions are mentioned (basic check)
+    if (tensions.length > 0) {
+      const tensionMentions = tensions.filter(t => {
+        const principle1 = t.principle1 || '';
+        const principle2 = t.principle2 || '';
+        return reportContent.includes(principle1) || reportContent.includes(principle2);
+      });
+      if (tensionMentions.length < tensions.length * 0.5) {
+        console.warn(`⚠️  WARNING: Only ${tensionMentions.length}/${tensions.length} tensions appear to be mentioned in report`);
+      }
+    }
 
     // Calculate metadata
     const metadata = {
@@ -246,48 +447,27 @@ exports.generateReport = async (req, res) => {
       ? new mongoose.Types.ObjectId(projectId)
       : projectId;
 
-    // Compute hash for versioning
-    const crypto = require('crypto');
-    const hash = crypto.createHash('sha256').update(reportContent).digest('hex').substring(0, 16);
-    
-    // Determine version (increment if report exists)
-    const existingReport = await Report.findOne({ projectId: projectIdObj })
-      .sort({ generatedAt: -1 })
-      .select('version')
-      .lean();
-    const version = existingReport ? (existingReport.version || 1) + 1 : 1;
-
     const report = new Report({
       projectId: projectIdObj,
       useCaseId: projectIdObj,
       title: `Analysis Report - ${analysisData.project.title || 'Project'}`,
       // Legacy compatibility
       content: reportContent,
+      // New workflow payload
+      sections: [{
+        principle: 'FULL_REPORT',
+        aiDraft: reportContent,
+        expertEdit: '',
+        comments: []
+      }],
       generatedBy: userIdObj,
-      createdAt: new Date(), // Explicitly set createdAt
       metadata,
-      status: 'draft',
-      version,
-      hash,
-      mimeType: 'text/markdown' // Legacy reports are markdown
+      status: 'draft'
     });
 
     await report.save();
 
     console.log('✅ Report generated and saved:', report._id);
-
-    // Prepare response with file metadata
-    const reportResponse = {
-      id: report._id,
-      title: report.title,
-      generatedAt: report.generatedAt,
-      createdAt: report.createdAt || report.generatedAt,
-      metadata: report.metadata,
-      status: report.status,
-      fileUrl: report.fileUrl || null,
-      version: report.version || 1,
-      hash: report.hash || null
-    };
 
     // Notify all assigned experts (excluding admin who generated the report)
     try {
@@ -343,7 +523,15 @@ exports.generateReport = async (req, res) => {
 
     res.json({
       success: true,
-      report: reportResponse
+      report: {
+        id: report._id,
+        title: report.title,
+        content: report.content, // legacy
+        sections: report.sections,
+        generatedAt: report.generatedAt,
+        metadata: report.metadata,
+        status: report.status
+      }
     });
   } catch (err) {
     console.error('❌ Error generating report:', err);
@@ -397,7 +585,6 @@ exports.getAllReports = async (req, res) => {
     }
 
     const reports = await Report.find(query)
-      .select('-content -sections')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
@@ -420,7 +607,6 @@ exports.getReportById = async (req, res) => {
     const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     const report = await Report.findById(id)
-      .select('-content -sections')
       .populate('projectId', 'title description')
       .populate('generatedBy', 'name email role')
       .lean();
@@ -439,16 +625,6 @@ exports.getReportById = async (req, res) => {
       if (!ok) {
         return res.status(403).json({ error: 'Not authorized to view this report.' });
       }
-    }
-
-    // Enforce visibility rules for expertComments
-    const comments = Array.isArray(report?.expertComments) ? report.expertComments : [];
-    if (roleCategory === 'admin') {
-      report.expertComments = comments;
-    } else if (roleCategory === 'expert') {
-      report.expertComments = comments.filter((c) => String(c?.expertId) === String(userIdObj));
-    } else {
-      report.expertComments = [];
     }
 
     res.json(report);
@@ -480,9 +656,7 @@ exports.updateReport = async (req, res) => {
       id,
       update,
       { new: true }
-    )
-      .select('-content -sections')
-      .lean();
+    ).lean();
 
     if (!report) {
       return res.status(404).json({ error: 'Report not found' });
@@ -502,31 +676,21 @@ exports.updateReport = async (req, res) => {
 exports.deleteReport = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    const { roleCategory } = await loadRequestUser(req);
 
-    // Allow both admin and experts to hide reports (soft delete)
-    // Admin can still see all reports, but experts can hide reports from their view
+    if (roleCategory !== 'admin') {
+      return res.status(403).json({ error: 'Only Admin can delete reports.' });
+    }
 
-    const report = await Report.findById(id);
-    if (!report) {
+    const deleted = await Report.findByIdAndDelete(id);
+
+    if (!deleted) {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    // Soft delete: Add user to hiddenForUsers array (only hide for this user)
-    if (!report.hiddenForUsers) {
-      report.hiddenForUsers = [];
-    }
-    
-    // Only add if not already hidden for this user
-    const userIdStr = userIdObj.toString();
-    if (!report.hiddenForUsers.some(id => id.toString() === userIdStr)) {
-      report.hiddenForUsers.push(userIdObj);
-      await report.save();
-    }
-
-    res.json({ success: true, message: 'Report hidden for this user' });
+    res.json({ success: true });
   } catch (err) {
-    console.error('Error hiding report:', err);
+    console.error('Error deleting report:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -537,7 +701,7 @@ exports.deleteReport = async (req, res) => {
  */
 exports.getMyReports = async (req, res) => {
   try {
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    const { userIdObj } = await loadRequestUser(req);
 
     // Find all projects where user is assigned (ProjectAssignment is the primary source)
     let projectIds = [];
@@ -563,26 +727,16 @@ exports.getMyReports = async (req, res) => {
       return res.json([]);
     }
 
-    // Find all reports for these projects, excluding reports hidden for this user
+    // Find all reports for these projects
     const reports = await Report.find({
-      projectId: { $in: projectIds },
-      hiddenForUsers: { $ne: userIdObj } // Exclude reports hidden for this user
+      projectId: { $in: projectIds }
     })
-      .select('-content -sections')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
       .lean();
 
-    // Enforce visibility rules for expertComments in list endpoints too
-    const safe = reports.map((r) => {
-      const comments = Array.isArray(r?.expertComments) ? r.expertComments : [];
-      if (roleCategory === 'admin') return r;
-      if (roleCategory === 'expert') return { ...r, expertComments: comments.filter((c) => String(c?.expertId) === String(userIdObj)) };
-      return { ...r, expertComments: [] };
-    });
-
-    res.json(safe);
+    res.json(reports);
   } catch (err) {
     console.error('Error fetching user reports:', err);
     res.status(500).json({ error: err.message });
@@ -599,7 +753,6 @@ exports.downloadReportPDF = async (req, res) => {
     const { userIdObj, roleCategory } = await loadRequestUser(req);
 
     const report = await Report.findById(id)
-      .select('title projectId content')
       .populate('projectId', 'title')
       .lean();
 
@@ -642,213 +795,12 @@ exports.downloadReportPDF = async (req, res) => {
 };
 
 /**
- * GET /api/reports/:id/download-docx
- * Download report as DOCX (Word)
- * Uses new professional DOCX generator if report has computedMetrics, otherwise falls back to markdown
- */
-exports.downloadReportDOCX = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Enhanced error handling for loadRequestUser
-    let userIdObj, roleCategory;
-    try {
-      const userData = await loadRequestUser(req);
-      userIdObj = userData.userIdObj;
-      roleCategory = userData.roleCategory;
-    } catch (authError) {
-      console.error('❌ Error loading user from request:', authError);
-      return res.status(authError.statusCode || 400).json({ 
-        error: authError.message || 'User ID is required for this operation' 
-      });
-    }
-
-    const report = await Report.findById(id)
-      .select('title projectId content computedMetrics geminiNarrative questionnaireKey generatedAt hiddenForUsers')
-      .populate('projectId', 'title')
-      .lean();
-
-    if (!report) {
-      return res.status(404).json({ error: 'Report not found' });
-    }
-
-    // Check if report is hidden for this user (soft delete)
-    if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
-      const userIdStr = userIdObj.toString();
-      const isHidden = report.hiddenForUsers.some(hiddenId => 
-        hiddenId && hiddenId.toString() === userIdStr
-      );
-      if (isHidden && roleCategory !== 'admin') {
-        return res.status(404).json({ error: 'Report not found' });
-      }
-    }
-
-    // Authorization: admin can export all. Expert/Viewer can export assigned reports.
-    if (roleCategory !== 'admin') {
-      const projectIdObj = report?.projectId?._id || report?.projectId;
-      const ok = await isUserAssignedToProject({
-        userIdObj,
-        projectIdObj: toObjectIdOrValue(projectIdObj)
-      });
-      if (!ok) {
-        return res.status(403).json({ error: 'Not authorized to download this report.' });
-      }
-    }
-
-    console.log('📝 Generating DOCX for report:', id);
-
-    // Always use latest data (same as PDF download)
-    const projectId = report.projectId?._id || report.projectId;
-    if (!projectId) {
-      console.error('❌ Missing projectId in report:', id);
-      return res.status(500).json({ error: 'Report is missing project information' });
-    }
-    
-    const questionnaireKey = report.questionnaireKey || report.computedMetrics?.project?.questionnaireKey || 'general-v1';
-    if (!questionnaireKey) {
-      console.error('❌ Missing questionnaireKey in report:', id);
-      return res.status(500).json({ error: 'Report is missing questionnaire information' });
-    }
-    
-    // Validate projectId format
-    if (!isValidObjectId(projectId)) {
-      console.error('❌ Invalid projectId format:', projectId);
-      return res.status(500).json({ error: `Invalid projectId format: ${projectId}` });
-    }
-
-    // Always regenerate with latest data (same approach as PDF)
-    console.log('📊 Fetching latest report metrics for DOCX generation...');
-    
-    let reportMetrics, geminiNarrative;
-    try {
-      // Build fresh report metrics from current data
-      reportMetrics = await buildReportMetrics(projectId, questionnaireKey);
-      
-      // Generate fresh narrative
-      const { generateReportNarrative } = require('./geminiService');
-      geminiNarrative = await generateReportNarrative(reportMetrics);
-    } catch (metricsError) {
-      console.error('❌ Error building report metrics:', metricsError);
-      // Fallback to stored data if available
-      if (report.computedMetrics && report.geminiNarrative) {
-        console.log('⚠️ Using stored metrics as fallback');
-        reportMetrics = report.computedMetrics;
-        geminiNarrative = report.geminiNarrative;
-      } else {
-        // Last resort: use legacy markdown
-        console.log('⚠️ Using legacy markdown-based DOCX generator');
-        const docxBuffer = await generateDOCXFromMarkdown(
-          buildExportMarkdownFromReport(report),
-          report.title || 'Report'
-        );
-        const fileName = `${(report.title || 'report').replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
-        res.setHeader(
-          'Content-Type',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        );
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-        res.setHeader('Content-Length', docxBuffer.length);
-        return res.send(docxBuffer);
-      }
-    }
-
-    // Generate charts for DOCX
-    let chartBuffers = null;
-    try {
-      const chartGenerationService = require('./chartGenerationService');
-      const { getProjectAnalytics } = require('./analyticsService');
-      const analytics = await getProjectAnalytics(projectId, questionnaireKey);
-      
-      // Generate chart images
-      chartBuffers = {};
-      
-      // Principle bar chart
-      if (analytics.principleBar && analytics.principleBar.length > 0) {
-        const principleData = {};
-        analytics.principleBar.forEach(p => {
-          principleData[p.principleKey] = {
-            avgScore: p.avgScore,
-            min: 0,
-            max: 4
-          };
-        });
-        chartBuffers.principleBarChart = await chartGenerationService.generatePrincipleBarChart(principleData);
-      }
-      
-      // Evidence type donut
-      if (analytics.evidenceMetrics && analytics.evidenceMetrics.typeDistribution.length > 0) {
-        const evidenceTypeDist = {};
-        analytics.evidenceMetrics.typeDistribution.forEach(d => {
-          evidenceTypeDist[d.type] = d.count;
-        });
-        chartBuffers.evidenceTypeChart = await chartGenerationService.generateEvidenceTypeChart(evidenceTypeDist);
-      }
-      
-      // Role × Principle heatmap
-      if (analytics.rolePrincipleMatrix && Object.keys(analytics.rolePrincipleMatrix).length > 0) {
-        chartBuffers.rolePrincipleHeatmap = await chartGenerationService.generateRolePrincipleHeatmap(analytics.rolePrincipleMatrix);
-      }
-      
-      // Tensions review state chart
-      if (analytics.tensionsSummary && analytics.tensionsSummary.countsByReviewState) {
-        chartBuffers.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart(analytics.tensionsSummary.countsByReviewState);
-      }
-    } catch (chartError) {
-      console.warn('⚠️ Error generating charts for DOCX, continuing without charts:', chartError.message);
-      chartBuffers = null;
-    }
-
-    // Generate DOCX with latest data
-    const docxBuffer = await generateProfessionalDOCX(
-      reportMetrics,
-      geminiNarrative,
-      report.generatedAt ? new Date(report.generatedAt) : new Date(),
-      chartBuffers
-    );
-
-    const fileName = `${(report.title || 'report').replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
-
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    );
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', docxBuffer.length);
-
-    res.send(docxBuffer);
-  } catch (err) {
-    console.error('❌ Error in downloadReportDOCX:', err);
-    console.error('❌ Error stack:', err.stack);
-    console.error('❌ Report ID:', req.params.id);
-    console.error('❌ User ID from request:', getUserIdFromReq(req));
-    console.error('❌ Request query:', req.query);
-    console.error('❌ Request body:', req.body);
-    
-    const errorMessage = err.message || 'Failed to generate DOCX';
-    const errorDetails = process.env.NODE_ENV === 'development' 
-      ? {
-          message: errorMessage,
-          stack: err.stack,
-          statusCode: err.statusCode,
-          reportId: req.params.id,
-          userId: getUserIdFromReq(req)
-        }
-      : { message: errorMessage };
-    
-    res.status(err.statusCode || 500).json({ 
-      error: errorMessage,
-      details: errorDetails
-    });
-  }
-};
-
-/**
  * GET /api/reports/assigned-to-me
  * Expert/Viewer can list reports for assigned projects. Admin can also use it.
  */
 exports.getAssignedToMe = async (req, res) => {
   try {
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    const { userIdObj } = await loadRequestUser(req);
 
     let projectIds = [];
     try {
@@ -869,26 +821,13 @@ exports.getAssignedToMe = async (req, res) => {
 
     if (projectIds.length === 0) return res.json([]);
 
-    // Exclude reports hidden for this user
-    const reports = await Report.find({ 
-      projectId: { $in: projectIds },
-      hiddenForUsers: { $ne: userIdObj } // Exclude reports hidden for this user
-    })
-      .select('-content -sections')
+    const reports = await Report.find({ projectId: { $in: projectIds } })
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
       .lean();
 
-    // Enforce visibility rules for expertComments in list endpoints too
-    const safe = reports.map((r) => {
-      const comments = Array.isArray(r?.expertComments) ? r.expertComments : [];
-      if (roleCategory === 'admin') return r;
-      if (roleCategory === 'expert') return { ...r, expertComments: comments.filter((c) => String(c?.expertId) === String(userIdObj)) };
-      return { ...r, expertComments: [] };
-    });
-
-    res.json(safe);
+    res.json(reports);
   } catch (err) {
     console.error('Error fetching assigned reports:', err);
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -896,17 +835,72 @@ exports.getAssignedToMe = async (req, res) => {
 };
 
 /**
- * POST /api/reports/:id/expert-comment
- * Expert (and Admin) can upsert their own comment on a draft report.
+ * PATCH /api/reports/:id/sections/:principle/expert-edit
+ * Expert (and Admin) can update expertEdit on a draft report.
  */
-exports.saveExpertComment = async (req, res) => {
+exports.updateSectionExpertEdit = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { commentText } = req.body;
+    const { id, principle } = req.params;
+    const { expertEdit } = req.body;
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
+
+    if (roleCategory === 'viewer') {
+      return res.status(403).json({ error: 'Viewer cannot edit reports.' });
+    }
+
+    const report = await Report.findById(id);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    // Locked after finalize
+    if (report.status === 'final') {
+      return res.status(409).json({ error: 'Report is finalized and locked.' });
+    }
+
+    if (roleCategory !== 'admin') {
+      const ok = await isUserAssignedToProject({
+        userIdObj,
+        projectIdObj: toObjectIdOrValue(report.projectId)
+      });
+      if (!ok) {
+        return res.status(403).json({ error: 'Not authorized to edit this report.' });
+      }
+    }
+
+    const targetPrinciple = decodeURIComponent(principle || '');
+    report.sections = Array.isArray(report.sections) ? report.sections : [];
+
+    let section = report.sections.find(s => s.principle === targetPrinciple);
+    if (!section) {
+      section = { principle: targetPrinciple, aiDraft: '', expertEdit: '', comments: [] };
+      report.sections.push(section);
+    }
+
+    section.expertEdit = String(expertEdit || '');
+
+    await report.save();
+    res.json({ success: true, report: report.toObject() });
+  } catch (err) {
+    console.error('Error updating expert edit:', err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+};
+
+/**
+ * POST /api/reports/:id/sections/:principle/comments
+ * Expert (and Admin) can comment on a draft report.
+ */
+exports.addSectionComment = async (req, res) => {
+  try {
+    const { id, principle } = req.params;
+    const { text } = req.body;
     const { user, userIdObj, roleCategory } = await loadRequestUser(req);
 
     if (roleCategory === 'viewer') {
       return res.status(403).json({ error: 'Viewer cannot comment on reports.' });
+    }
+
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: 'Comment text is required' });
     }
 
     const report = await Report.findById(id);
@@ -924,29 +918,30 @@ exports.saveExpertComment = async (req, res) => {
       if (!ok) {
         return res.status(403).json({ error: 'Not authorized to comment on this report.' });
       }
+
     }
 
-    report.expertComments = Array.isArray(report.expertComments) ? report.expertComments : [];
-    const idx = report.expertComments.findIndex((c) => String(c?.expertId) === String(userIdObj));
+    const targetPrinciple = decodeURIComponent(principle || '');
+    report.sections = Array.isArray(report.sections) ? report.sections : [];
 
-    const next = {
-      expertId: userIdObj,
-      expertName: user?.name || 'Expert',
-      commentText: String(commentText || ''),
-      updatedAt: new Date()
-    };
-
-    if (idx >= 0) {
-      report.expertComments[idx] = { ...report.expertComments[idx], ...next };
-    } else {
-      report.expertComments.push(next);
+    let section = report.sections.find(s => s.principle === targetPrinciple);
+    if (!section) {
+      section = { principle: targetPrinciple, aiDraft: '', expertEdit: '', comments: [] };
+      report.sections.push(section);
     }
+
+    section.comments = Array.isArray(section.comments) ? section.comments : [];
+    section.comments.push({
+      userId: userIdObj,
+      userName: user?.name || 'User',
+      text: String(text).trim(),
+      createdAt: new Date()
+    });
 
     await report.save();
-
-    res.json({ success: true, expertComment: next });
+    res.json({ success: true, report: report.toObject() });
   } catch (err) {
-    console.error('Error saving expert comment:', err);
+    console.error('Error adding comment:', err);
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 };
@@ -980,1013 +975,6 @@ exports.finalizeReport = async (req, res) => {
   } catch (err) {
     console.error('Error finalizing report:', err);
     res.status(err.statusCode || 500).json({ error: err.message });
-  }
-};
-
-/**
- * POST /api/projects/:projectId/reports/generate
- * Generate professional report with deterministic metrics and narrative
- * Query param: questionnaireKey (default: 'general-v1')
- */
-exports.generateProfessionalReport = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const { questionnaireKey = 'general-v1' } = req.query;
-    const { user, userIdObj, roleCategory } = await loadRequestUser(req);
-
-    if (roleCategory !== 'admin') {
-      return res.status(403).json({ error: 'Only Admin can generate reports.' });
-    }
-
-    if (!projectId) {
-      return res.status(400).json({ error: 'Project ID is required' });
-    }
-
-    console.log(`📊 Generating professional report for project: ${projectId}, questionnaire: ${questionnaireKey}`);
-
-    // Step 1: Build deterministic reportMetrics (NO LLM)
-    console.log('📈 Building report metrics from MongoDB...');
-    const reportMetrics = await buildReportMetrics(projectId, questionnaireKey);
-
-    // Extract chart buffers before saving (they're too large for MongoDB)
-    const chartBuffers = reportMetrics._chartBuffers || null;
-    // Remove _chartBuffers from reportMetrics before saving (clean JSON)
-    delete reportMetrics._chartBuffers;
-
-    // Step 2: Generate narrative using Gemini (strict guardrails)
-    console.log('🤖 Generating narrative with Gemini...');
-    const geminiNarrative = await generateReportNarrative(reportMetrics);
-
-    // Step 3: Save report to database
-    const projectIdObj = isValidObjectId(projectId)
-      ? new mongoose.Types.ObjectId(projectId)
-      : projectId;
-
-    const report = new Report({
-      projectId: projectIdObj,
-      useCaseId: projectIdObj,
-      title: `Ethical AI Evaluation Report - ${reportMetrics.project.title || 'Project'}`,
-      computedMetrics: reportMetrics,
-      geminiNarrative: geminiNarrative,
-      questionnaireKey: questionnaireKey,
-      generatedBy: userIdObj,
-      status: 'draft',
-      metadata: {
-        totalScores: reportMetrics.scoring.totalsOverall?.count || 0,
-        totalTensions: reportMetrics.tensions.summary.total,
-        principlesAnalyzed: Object.keys(reportMetrics.scoring.byPrincipleOverall),
-        chartsGenerated: chartBuffers ? Object.keys(chartBuffers).filter(k => chartBuffers[k] !== null).length : 0
-      }
-    });
-
-    await report.save();
-    
-    // Store chart buffers separately (in memory cache or file system)
-    // For now, we'll regenerate charts on-demand during DOCX generation
-    // In production, consider storing in file system or Redis cache
-    report._chartBuffers = chartBuffers;
-
-    console.log('✅ Professional report generated and saved:', report._id);
-
-    // Notify assigned experts (non-blocking)
-    try {
-      const Message = mongoose.model('Message');
-      const Project = mongoose.model('Project');
-      const project = await Project.findById(projectIdObj).select('assignedUsers').lean();
-      
-      if (project && project.assignedUsers && project.assignedUsers.length > 0) {
-        const assignedUserIds = project.assignedUsers
-          .map(id => {
-            const idStr = id.toString ? id.toString() : String(id);
-            return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : id;
-          })
-          .filter(id => {
-            if (userIdObj) {
-              const idStr = id.toString ? id.toString() : String(id);
-              const userIdStr = userIdObj.toString ? userIdObj.toString() : String(userIdObj);
-              return idStr !== userIdStr;
-            }
-            return true;
-          });
-
-        if (assignedUserIds.length > 0) {
-          const projectTitle = reportMetrics.project.title || 'Project';
-          const notificationText = `[NOTIFICATION] A new professional report has been generated for project "${projectTitle}". You can review it in the Reports section.`;
-          
-          await Promise.all(
-            assignedUserIds.map(assignedUserId =>
-              Message.create({
-                projectId: projectIdObj,
-                fromUserId: userIdObj || assignedUserId,
-                toUserId: assignedUserId,
-                text: notificationText,
-                isNotification: true,
-                createdAt: new Date(),
-                readAt: null,
-              })
-            )
-          );
-          
-          console.log(`📬 Notifications sent to ${assignedUserIds.length} assigned expert(s)`);
-        }
-      }
-    } catch (notificationError) {
-      console.error('⚠️ Error sending notifications:', notificationError);
-    }
-
-    res.json({
-      success: true,
-      report: {
-        id: report._id,
-        title: report.title,
-        generatedAt: report.generatedAt,
-        questionnaireKey: report.questionnaireKey,
-        status: report.status
-      }
-    });
-  } catch (err) {
-    console.error('❌ Error generating professional report:', err);
-    console.error('❌ Error stack:', err.stack);
-    
-    let errorMessage = err.message || 'Failed to generate report';
-    
-    if (err.message && (err.message.includes('404') || err.message.includes('NOT_FOUND'))) {
-      if (!errorMessage.includes('Gemini API')) {
-        errorMessage = 'Gemini API model not found. Please check API key and model availability. ' + errorMessage;
-      }
-    } else if (err.message && (err.message.includes('API key') || err.message.includes('PERMISSION_DENIED'))) {
-      if (!errorMessage.includes('API Key')) {
-        errorMessage = 'Invalid Gemini API key. Please check your API key. ' + errorMessage;
-      }
-    } else if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED'))) {
-      errorMessage = 'API quota exceeded. Please try again later.';
-    }
-    
-    res.status(500).json({ 
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-      originalError: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-  }
-};
-
-/**
- * POST /api/reports/generate-dashboard-narrative
- * Generate narrative synthesis from dashboard metrics, scores, and tensions
- */
-exports.generateDashboardNarrative = async (req, res) => {
-  try {
-    const { projectId } = req.body;
-
-    if (!projectId) {
-      return res.status(400).json({ error: 'projectId is required' });
-    }
-
-    const projectIdObj = isValidObjectId(projectId) 
-      ? new mongoose.Types.ObjectId(projectId) 
-      : projectId;
-
-    // Verify project exists
-    const project = await Project.findById(projectIdObj).lean();
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-
-    // Collect all necessary data
-    const { scores, tensions } = await collectAnalysisData(projectIdObj);
-
-    // Build dashboardMetrics from scores
-    const dashboardMetrics = {
-      overallScores: {},
-      byPrinciple: {},
-      roleBreakdowns: {}
-    };
-
-    // Aggregate overall scores
-    if (scores.length > 0) {
-      const allTotals = scores.map(s => s.totals?.avg || 0).filter(v => v > 0);
-      if (allTotals.length > 0) {
-        dashboardMetrics.overallScores = {
-          avg: allTotals.reduce((a, b) => a + b, 0) / allTotals.length,
-          min: Math.min(...allTotals),
-          max: Math.max(...allTotals),
-          count: allTotals.length
-        };
-      }
-
-      // Aggregate by principle
-      const principleScores = {};
-      scores.forEach(score => {
-        if (score.byPrinciple) {
-          Object.entries(score.byPrinciple).forEach(([principle, data]) => {
-            if (data && data.avg !== undefined) {
-              if (!principleScores[principle]) {
-                principleScores[principle] = [];
-              }
-              principleScores[principle].push(data.avg);
-            }
-          });
-        }
-      });
-
-      Object.entries(principleScores).forEach(([principle, values]) => {
-        dashboardMetrics.byPrinciple[principle] = {
-          avg: values.reduce((a, b) => a + b, 0) / values.length,
-          min: Math.min(...values),
-          max: Math.max(...values),
-          count: values.length
-        };
-      });
-
-      // Role breakdowns
-      const roleGroups = {};
-      scores.forEach(score => {
-        const role = score.role || 'unknown';
-        if (!roleGroups[role]) {
-          roleGroups[role] = [];
-        }
-        if (score.totals?.avg) {
-          roleGroups[role].push(score.totals.avg);
-        }
-      });
-
-      Object.entries(roleGroups).forEach(([role, values]) => {
-        dashboardMetrics.roleBreakdowns[role] = {
-          avg: values.reduce((a, b) => a + b, 0) / values.length,
-          count: values.length
-        };
-      });
-    }
-
-    // Build topRiskyQuestions (questions with lowest scores)
-    const Response = require('../models/response');
-    const Question = require('../models/question');
-    
-    const responses = await Response.find({ 
-      projectId: projectIdObj,
-      status: 'submitted'
-    }).lean();
-
-    const questionScores = {};
-    for (const response of responses) {
-      if (response.answers && Array.isArray(response.answers)) {
-        for (const answer of response.answers) {
-          if (answer.score !== undefined && answer.questionId) {
-            const questionId = answer.questionId.toString();
-            if (!questionScores[questionId]) {
-              questionScores[questionId] = [];
-            }
-            questionScores[questionId].push(answer.score);
-          }
-        }
-      }
-    }
-
-    const topRiskyQuestions = [];
-    for (const [questionId, scores] of Object.entries(questionScores)) {
-      const avgRisk = scores.reduce((a, b) => a + b, 0) / scores.length;
-      // Higher score = higher risk (0 = lowest risk, 4 = highest risk), so we want questions with avgRisk >= 2.0 (High or Critical)
-      if (avgRisk >= 2.0 && scores.length > 0) {
-        try {
-          const question = await Question.findById(questionId).lean();
-          if (question) {
-            topRiskyQuestions.push({
-              questionId: questionId,
-              questionCode: question.code || questionId,
-              principle: question.principle || 'Unknown',
-              avgRisk: avgRisk,
-              count: scores.length
-            });
-          }
-        } catch (err) {
-          // Skip if question not found
-        }
-      }
-    }
-
-    // Sort by avgRisk (descending = highest risk first) and limit to top 10
-    topRiskyQuestions.sort((a, b) => b.avgRisk - a.avgRisk);
-    topRiskyQuestions.splice(10);
-
-    // Build tensionSummaries
-    const tensionSummaries = tensions.map(tension => ({
-      claim: tension.claim || tension.claimStatement || '',
-      principle1: tension.principle1 || '',
-      principle2: tension.principle2 || '',
-      severity: tension.severityLevel || tension.severity || 'Unknown',
-      reviewState: tension.reviewState || 'Proposed',
-      evidenceCount: Array.isArray(tension.evidence) ? tension.evidence.length : 0,
-      evidenceTypes: Array.isArray(tension.evidence) 
-        ? [...new Set(tension.evidence.map(e => e.evidenceType || 'Unknown').filter(Boolean))]
-        : []
-    }));
-
-    // Build responseExcerpts (optional - prioritize high-risk questions)
-    const responseExcerpts = [];
-    const highRiskQuestionCodes = new Set(topRiskyQuestions.map(q => q.questionCode));
-    
-    // First, collect excerpts from high-risk questions
-    for (const response of responses) {
-      if (response.answers && Array.isArray(response.answers)) {
-        for (const answer of response.answers) {
-          const questionCode = answer.questionCode;
-          if (questionCode && highRiskQuestionCodes.has(questionCode)) {
-            // Check for text answers
-            if (answer.answerText && answer.answerText.trim().length > 20) {
-              responseExcerpts.push({
-                questionCode: questionCode,
-                excerpt: answer.answerText.trim().substring(0, 250) // Limit to 250 chars
-              });
-            } else if (answer.answer && answer.answer.text && answer.answer.text.trim().length > 20) {
-              responseExcerpts.push({
-                questionCode: questionCode,
-                excerpt: answer.answer.text.trim().substring(0, 250)
-              });
-            }
-          }
-        }
-      }
-    }
-    
-    // Then, add some general excerpts if we don't have enough
-    if (responseExcerpts.length < 10) {
-      const sampleResponses = responses.slice(0, 10);
-      for (const response of sampleResponses) {
-        if (response.answers && Array.isArray(response.answers)) {
-          const textAnswers = response.answers
-            .filter(a => {
-              const questionCode = a.questionCode;
-              // Skip if we already have this question or it's a high-risk question
-              return !highRiskQuestionCodes.has(questionCode) && 
-                     !responseExcerpts.some(e => e.questionCode === questionCode);
-            })
-            .filter(a => {
-              const text = a.answerText || (a.answer && a.answer.text);
-              return text && text.trim().length > 20;
-            })
-            .slice(0, 1); // Max 1 excerpt per response for non-high-risk
-          
-          textAnswers.forEach(answer => {
-            if (responseExcerpts.length < 15) { // Limit total excerpts
-              const text = answer.answerText || (answer.answer && answer.answer.text);
-              responseExcerpts.push({
-                questionCode: answer.questionCode || 'Unknown',
-                excerpt: text.trim().substring(0, 250)
-              });
-            }
-          });
-        }
-      }
-    }
-
-    // Prepare input data for narrative generation
-    const inputData = {
-      dashboardMetrics,
-      topRiskyQuestions,
-      responseExcerpts: responseExcerpts.length > 0 ? responseExcerpts : undefined,
-      tensionSummaries: tensionSummaries.length > 0 ? tensionSummaries : undefined
-    };
-
-    // Generate narrative
-    const narrative = await generateDashboardNarrative(inputData);
-
-    res.json({
-      success: true,
-      narrative
-    });
-  } catch (err) {
-    console.error('Error generating dashboard narrative:', err);
-    res.status(err.statusCode || 500).json({ 
-      success: false,
-      error: err.message || 'Failed to generate dashboard narrative'
-    });
-  }
-};
-
-/**
- * GET /api/projects/:projectId/analytics
- * Get analytics data for dashboard and report generation
- * Query param: questionnaireKey (default: 'general-v1')
- */
-exports.getProjectAnalytics = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const { questionnaireKey = 'general-v1' } = req.query;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
-
-    // Authorization: admin can view all. Expert/Viewer can view assigned projects.
-    if (roleCategory !== 'admin') {
-      const projectIdObj = isValidObjectId(projectId)
-        ? new mongoose.Types.ObjectId(projectId)
-        : projectId;
-      const ok = await isUserAssignedToProject({
-        userIdObj,
-        projectIdObj: toObjectIdOrValue(projectIdObj)
-      });
-      if (!ok) {
-        return res.status(403).json({ error: 'Not authorized to view analytics for this project.' });
-      }
-    }
-
-    console.log(`📊 Fetching analytics for project: ${projectId}, questionnaire: ${questionnaireKey}`);
-
-    const analytics = await getProjectAnalytics(projectId, questionnaireKey);
-
-    res.json(analytics);
-  } catch (err) {
-    console.error('Error fetching analytics:', err);
-    res.status(err.statusCode || 500).json({ 
-      error: err.message || 'Failed to fetch analytics' 
-    });
-  }
-};
-
-/**
- * POST /api/projects/:projectId/reports/generate-pdf
- * Generate professional PDF report with dashboard layout
- * Query param: questionnaireKey (default: 'general-v1')
- */
-exports.generatePDFReport = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const { questionnaireKey = 'general-v1' } = req.query;
-    const { user, userIdObj, roleCategory } = await loadRequestUser(req);
-
-    if (roleCategory !== 'admin') {
-      return res.status(403).json({ error: 'Only Admin can generate PDF reports.' });
-    }
-
-    if (!projectId) {
-      return res.status(400).json({ error: 'Project ID is required' });
-    }
-
-    console.log(`📊 Generating PDF dashboard report for project: ${projectId}, questionnaire: ${questionnaireKey}`);
-
-    // Generate PDF report
-    const pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
-      generatedAt: new Date()
-    });
-
-    // Save report to database
-    const report = await generateAndSavePDFReport(projectId, questionnaireKey, userIdObj, {
-      generatedAt: new Date()
-    });
-
-    console.log('✅ PDF report generated and saved:', report._id);
-
-    // Notify assigned experts (non-blocking)
-    try {
-      const Message = mongoose.model('Message');
-      const projectIdObj = isValidObjectId(projectId)
-        ? new mongoose.Types.ObjectId(projectId)
-        : projectId;
-      
-      // Get project to find assigned users
-      const project = await Project.findById(projectIdObj).select('assignedUsers title').lean();
-      
-      if (project && project.assignedUsers && project.assignedUsers.length > 0) {
-        const assignedUserIds = project.assignedUsers
-          .map(id => {
-            const idStr = id.toString ? id.toString() : String(id);
-            return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : id;
-          })
-          .filter(id => {
-            // Exclude the admin who generated the report
-            if (userIdObj) {
-              const idStr = id.toString ? id.toString() : String(id);
-              const userIdStr = userIdObj.toString ? userIdObj.toString() : String(userIdObj);
-              return idStr !== userIdStr;
-            }
-            return true;
-          });
-
-        if (assignedUserIds.length > 0) {
-          const projectTitle = project.title || report.title || 'Project';
-          const notificationText = `[NOTIFICATION] A new PDF report has been generated for project "${projectTitle}". You can review it in the Reports section.`;
-          
-          await Promise.all(
-            assignedUserIds.map(assignedUserId =>
-              Message.create({
-                projectId: projectIdObj,
-                fromUserId: userIdObj || assignedUserId,
-                toUserId: assignedUserId,
-                text: notificationText,
-                isNotification: true,
-                createdAt: new Date(),
-                readAt: null,
-              })
-            )
-          );
-          
-          console.log(`📬 Notifications sent to ${assignedUserIds.length} assigned expert(s) for PDF report`);
-        }
-      }
-    } catch (notificationError) {
-      // Don't fail report generation if notification fails
-      console.error('⚠️ Error sending notifications:', notificationError);
-    }
-
-    // Return PDF for download
-    const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${report._id}.pdf`;
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    res.send(pdfBuffer);
-  } catch (err) {
-    console.error('❌ Error generating PDF report:', err);
-    console.error('❌ Error stack:', err.stack);
-    
-    let errorMessage = err.message || 'Failed to generate PDF report';
-    
-    if (err.message && (err.message.includes('404') || err.message.includes('NOT_FOUND'))) {
-      if (!errorMessage.includes('Gemini API')) {
-        errorMessage = 'Gemini API model not found. Please check API key and model availability. ' + errorMessage;
-      }
-    } else if (err.message && (err.message.includes('API key') || err.message.includes('PERMISSION_DENIED'))) {
-      if (!errorMessage.includes('API Key')) {
-        errorMessage = 'Invalid Gemini API key. Please check your API key. ' + errorMessage;
-      }
-    } else if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED'))) {
-      errorMessage = 'API quota exceeded. Please try again later.';
-    }
-    
-    res.status(500).json({ 
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-      originalError: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-  }
-};
-
-/**
- * GET /api/reports/:id/download-pdf
- * Download existing PDF report
- */
-exports.downloadPDFReport = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Enhanced error handling for loadRequestUser
-    let userIdObj, roleCategory;
-    try {
-      const userData = await loadRequestUser(req);
-      userIdObj = userData.userIdObj;
-      roleCategory = userData.roleCategory;
-    } catch (authError) {
-      console.error('❌ Error loading user from request:', authError);
-      return res.status(authError.statusCode || 400).json({ 
-        error: authError.message || 'User ID is required for this operation' 
-      });
-    }
-
-    const report = await Report.findById(id)
-      .select('title projectId computedMetrics geminiNarrative questionnaireKey generatedAt metadata hiddenForUsers')
-      .populate('projectId', 'title')
-      .lean();
-
-    if (!report) {
-      return res.status(404).json({ error: 'Report not found' });
-    }
-
-    // Check if report is hidden for this user (soft delete)
-    if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
-      const userIdStr = userIdObj.toString();
-      const isHidden = report.hiddenForUsers.some(hiddenId => 
-        hiddenId && hiddenId.toString() === userIdStr
-      );
-      if (isHidden && roleCategory !== 'admin') {
-        return res.status(404).json({ error: 'Report not found' });
-      }
-    }
-
-    // Authorization: admin can export all. Expert/Viewer can export assigned reports.
-    if (roleCategory !== 'admin') {
-      const projectIdObj = report?.projectId?._id || report?.projectId;
-      const ok = await isUserAssignedToProject({
-        userIdObj,
-        projectIdObj: toObjectIdOrValue(projectIdObj)
-      });
-      if (!ok) {
-        return res.status(403).json({ error: 'Not authorized to download this report.' });
-      }
-    }
-
-    console.log('📄 Regenerating PDF for report:', id);
-
-    // Regenerate PDF (charts are generated on-demand)
-    const projectId = report.projectId?._id || report.projectId;
-    if (!projectId) {
-      console.error('❌ Missing projectId in report:', id);
-      return res.status(500).json({ error: 'Report is missing project information' });
-    }
-    
-    const questionnaireKey = report.questionnaireKey || report.computedMetrics?.project?.questionnaireKey || 'general-v1';
-    if (!questionnaireKey) {
-      console.error('❌ Missing questionnaireKey in report:', id);
-      return res.status(500).json({ error: 'Report is missing questionnaire information' });
-    }
-    
-    // Validate projectId format
-    if (!isValidObjectId(projectId)) {
-      console.error('❌ Invalid projectId format:', projectId);
-      return res.status(500).json({ error: `Invalid projectId format: ${projectId}` });
-    }
-    
-    let pdfBuffer;
-    try {
-      pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
-        generatedAt: report.generatedAt ? new Date(report.generatedAt) : new Date()
-      });
-    } catch (pdfGenError) {
-      console.error('❌ Error in generatePDFReportService:', pdfGenError);
-      console.error('❌ PDF generation error stack:', pdfGenError?.stack);
-      console.error('❌ Report ID:', id);
-      console.error('❌ Project ID:', projectId);
-      console.error('❌ Questionnaire Key:', questionnaireKey);
-      return res.status(500).json({ 
-        error: `PDF generation failed: ${pdfGenError?.message || 'Unknown error'}`,
-        details: process.env.NODE_ENV === 'development' ? {
-          message: pdfGenError?.message,
-          stack: pdfGenError?.stack,
-          reportId: id,
-          projectId: projectId?.toString(),
-          questionnaireKey: questionnaireKey
-        } : undefined
-      });
-    }
-    
-    if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
-      console.error('❌ PDF generation returned invalid buffer');
-      return res.status(500).json({ error: 'PDF generation returned invalid buffer' });
-    }
-    
-    if (pdfBuffer.length === 0) {
-      console.error('❌ PDF generation returned empty buffer');
-      return res.status(500).json({ error: 'PDF generation returned empty buffer' });
-    }
-
-    const fileName = `${(report.title || 'report').replace(/[^a-z0-9]/gi, '_')}_${id}.pdf`;
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    res.send(pdfBuffer);
-  } catch (err) {
-    console.error('❌ Error in downloadPDFReport:', err);
-    console.error('❌ Error stack:', err.stack);
-    console.error('❌ Report ID:', req.params.id);
-    console.error('❌ User ID from request:', getUserIdFromReq(req));
-    console.error('❌ Request query:', req.query);
-    console.error('❌ Request body:', req.body);
-    
-    const errorMessage = err.message || 'Failed to generate PDF';
-    const errorDetails = process.env.NODE_ENV === 'development' 
-      ? {
-          message: errorMessage,
-          stack: err.stack,
-          statusCode: err.statusCode,
-          reportId: req.params.id,
-          userId: getUserIdFromReq(req)
-        }
-      : { message: errorMessage };
-    
-    res.status(err.statusCode || 500).json({ 
-      error: errorMessage,
-      details: errorDetails
-    });
-  }
-};
-
-/**
- * GET /api/reports/:id/file
- * Serve stored report file (PDF/DOCX)
- */
-exports.getReportFile = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Enhanced error handling for loadRequestUser
-    let userIdObj, roleCategory;
-    try {
-      const userData = await loadRequestUser(req);
-      userIdObj = userData.userIdObj;
-      roleCategory = userData.roleCategory;
-    } catch (authError) {
-      console.error('❌ Error loading user from request:', authError);
-      return res.status(authError.statusCode || 400).json({ 
-        error: authError.message || 'User ID is required for this operation' 
-      });
-    }
-
-    const report = await Report.findById(id)
-      .select('filePath fileUrl mimeType fileSize projectId hiddenForUsers')
-      .populate('projectId', 'title')
-      .lean();
-
-    if (!report) {
-      return res.status(404).json({ error: 'Report not found' });
-    }
-
-    // Check if report is hidden for this user (soft delete)
-    if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
-      const userIdStr = userIdObj.toString();
-      const isHidden = report.hiddenForUsers.some(hiddenId => 
-        hiddenId && hiddenId.toString() === userIdStr
-      );
-      if (isHidden && roleCategory !== 'admin') {
-        return res.status(404).json({ error: 'Report not found' });
-      }
-    }
-
-    // Authorization: admin can view all. Expert/Viewer can view assigned reports.
-    if (roleCategory !== 'admin') {
-      const projectIdObj = report?.projectId?._id || report?.projectId;
-      const ok = await isUserAssignedToProject({
-        userIdObj,
-        projectIdObj: toObjectIdOrValue(projectIdObj)
-      });
-      if (!ok) {
-        return res.status(403).json({ error: 'Not authorized to view this report.' });
-      }
-    }
-
-    // If filePath doesn't exist, regenerate PDF on-the-fly
-    if (!report.filePath) {
-      console.log('⚠️ Report file not found on disk, regenerating PDF on-the-fly...');
-      
-      // Get report details to regenerate
-      const fullReport = await Report.findById(id)
-        .select('projectId questionnaireKey generatedAt title computedMetrics')
-        .populate('projectId', 'title')
-        .lean();
-      
-      if (!fullReport) {
-        return res.status(404).json({ error: 'Report not found' });
-      }
-      
-      const projectId = fullReport.projectId?._id || fullReport.projectId;
-      if (!projectId) {
-        console.error('❌ Missing projectId in report:', id);
-        return res.status(500).json({ error: 'Report is missing project information' });
-      }
-      
-      const questionnaireKey = fullReport.questionnaireKey || fullReport.computedMetrics?.project?.questionnaireKey || 'general-v1';
-      
-      if (!questionnaireKey) {
-        console.error('❌ Missing questionnaireKey in report:', id);
-        return res.status(500).json({ error: 'Report is missing questionnaire information' });
-      }
-      
-      try {
-        console.log(`📄 Regenerating PDF for report ${id}, projectId: ${projectId}, questionnaireKey: ${questionnaireKey}`);
-        
-        // Validate projectId format
-        if (!isValidObjectId(projectId)) {
-          throw new Error(`Invalid projectId format: ${projectId}`);
-        }
-        
-        // Regenerate PDF
-        let pdfBuffer;
-        try {
-          pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
-            generatedAt: fullReport.generatedAt ? new Date(fullReport.generatedAt) : new Date()
-          });
-        } catch (pdfGenError) {
-          console.error('❌ Error in generatePDFReportService:', pdfGenError);
-          console.error('❌ PDF generation error stack:', pdfGenError?.stack);
-          throw new Error(`PDF generation failed: ${pdfGenError?.message || 'Unknown error'}`);
-        }
-        
-        if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
-          throw new Error('PDF generation returned invalid buffer');
-        }
-        
-        if (pdfBuffer.length === 0) {
-          throw new Error('PDF generation returned empty buffer');
-        }
-        
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${fullReport.projectId?.title || 'report'}.pdf"`);
-        res.setHeader('Content-Length', pdfBuffer.length);
-        
-        return res.send(pdfBuffer);
-      } catch (regenerateError) {
-        console.error('❌ Error regenerating PDF:', regenerateError);
-        console.error('❌ Error stack:', regenerateError.stack);
-        console.error('❌ Report ID:', id);
-        console.error('❌ Project ID:', projectId);
-        console.error('❌ Questionnaire Key:', questionnaireKey);
-        
-        // Return more detailed error message
-        const errorMessage = regenerateError.message || 'Unknown error occurred';
-        const errorDetails = process.env.NODE_ENV === 'development' 
-          ? {
-              message: errorMessage,
-              stack: regenerateError.stack,
-              reportId: id,
-              projectId: projectId?.toString(),
-              questionnaireKey: questionnaireKey
-            }
-          : { message: errorMessage };
-        
-        return res.status(500).json({ 
-          error: `Failed to generate report file: ${errorMessage}`,
-          details: errorDetails
-        });
-      }
-    }
-
-    const fs = require('fs').promises;
-    try {
-      const fileBuffer = await fs.readFile(report.filePath);
-      
-      res.setHeader('Content-Type', report.mimeType || 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${report.projectId?.title || 'report'}.pdf"`);
-      res.setHeader('Content-Length', fileBuffer.length);
-      
-      res.send(fileBuffer);
-    } catch (fileError) {
-      console.error('❌ Error reading report file:', fileError);
-      console.error('❌ File path:', report.filePath);
-      
-      // Try to regenerate if file read fails
-      console.log('⚠️ File read failed, attempting to regenerate PDF...');
-      const fullReport = await Report.findById(id)
-        .select('projectId questionnaireKey generatedAt title computedMetrics')
-        .populate('projectId', 'title')
-        .lean();
-      
-      if (fullReport) {
-        const projectId = fullReport.projectId?._id || fullReport.projectId;
-        if (!projectId) {
-          console.error('❌ Missing projectId in report:', id);
-          return res.status(500).json({ error: 'Report is missing project information' });
-        }
-        
-        const questionnaireKey = fullReport.questionnaireKey || fullReport.computedMetrics?.project?.questionnaireKey || 'general-v1';
-        
-        if (!questionnaireKey) {
-          console.error('❌ Missing questionnaireKey in report:', id);
-          return res.status(500).json({ error: 'Report is missing questionnaire information' });
-        }
-        
-        try {
-          console.log(`📄 Regenerating PDF for report ${id}, projectId: ${projectId}, questionnaireKey: ${questionnaireKey}`);
-          
-          // Validate projectId format
-          if (!isValidObjectId(projectId)) {
-            throw new Error(`Invalid projectId format: ${projectId}`);
-          }
-          
-          let pdfBuffer;
-          try {
-            pdfBuffer = await generatePDFReportService(projectId, questionnaireKey, {
-              generatedAt: fullReport.generatedAt ? new Date(fullReport.generatedAt) : new Date()
-            });
-          } catch (pdfGenError) {
-            console.error('❌ Error in generatePDFReportService (fallback):', pdfGenError);
-            console.error('❌ PDF generation error stack:', pdfGenError?.stack);
-            throw new Error(`PDF generation failed: ${pdfGenError?.message || 'Unknown error'}`);
-          }
-          
-          if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
-            throw new Error('PDF generation returned invalid buffer');
-          }
-          
-          if (pdfBuffer.length === 0) {
-            throw new Error('PDF generation returned empty buffer');
-          }
-          
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="${fullReport.projectId?.title || 'report'}.pdf"`);
-          res.setHeader('Content-Length', pdfBuffer.length);
-          
-          return res.send(pdfBuffer);
-        } catch (regenerateError) {
-          console.error('❌ Error regenerating PDF:', regenerateError);
-          console.error('❌ Error stack:', regenerateError.stack);
-          console.error('❌ Report ID:', id);
-          console.error('❌ Project ID:', projectId);
-          console.error('❌ Questionnaire Key:', questionnaireKey);
-          
-          // Return more detailed error message
-          const errorMessage = regenerateError.message || 'Unknown error occurred';
-          const errorDetails = process.env.NODE_ENV === 'development' 
-            ? {
-                message: errorMessage,
-                stack: regenerateError.stack,
-                reportId: id,
-                projectId: projectId?.toString(),
-                questionnaireKey: questionnaireKey
-              }
-            : { message: errorMessage };
-          
-          return res.status(500).json({ 
-            error: `Failed to regenerate report file: ${errorMessage}`,
-            details: errorDetails
-          });
-        }
-      }
-      
-      res.status(404).json({ error: 'Report file not found on disk' });
-    }
-  } catch (err) {
-    console.error('❌ Error serving report file:', err);
-    console.error('❌ Error stack:', err.stack);
-    console.error('❌ Report ID:', req.params.id);
-    console.error('❌ User ID from request:', getUserIdFromReq(req));
-    console.error('❌ Request query:', req.query);
-    console.error('❌ Request body:', req.body);
-    
-    const errorMessage = err.message || 'Failed to serve report file';
-    const errorDetails = process.env.NODE_ENV === 'development' 
-      ? {
-          message: errorMessage,
-          stack: err.stack,
-          statusCode: err.statusCode,
-          reportId: req.params.id,
-          userId: getUserIdFromReq(req)
-        }
-      : { message: errorMessage };
-    
-    res.status(err.statusCode || 500).json({ 
-      error: errorMessage,
-      details: errorDetails
-    });
-  }
-};
-
-/**
- * GET /api/projects/:projectId/reports/latest
- * Get latest report for a project
- */
-exports.getLatestReport = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
-
-    // Authorization
-    if (roleCategory !== 'admin') {
-      const projectIdObj = isValidObjectId(projectId)
-        ? new mongoose.Types.ObjectId(projectId)
-        : projectId;
-      const ok = await isUserAssignedToProject({
-        userIdObj,
-        projectIdObj: toObjectIdOrValue(projectIdObj)
-      });
-      if (!ok) {
-        return res.status(403).json({ error: 'Not authorized to view reports for this project.' });
-      }
-    }
-
-    const projectIdObj = isValidObjectId(projectId)
-      ? new mongoose.Types.ObjectId(projectId)
-      : projectId;
-
-    // Get latest report with file metadata
-    // Sort by generatedAt (preferred) or createdAt (fallback) descending
-    // Also consider version field to ensure we get the most recent report
-    // Exclude reports hidden for this user (unless admin, who can see all)
-    const query = { projectId: projectIdObj };
-    if (roleCategory !== 'admin') {
-      query.hiddenForUsers = { $ne: userIdObj }; // Exclude reports hidden for this user
-    }
-    
-    const report = await Report.findOne(query)
-      .sort({ 
-        generatedAt: -1, 
-        createdAt: -1,
-        version: -1  // Also sort by version to ensure latest version
-      })
-      .select('_id title generatedAt createdAt fileUrl filePath mimeType fileSize hash version status questionnaireKey')
-      .lean();
-
-    if (!report) {
-      return res.json({ report: null });
-    }
-
-    // Ensure title exists (fallback to default)
-    if (!report.title) {
-      report.title = 'Analysis Report';
-    }
-
-    // Ensure fileUrl is set (use API endpoint if filePath exists but fileUrl doesn't)
-    if (!report.fileUrl && report.filePath) {
-      report.fileUrl = `/api/reports/${report._id}/file`;
-    }
-
-    // Ensure generatedAt exists (use createdAt as fallback)
-    if (!report.generatedAt && report.createdAt) {
-      report.generatedAt = report.createdAt;
-    }
-
-    res.json({ report });
-  } catch (err) {
-    console.error('Error fetching latest report:', err);
-    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to fetch latest report' });
   }
 };
 
