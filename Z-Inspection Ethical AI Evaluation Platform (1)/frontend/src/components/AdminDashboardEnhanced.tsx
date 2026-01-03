@@ -1524,6 +1524,112 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     }
   };
 
+  // Download report as HTML
+  const handleDownloadHTML = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent card click event
+    }
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download-html?userId=${currentUser.id}`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.html`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json();
+        alert('HTML indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading HTML:', error);
+      alert('HTML indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
+  // Download report as Word (DOCX)
+  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
+    try {
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
+      
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        const expectedTypes = [
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/octet-stream',
+          'application/zip'
+        ];
+        
+        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
+          const text = await response.text();
+          try {
+            const error = JSON.parse(text);
+            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
+          } catch {
+            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
+        const blob = await response.blob();
+        if (blob.size === 0) {
+          alert('Word dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+        }
+        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
+      }
+    } catch (error: any) {
+      console.error('Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
+    }
+  };
+
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) {
@@ -1632,6 +1738,22 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           PDF
                         </button>
                         <button
+                          onClick={(e) => handleDownloadHTML(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download HTML"
+                        >
+                          <Download className="h-4 w-4" />
+                          HTML
+                        </button>
+                        <button
+                          onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download Word"
+                        >
+                          <Download className="h-4 w-4" />
+                          Word
+                        </button>
+                        <button
                           onClick={(e) => handleDeleteReport(reportId, report.title, e)}
                           className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
                           title="Delete Report"
@@ -1701,6 +1823,18 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                 >
                   <Download className="h-4 w-4" />
                   Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadDOCX(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Word
                 </button>
                 <button
                   onClick={() => {
@@ -1831,6 +1965,112 @@ function ReportsTab({ projects, currentUser, users }: any) {
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
+  // Download report as HTML
+  const handleDownloadHTML = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent card click event
+    }
+    try {
+      const response = await fetch(api(`/api/reports/${reportId}/download-html?userId=${currentUser.id}`));
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.html`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json();
+        alert('HTML indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+      }
+    } catch (error: any) {
+      console.error('Error downloading HTML:', error);
+      alert('HTML indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    }
+  };
+
+  // Download report as Word (DOCX)
+  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
+    try {
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      if (!userId) {
+        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        return;
+      }
+      
+      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
+      
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        const expectedTypes = [
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/octet-stream',
+          'application/zip'
+        ];
+        
+        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
+          const text = await response.text();
+          try {
+            const error = JSON.parse(text);
+            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
+          } catch {
+            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
+          }
+          return;
+        }
+        
+        const blob = await response.blob();
+        if (blob.size === 0) {
+          alert('Word dosyası boş. Lütfen tekrar deneyin.');
+          return;
+        }
+        
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        let errorMessage = 'Bilinmeyen hata';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch {
+          const text = await response.text();
+          errorMessage = text.substring(0, 200) || errorMessage;
+        }
+        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
+      }
+    } catch (error: any) {
+      console.error('Error downloading Word:', error);
+      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+    } finally {
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
     }
   };
 
@@ -2073,6 +2313,22 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           PDF
                         </button>
                         <button
+                          onClick={(e) => handleDownloadHTML(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download HTML"
+                        >
+                          <Download className="h-4 w-4" />
+                          HTML
+                        </button>
+                        <button
+                          onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
+                          className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
+                          title="Download Word"
+                        >
+                          <Download className="h-4 w-4" />
+                          Word
+                        </button>
+                        <button
                           onClick={(e) => handleDeleteReport(reportId, report.title, e)}
                           className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
                           title="Delete Report"
@@ -2142,6 +2398,18 @@ function ReportsTab({ projects, currentUser, users }: any) {
                 >
                   <Download className="h-4 w-4" />
                   Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedReport) {
+                      const reportId = selectedReport._id || selectedReport.id;
+                      handleDownloadDOCX(reportId, selectedReport.title);
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Word
                 </button>
                 <button
                   onClick={() => {

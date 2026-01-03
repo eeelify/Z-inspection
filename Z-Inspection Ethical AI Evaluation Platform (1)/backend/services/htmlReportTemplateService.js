@@ -22,10 +22,40 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
 
   // Helper to encode base64 images
   const getChartImage = (key) => {
-    if (chartImages[key] && Buffer.isBuffer(chartImages[key])) {
-      return `data:image/png;base64,${chartImages[key].toString('base64')}`;
+    if (!chartImages[key]) {
+      return '';
     }
-    return chartImages[key] || '';
+    
+    const img = chartImages[key];
+    
+    // Already a data URI string
+    if (typeof img === 'string' && img.startsWith('data:image/')) {
+      return img;
+    }
+    
+    // Buffer - convert to data URI
+    if (Buffer.isBuffer(img)) {
+      return `data:image/png;base64,${img.toString('base64')}`;
+    }
+    
+    // Uint8Array - convert to Buffer then data URI
+    if (img instanceof Uint8Array) {
+      return `data:image/png;base64,${Buffer.from(img).toString('base64')}`;
+    }
+    
+    // Object with buffer property
+    if (typeof img === 'object' && img.buffer) {
+      const buffer = Buffer.isBuffer(img.buffer) ? img.buffer : Buffer.from(img.buffer);
+      return `data:image/png;base64,${buffer.toString('base64')}`;
+    }
+    
+    // Plain base64 string (without data: prefix)
+    if (typeof img === 'string' && img.length > 0) {
+      return `data:image/png;base64,${img}`;
+    }
+    
+    // Fallback: return as string if possible
+    return String(img || '');
   };
 
   // Helper to format date
@@ -36,19 +66,9 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
   };
 
   // Risk tier mapping using shared function
-  // Scoring interpretation: 0 = worst (highest risk/critical concern), 4 = best (lowest risk)
-  // Lower score = Higher risk, Higher score = Lower risk
-  const { riskLabel } = require('../utils/riskLabel');
-  const getRiskTier = (score) => {
-    const label = riskLabel(score);
-    const colorMap = {
-      'Low': '#10b981',      // Green - lowest risk
-      'Moderate': '#f59e0b', // Amber
-      'High': '#ef4444',     // Red
-      'Critical': '#dc2626'  // Dark red - highest risk
-    };
-    return { label, color: colorMap[label] || '#6b7280' };
-  };
+  // CORRECT SCALE (FIXED): 0 = MINIMAL RISK, 1 = LOW, 2 = MEDIUM, 3 = HIGH, 4 = CRITICAL
+  // Higher score = Higher risk, Lower score = Lower risk
+  const { getRiskTier } = require('../utils/riskUtils');
 
   const overallAvg = scoring.totalsOverall?.avg || 0;
   const overallRisk = getRiskTier(overallAvg);
@@ -332,18 +352,10 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
           <span class="risk-badge risk-${overallRisk.label.toLowerCase()}">${overallRisk.label} Risk</span>
         </div>
         <div style="margin-top: 0.3cm; font-size: 9pt; color: #6b7280;">
-          Based on ${scoring.totalsOverall?.count || 0} evaluator submission(s)
+          Based on ${coverage.expertsSubmittedCount || 0} evaluator submission(s)
         </div>
       </div>
 
-      <div class="dashboard-card">
-        <h3>Team Completion</h3>
-        <div class="stat-value">${coverage.expertsSubmittedCount || 0}/${coverage.assignedExpertsCount || 0}</div>
-        <div class="stat-label">Experts Submitted</div>
-        <div style="margin-top: 0.3cm; font-size: 9pt; color: #6b7280;">
-          ${coverage.expertsStartedCount || 0} started, ${coverage.assignedExpertsCount || 0} assigned
-        </div>
-      </div>
 
       <div class="dashboard-card">
         <h3>Ethical Tensions</h3>
@@ -372,13 +384,17 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <h3>Ethical Principles Score Overview</h3>
       <img src="${getChartImage('principleBarChart')}" alt="Principle Scores Chart" class="chart-image" />
       <div class="chart-legend">
-        <h4>Scale 0–4 (0 = lowest risk, 4 = highest risk)</h4>
+        <h4>Scale 0–4 (CORRECT Risk Interpretation)</h4>
         <ul>
-          <li><strong>0.0–1.0:</strong> Low</li>
-          <li><strong>1.0–2.0:</strong> Moderate</li>
-          <li><strong>2.0–3.0:</strong> High</li>
-          <li><strong>3.0–4.0:</strong> Critical</li>
+          <li><strong>0.0:</strong> MINIMAL/NO RISK (well-managed, no concerns)</li>
+          <li><strong>1.0:</strong> LOW RISK (acceptable with minor concerns)</li>
+          <li><strong>2.0:</strong> MEDIUM RISK (requires monitoring)</li>
+          <li><strong>3.0:</strong> HIGH RISK (requires immediate attention)</li>
+          <li><strong>4.0:</strong> MAX/CRITICAL RISK (requires urgent intervention)</li>
         </ul>
+        <p style="margin-top: 0.3cm; font-weight: bold; color: #dc2626;">
+          CRITICAL: Higher numeric score = Higher ethical risk. Lower numeric score = Lower ethical risk.
+        </p>
         <p style="margin-top: 0.3cm; font-style: italic; color: #6b7280;">
           <strong>Note:</strong> Scores are canonical from scores collection; Gemini does not compute scores.
         </p>
@@ -393,7 +409,8 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <img src="${getChartImage('principleEvaluatorHeatmap')}" alt="Principle-Evaluator Heatmap" class="chart-image" />
       <div class="chart-legend">
         <h4>Heatmap Legend</h4>
-        <p>Cells show evaluator's average risk score per principle (0-4 scale, 0 = lowest risk, 4 = highest risk).</p>
+        <p>Cells show evaluator's average risk score per principle (0-4 scale, 0 = MINIMAL risk, 4 = CRITICAL risk).</p>
+        <p><strong>CRITICAL:</strong> Higher score = Higher risk. Score 0 = MINIMAL RISK, Score 4 = CRITICAL RISK.</p>
         <p><strong>N/A</strong> = evaluator did not submit responses for this principle.</p>
         <p>Only evaluators with submitted responses (status="submitted") are shown.</p>
         <p><strong>Note:</strong> Evaluators are derived from scores collection - no hardcoded "Expert 1/2" labels.</p>
@@ -401,39 +418,45 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     </div>
     ` : ''}
     
-    <!-- Evidence Coverage Donut -->
-    ${getChartImage('evidenceCoverageChart') ? `
-    <div class="chart-container">
-      <h3>Evidence Coverage</h3>
-      <img src="${getChartImage('evidenceCoverageChart')}" alt="Evidence Coverage Chart" class="chart-image" />
-      <div class="chart-legend">
-        <h4>Coverage Explanation</h4>
-        <p>Percentage of tensions that have at least one evidence item attached.</p>
-        <p><strong>With Evidence:</strong> Tensions with evidence count > 0</p>
-        <p><strong>No Evidence:</strong> Tensions with no evidence attached</p>
-      </div>
-    </div>
-    ` : ''}
-    
-    <!-- Evidence Type Donut -->
-    ${getChartImage('evidenceTypeChart') ? `
-    <div class="chart-container">
-      <h3>Evidence Type Distribution</h3>
-      <img src="${getChartImage('evidenceTypeChart')}" alt="Evidence Type Chart" class="chart-image" />
-      <div class="chart-legend">
-        <h4>Evidence Types</h4>
-        <p>Distribution of evidence types across all tensions (Policy, Test, User feedback, Log, Incident, Other).</p>
-      </div>
-    </div>
-    ` : ''}
+    <!-- TASK 7: Evidence charts removed (invalid/misleading per Z-Inspection methodology) -->
 
-    <!-- Executive Summary -->
-    ${geminiNarrative?.executiveSummary ? `
+    <!-- Executive Summary (structured) -->
+    ${geminiNarrative?.executiveSummary && geminiNarrative.executiveSummary.length > 0 ? `
     <div class="section">
       <h2>Executive Summary</h2>
       <ul style="margin-left: 1.5cm; margin-top: 0.5cm;">
         ${geminiNarrative.executiveSummary.map(point => `<li style="margin-bottom: 0.3cm;">${point}</li>`).join('')}
       </ul>
+    </div>
+    ` : ''}
+    
+    <!-- Narrative Content (markdown fallback) -->
+    ${geminiNarrative?.markdown && (!geminiNarrative?.executiveSummary || geminiNarrative.executiveSummary.length === 0) ? `
+    <div class="section" style="margin-top: 1cm;">
+      <div style="font-family: inherit; line-height: 1.6;">
+        ${(() => {
+          let html = geminiNarrative.markdown;
+          // Convert headers
+          html = html.replace(/^## (.+)$/gm, '<h2 style="margin-top: 1cm; margin-bottom: 0.5cm; color: #1e40af; border-bottom: 2px solid #3b82f6; padding-bottom: 0.2cm;">$1</h2>');
+          html = html.replace(/^### (.+)$/gm, '<h3 style="margin-top: 0.8cm; margin-bottom: 0.4cm; color: #374151;">$1</h3>');
+          // Convert bold
+          html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+          // Convert italic
+          html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+          // Convert bullet lists
+          html = html.replace(/^- (.+)$/gm, '<li style="margin-left: 1.5cm; margin-bottom: 0.3cm;">$1</li>');
+          // Wrap consecutive list items in ul
+          html = html.replace(/(<li[^>]*>.*?<\/li>(?:\s*<li[^>]*>.*?<\/li>)*)/gs, '<ul style="margin-top: 0.5cm; margin-bottom: 0.5cm;">$1</ul>');
+          // Convert line breaks
+          html = html.replace(/\n\n/g, '</p><p style="margin-top: 0.5cm; margin-bottom: 0.5cm;">');
+          html = html.replace(/\n/g, '<br>');
+          // Wrap in paragraph
+          if (!html.startsWith('<h')) {
+            html = '<p>' + html + '</p>';
+          }
+          return html;
+        })()}
+      </div>
     </div>
     ` : ''}
   </div>
@@ -556,36 +579,14 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       </div>
       ` : ''}
       
-      ${getChartImage('severityChart') ? `
+      ${getChartImage('tensionSeverityChart') ? `
       <div class="chart-container">
         <h3>Tension Severity Distribution</h3>
-        <img src="${getChartImage('severityChart')}" alt="Tension Severity Chart" class="chart-image" />
+        <img src="${getChartImage('tensionSeverityChart')}" alt="Tension Severity Chart" class="chart-image" />
       </div>
       ` : ''}
       
-      ${getChartImage('evidenceTypeChart') ? `
-      <div class="chart-container">
-        <h3>Evidence Type Distribution</h3>
-        <img src="${getChartImage('evidenceTypeChart')}" alt="Evidence Type Chart" class="chart-image" />
-        <div class="chart-legend">
-          <h4>Evidence Types</h4>
-          <p>Distribution of evidence types across all tensions (Policy, Test, User feedback, Log, Incident, Other).</p>
-        </div>
-      </div>
-      ` : ''}
-      
-      ${getChartImage('evidenceCoverageChart') ? `
-      <div class="chart-container">
-        <h3>Evidence Coverage</h3>
-        <img src="${getChartImage('evidenceCoverageChart')}" alt="Evidence Coverage Chart" class="chart-image" />
-        <div class="chart-legend">
-          <h4>Coverage Explanation</h4>
-          <p>Percentage of tensions that have at least one evidence item attached.</p>
-          <p><strong>With Evidence:</strong> Tensions with evidence count > 0</p>
-          <p><strong>No Evidence:</strong> Tensions with no evidence attached</p>
-        </div>
-      </div>
-      ` : ''}
+      <!-- TASK 7: Evidence charts removed (invalid/misleading per Z-Inspection methodology) -->
 
       <!-- Tensions Table -->
       ${((options.analytics?.tensionsTable && options.analytics.tensionsTable.length > 0) || (tensions.list && tensions.list.length > 0)) ? `
@@ -782,14 +783,15 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       
       <h3 style="margin-top: 0.8cm;">Risk Score Mapping</h3>
       <ul style="margin-left: 1.5cm; margin-top: 0.4cm;">
-        <li><strong>Score 4:</strong> Best/Low risk</li>
-        <li><strong>Score 3:</strong> Good/Acceptable risk</li>
-        <li><strong>Score 2:</strong> Moderate risk</li>
-        <li><strong>Score 1:</strong> High risk</li>
-        <li><strong>Score 0:</strong> Critical/Worst risk</li>
+        <li><strong>Score 0:</strong> Minimal/No Risk (best case)</li>
+        <li><strong>Score 1:</strong> Low Risk</li>
+        <li><strong>Score 2:</strong> Medium Risk</li>
+        <li><strong>Score 3:</strong> High Risk</li>
+        <li><strong>Score 4:</strong> Critical/Max Risk (worst case)</li>
       </ul>
+      <p style="margin-top: 0.3cm; font-size: 0.9em; color: #6b7280;"><em>Higher numeric score = Higher ethical risk. Lower numeric score = Lower ethical risk.</em></p>
       
-      <p style="margin-top: 0.4cm;"><strong>Risk Percentage Formula:</strong> Percentage of responses with score &lt; 3.0 (indicating risk)</p>
+      <p style="margin-top: 0.4cm;"><strong>Risk Percentage Formula:</strong> Percentage of responses with score &gt;= 2.0 (indicating medium or higher risk)</p>
       
       <!-- Data Integrity Checks -->
       ${(() => {
@@ -941,7 +943,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       
       <h3 style="margin-top: 0.8cm;">Glossary</h3>
       <ul style="margin-left: 1.5cm; margin-top: 0.4cm; font-size: 9pt;">
-        <li><strong>Risk Score:</strong> 0-4 scale where 0 = lowest risk, 4 = highest risk</li>
+        <li><strong>Risk Score:</strong> 0-4 scale where 0 = MINIMAL risk, 4 = CRITICAL risk (Higher score = Higher risk)</li>
         <li><strong>Risk %:</strong> Percentage of responses with score &lt; 3.0</li>
         <li><strong>Safe %:</strong> Percentage of responses with score &gt;= 3.0</li>
         <li><strong>Severity Levels:</strong> Critical, High, Medium, Low (based on avgRiskScore)</li>

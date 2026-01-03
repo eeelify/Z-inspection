@@ -105,7 +105,7 @@ async function initializeResponses(projectId, userId, role, questionnaires) {
             questionId: question._id,
             questionCode: question.code,
             answer: null, // Unanswered
-            score: 2, // Default score for unanswered questions (required field)
+            score: null, // Unanswered questions should have null score (will be filtered out in computeScores)
             notes: null,
             evidence: []
           }));
@@ -120,7 +120,7 @@ async function initializeResponses(projectId, userId, role, questionnaires) {
           questionId: question._id,
           questionCode: question.code,
           answer: null, // Unanswered
-          score: 2, // Default score for unanswered questions (required field)
+          score: null, // Unanswered questions should have null score (will be filtered out in computeScores)
           notes: null,
           evidence: []
         }));
@@ -164,8 +164,24 @@ async function saveDraftResponse(projectId, userId, questionnaireKey, answers) {
       throw new Error(`Questionnaire ${questionnaireKey} not found or inactive`);
     }
 
+    // CRITICAL DEBUG: Log incoming answers from frontend
+    console.log(`📥 [DEBUG saveDraftResponse] Received ${answers?.length || 0} answers from frontend for ${questionnaireKey}`);
+    if (answers && answers.length > 0) {
+      answers.slice(0, 3).forEach((ans, idx) => {
+        console.log(`   Answer ${idx + 1}: questionCode=${ans.questionCode}, choiceKey=${ans.answer?.choiceKey}, score=${ans.score || 'undefined'}`);
+      });
+    }
+
     // Validate and map answers
     const validatedAnswers = await validateAndMapAnswers(questionnaireKey, answers);
+    
+    // CRITICAL DEBUG: Log validated answers
+    console.log(`✅ [DEBUG saveDraftResponse] Validated ${validatedAnswers?.length || 0} answers`);
+    if (validatedAnswers && validatedAnswers.length > 0) {
+      validatedAnswers.slice(0, 3).forEach((ans, idx) => {
+        console.log(`   Validated ${idx + 1}: questionCode=${ans.questionCode}, score=${ans.score}, answer=${JSON.stringify(ans.answer)}`);
+      });
+    }
 
     // Save or update response
     const response = await Response.findOneAndUpdate(
@@ -298,11 +314,41 @@ async function validateAndMapAnswers(questionnaireKey, answers) {
       if (!answer.answer?.choiceKey) {
         throw new Error(`Missing choiceKey for question ${answer.questionCode}`);
       }
-      const option = question.options.find(opt => opt.key === answer.answer.choiceKey);
+      
+      // CRITICAL DEBUG: Log all available options
+      console.log(`🔍 [DEBUG validateAndMapAnswers] Question ${answer.questionCode}: Looking for choiceKey="${answer.answer.choiceKey}"`);
+      console.log(`🔍 [DEBUG validateAndMapAnswers] Available options: ${JSON.stringify(question.options.map(o => ({ key: o.key, score: o.score })))}`);
+      
+      // Try exact match first
+      let option = question.options.find(opt => opt.key === answer.answer.choiceKey);
+      
+      // If not found, try case-insensitive and normalize spaces/underscores
       if (!option) {
-        throw new Error(`Invalid choiceKey ${answer.answer.choiceKey} for question ${answer.questionCode}`);
+        const normalizedChoiceKey = answer.answer.choiceKey.toLowerCase().replace(/\s+/g, '_');
+        option = question.options.find(opt => {
+          const normalizedOptKey = opt.key.toLowerCase().replace(/\s+/g, '_');
+          return normalizedOptKey === normalizedChoiceKey;
+        });
+        
+        if (option) {
+          console.warn(`⚠️ [WARNING validateAndMapAnswers] Question ${answer.questionCode}: Found option using normalized matching. Original: "${answer.answer.choiceKey}" → Matched: "${option.key}"`);
+        }
       }
+      
+      if (!option) {
+        console.error(`❌ [ERROR validateAndMapAnswers] Question ${answer.questionCode}: No matching option found for choiceKey="${answer.answer.choiceKey}". Available options: ${question.options.map(o => o.key).join(', ')}`);
+        throw new Error(`Invalid choiceKey ${answer.answer.choiceKey} for question ${answer.questionCode}. Available options: ${question.options.map(o => o.key).join(', ')}`);
+      }
+      
+      // CRITICAL DEBUG: Log option score values
+      console.log(`✅ [DEBUG validateAndMapAnswers] Question ${answer.questionCode}: Found option key="${option.key}", score=${option.score}`);
+      
       score = option.score !== undefined ? option.score : 0;
+      
+      // WARNING: If score is 0 but option exists, it might be incorrectly set
+      if (score === 0 && option) {
+        console.warn(`⚠️ [WARNING validateAndMapAnswers] Question ${answer.questionCode}: Selected option "${answer.answer.choiceKey}" → "${option.key}" has score=0. This might be correct (MINIMAL risk) or incorrect (missing score).`);
+      }
     } else if (question.answerType === 'multi_choice') {
       if (!answer.answer?.multiChoiceKeys || answer.answer.multiChoiceKeys.length === 0) {
         throw new Error(`Missing multiChoiceKeys for question ${answer.questionCode}`);
@@ -397,11 +443,63 @@ async function computeScores(projectId, userId = null, questionnaireKey = null) 
 
       // Group answers by principle and build byQuestion array
       const byQuestion = [];
+      console.log(`📊 [DEBUG computeScores] Processing ${group.answers.length} answers for userId=${group.userId}, role=${group.role}`);
+      
       for (const answer of group.answers) {
         const question = await Question.findById(answer.questionId);
-        if (!question) continue;
+        if (!question) {
+          console.warn(`⚠️ [DEBUG computeScores] Question not found for answer.questionId=${answer.questionId}`);
+          continue;
+        }
 
-        const principle = question.principle;
+        let principle = question.principle;
+        
+        // CRITICAL: Map legal/role-specific principle names to CANONICAL_PRINCIPLES
+        // This ensures that all principle scores are aggregated correctly
+        const principleMapping = {
+          'TRANSPARENCY & EXPLAINABILITY': 'TRANSPARENCY',
+          'HUMAN OVERSIGHT & CONTROL': 'HUMAN AGENCY & OVERSIGHT',
+          'PRIVACY & DATA PROTECTION': 'PRIVACY & DATA GOVERNANCE',
+          'ACCOUNTABILITY & RESPONSIBILITY': 'ACCOUNTABILITY',
+          'LAWFULNESS & COMPLIANCE': 'ACCOUNTABILITY', // Legal compliance is part of accountability
+          'RISK MANAGEMENT & HARM PREVENTION': 'TECHNICAL ROBUSTNESS & SAFETY', // Risk management is part of technical robustness
+          'PURPOSE LIMITATION & DATA MINIMIZATION': 'PRIVACY & DATA GOVERNANCE', // Data minimization is part of privacy
+          'USER RIGHTS & AUTONOMY': 'HUMAN AGENCY & OVERSIGHT' // User rights are part of human agency
+        };
+        
+        // Map to canonical principle if needed
+        if (principleMapping[principle]) {
+          const mappedPrinciple = principleMapping[principle];
+          console.log(`🔄 [DEBUG computeScores] Mapping principle "${principle}" → "${mappedPrinciple}" for question ${question.code}`);
+          principle = mappedPrinciple;
+        }
+        
+        // CRITICAL: Skip unanswered questions (answer.answer === null or empty)
+        // Unanswered questions should NOT be included in score calculations
+        const isUnanswered = 
+          answer.answer === null || 
+          answer.answer === undefined ||
+          (typeof answer.answer === 'object' && answer.answer !== null && Object.keys(answer.answer).length === 0) ||
+          (answer.answer && typeof answer.answer === 'object' && 
+           !answer.answer.choiceKey && 
+           !answer.answer.text && 
+           !answer.answer.numeric && 
+           (!answer.answer.multiChoiceKeys || answer.answer.multiChoiceKeys.length === 0));
+        
+        if (isUnanswered) {
+          console.log(`⏭️ [DEBUG computeScores] Skipping unanswered question ${question.code} (${principle}): answer.answer is null/empty`);
+          continue;
+        }
+        
+        // CRITICAL DEBUG: Log answer score values
+        console.log(`📊 [DEBUG computeScores] Question ${question.code} (${principle}): answer.score=${answer.score}, answer.answer=${JSON.stringify(answer.answer)}`);
+        
+        // Filter out null/undefined/NaN scores
+        if (answer.score === null || answer.score === undefined || isNaN(answer.score)) {
+          console.warn(`⚠️ [DEBUG computeScores] Skipping invalid score for question ${question.code}: ${answer.score}`);
+          continue;
+        }
+        
         if (!scoresByPrinciple[principle]) {
           scoresByPrinciple[principle] = [];
         }

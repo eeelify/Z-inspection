@@ -302,7 +302,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
         weight: 1 // Default weight
       };
     })
-    .sort((a, b) => a.avgRiskScore - b.avgRiskScore) // Lower score = higher risk (0 = worst, 4 = best)
+    .sort((a, b) => b.avgRiskScore - a.avgRiskScore) // CORRECT: Higher score = higher risk (4 = worst, 0 = best)
     .slice(0, 10);
 
   // ============================================================

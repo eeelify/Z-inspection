@@ -1930,9 +1930,41 @@ app.post('/api/general-questions', async (req, res) => {
                 let answerFormat = {};
                 
                 if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
-                  const option = question.options?.find(o => o.key === answerValue);
-                  score = option?.score || 0;
-                  answerFormat = { choiceKey: answerValue };
+                  // Try exact match first
+                  let option = question.options?.find(o => o.key === answerValue);
+                  
+                  // If not found, try case-insensitive and normalize spaces/underscores
+                  if (!option) {
+                    const normalizedAnswerValue = answerValue.toLowerCase().replace(/\s+/g, '_');
+                    option = question.options?.find(o => {
+                      const normalizedOptKey = o.key.toLowerCase().replace(/\s+/g, '_');
+                      return normalizedOptKey === normalizedAnswerValue || 
+                             o.label?.en?.toLowerCase() === answerValue.toLowerCase() ||
+                             o.label?.tr?.toLowerCase() === answerValue.toLowerCase();
+                    });
+                    
+                    if (option) {
+                      console.log(`⚠️ [DEBUG /api/general-questions] Question ${qId}: Found option using normalized matching. Original: "${answerValue}" → Matched: "${option.key}"`);
+                    }
+                  }
+                  
+                  // CRITICAL DEBUG: Log option matching
+                  if (!option) {
+                    console.error(`❌ [ERROR /api/general-questions] Question ${qId}: No matching option found for answerValue="${answerValue}". Available options: ${question.options?.map(o => `${o.key}(${o.label?.en || o.label?.tr || 'no label'})`).join(', ') || 'none'}`);
+                  } else {
+                    console.log(`✅ [DEBUG /api/general-questions] Question ${qId}: Found option key="${option.key}", score=${option.score}, answerValue="${answerValue}"`);
+                  }
+                  
+                  // For single_choice: Use risk score if provided (user's manual override), otherwise use option's score
+                  const riskScore = generalRisksMap[qId];
+                  if (riskScore !== undefined && riskScore !== null && typeof riskScore === 'number' && riskScore >= 0 && riskScore <= 4) {
+                    score = riskScore;
+                    console.log(`📊 [DEBUG /api/general-questions] Question ${qId}: Using manual risk score=${riskScore} (override option score=${option?.score || 0})`);
+                  } else {
+                    score = option?.score || 0;
+                  }
+                  // Use the matched option key, not the original answerValue
+                  answerFormat = { choiceKey: option?.key || answerValue };
                 } else if (question.answerType === 'open_text') {
                   score = generalRisksMap[qId] !== undefined ? generalRisksMap[qId] : 0;
                   answerFormat = { text: answerValue };
@@ -2032,9 +2064,41 @@ app.post('/api/general-questions', async (req, res) => {
                   let answerFormat = {};
                   
                   if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
-                    const option = question.options?.find(o => o.key === answerValue);
-                    score = option?.score || 0;
-                    answerFormat = { choiceKey: answerValue };
+                    // Try exact match first
+                    let option = question.options?.find(o => o.key === answerValue);
+                    
+                    // If not found, try case-insensitive and normalize spaces/underscores
+                    if (!option) {
+                      const normalizedAnswerValue = answerValue.toLowerCase().replace(/\s+/g, '_');
+                      option = question.options?.find(o => {
+                        const normalizedOptKey = o.key.toLowerCase().replace(/\s+/g, '_');
+                        return normalizedOptKey === normalizedAnswerValue || 
+                               o.label?.en?.toLowerCase() === answerValue.toLowerCase() ||
+                               o.label?.tr?.toLowerCase() === answerValue.toLowerCase();
+                      });
+                      
+                      if (option) {
+                        console.log(`⚠️ [DEBUG /api/general-questions] Question ${qId}: Found option using normalized matching. Original: "${answerValue}" → Matched: "${option.key}"`);
+                      }
+                    }
+                    
+                    // CRITICAL DEBUG: Log option matching
+                    if (!option) {
+                      console.error(`❌ [ERROR /api/general-questions] Question ${qId}: No matching option found for answerValue="${answerValue}". Available options: ${question.options?.map(o => `${o.key}(${o.label?.en || o.label?.tr || 'no label'})`).join(', ') || 'none'}`);
+                    } else {
+                      console.log(`✅ [DEBUG /api/general-questions] Question ${qId}: Found option key="${option.key}", score=${option.score}, answerValue="${answerValue}"`);
+                    }
+                    
+                    // For single_choice: Use risk score if provided (user's manual override), otherwise use option's score
+                    const riskScore = roleSpecificRisksMap[qId];
+                    if (riskScore !== undefined && riskScore !== null && typeof riskScore === 'number' && riskScore >= 0 && riskScore <= 4) {
+                      score = riskScore;
+                      console.log(`📊 [DEBUG /api/general-questions] Question ${qId}: Using manual risk score=${riskScore} (override option score=${option?.score || 0})`);
+                    } else {
+                      score = option?.score || 0;
+                    }
+                    // Use the matched option key, not the original answerValue
+                    answerFormat = { choiceKey: option?.key || answerValue };
                   } else if (question.answerType === 'open_text') {
                     score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
                     answerFormat = { text: answerValue };

@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 const { generateReport } = require('../services/geminiService');
 const { generatePDFFromMarkdown } = require('../services/pdfService');
+const { buildReportMetrics } = require('../services/reportMetricsService');
+const chartGenerationService = require('../services/chartGenerationService');
+const { getProjectAnalytics } = require('../services/analyticsService');
+const { generateHTMLReport } = require('../services/htmlReportTemplateService');
 
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
@@ -138,10 +142,9 @@ const buildExportMarkdownFromReport = (report) => {
 async function aggregateUnifiedAnswers(projectIdObj) {
   const unifiedAnswers = [];
 
-  // 1. Fetch from responses collection
+  // 1. Fetch from responses collection (no status filter - get all with answers)
   const responses = await Response.find({ 
-    projectId: projectIdObj,
-    status: { $in: ['draft', 'submitted'] }
+    projectId: projectIdObj
   }).populate('answers.questionId').lean();
 
   for (const response of responses) {
@@ -371,16 +374,12 @@ exports.generateReport = async (req, res) => {
     
     console.log(`📊 Validation: ${unifiedAnswers.length} unified answers, ${tensions.length} tensions, ${scores.length} scores`);
     
-    // Check for high-risk items that require detailed narratives
-    const highRiskAnswers = unifiedAnswers.filter(a => a.score !== null && a.score !== undefined && a.score < 3);
+    // Check for high-severity tensions only (removed wrong score < 3 logic)
     const highSeverityTensions = tensions.filter(t => {
       const severity = String(t.severity || '').toLowerCase();
       return severity.includes('high') || severity.includes('critical');
     });
     
-    if (highRiskAnswers.length > 0) {
-      console.log(`⚠️  ${highRiskAnswers.length} high-risk answers (score < 3) require detailed narrative`);
-    }
     if (highSeverityTensions.length > 0) {
       console.log(`⚠️  ${highSeverityTensions.length} high-severity tensions require detailed explanation`);
     }
@@ -395,21 +394,343 @@ exports.generateReport = async (req, res) => {
       console.log(`✅ ${tensions.length} tensions will be analyzed in the report`);
     }
 
-    // Generate report using Gemini AI
-    console.log('🤖 Calling Gemini API...');
-    const reportContent = await generateReport(analysisData);
+    // ============================================================
+    // STEP 1: Build report metrics (required for charts)
+    // ============================================================
+    console.log('📈 Building report metrics for charts...');
+    let reportMetrics;
+    let chartImages = {};
+    let chartGenerationError = null;
     
-    // DEFENSIVE VALIDATION: Validate report quality
-    if (!reportContent || reportContent.trim().length === 0) {
-      const error = new Error('Report generation failed: Empty report generated');
+    try {
+      // Build metrics using reportMetricsService
+      reportMetrics = await buildReportMetrics(projectId, 'general-v1');
+      
+      // Get analytics for chart data
+      const analytics = await getProjectAnalytics(projectId, 'general-v1');
+      
+      // ============================================================
+      // STEP 2: Generate charts BEFORE Gemini
+      // ============================================================
+      console.log('📊 Generating charts...');
+      
+      // Generate Principle Bar Chart (required chart)
+      if (reportMetrics.scoring?.byPrincipleOverall) {
+        try {
+          chartImages.principleBarChart = await chartGenerationService.generatePrincipleBarChart(
+            reportMetrics.scoring.byPrincipleOverall
+          );
+          console.log('✅ Principle bar chart generated');
+        } catch (err) {
+          console.error('❌ Principle bar chart generation failed:', err.message);
+          chartGenerationError = err;
+        }
+      }
+
+      // Generate Principle × Evaluator Heatmap
+      if (reportMetrics.scoring?.byPrincipleTable && analytics.evaluators?.length > 0) {
+        try {
+          chartImages.principleEvaluatorHeatmap = await chartGenerationService.generatePrincipleEvaluatorHeatmap(
+            reportMetrics.scoring.byPrincipleTable,
+            analytics.evaluators
+          );
+          console.log('✅ Heatmap generated');
+        } catch (err) {
+          console.error('❌ Heatmap generation failed:', err.message);
+          chartGenerationError = err;
+        }
+      }
+      
+      // TASK 7: Evidence charts removed (invalid/misleading per Z-Inspection methodology)
+      
+      // Generate Tension Severity Distribution
+      if (tensions.length > 0) {
+        try {
+          const severityDist = {};
+          tensions.forEach(t => {
+            const severity = String(t.severity || 'unknown').toLowerCase();
+            severityDist[severity] = (severityDist[severity] || 0) + 1;
+          });
+          chartImages.tensionSeverityChart = await chartGenerationService.generateTensionSeverityChart(severityDist);
+          console.log('✅ Tension severity chart generated');
+        } catch (err) {
+          console.error('❌ Tension severity chart generation failed:', err.message);
+        }
+      }
+      
+      // Generate Tension Review State Distribution
+      if (tensions.length > 0) {
+        try {
+          // Build review state summary for chart
+          const reviewStateCounts = {
+            proposed: 0,
+            underReview: 0,
+            accepted: 0,
+            disputed: 0,
+            resolved: 0,
+            total: tensions.length
+          };
+          
+          tensions.forEach(t => {
+            const state = String(t.status || 'ongoing').toLowerCase();
+            if (state.includes('proposed')) reviewStateCounts.proposed++;
+            else if (state.includes('under') || state.includes('review')) reviewStateCounts.underReview++;
+            else if (state.includes('accepted')) reviewStateCounts.accepted++;
+            else if (state.includes('disputed')) reviewStateCounts.disputed++;
+            else if (state.includes('resolved')) reviewStateCounts.resolved++;
+            else reviewStateCounts.proposed++; // Default to proposed
+          });
+          
+          chartImages.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart({
+            countsByReviewState: {
+              proposed: reviewStateCounts.proposed,
+              underreview: reviewStateCounts.underReview,
+              accepted: reviewStateCounts.accepted,
+              disputed: reviewStateCounts.disputed,
+              resolved: reviewStateCounts.resolved
+            },
+            total: reviewStateCounts.total
+          });
+          console.log('✅ Tension review state chart generated');
+        } catch (err) {
+          console.error('❌ Tension review state chart generation failed:', err.message);
+        }
+      }
+      
+      // SAFETY GUARD: Validate charts were generated
+      const chartCount = Object.keys(chartImages).length;
+      
+      // Guard 1: If scores exist but no heatmap generated → WARN
+      if (scores.length > 0 && reportMetrics.scoring?.byPrincipleTable && !chartImages.principleEvaluatorHeatmap) {
+        console.warn('⚠️  WARNING: Scores and principle table exist but heatmap was not generated');
+      }
+      
+      // Guard 2: If chart service exists but no charts generated despite having data → WARN
+      if (scores.length > 0 && chartCount === 0) {
+        console.warn('⚠️  WARNING: Chart generation service exists but no charts were generated despite having score data');
+      }
+      
+      // Guard 3: If tensions exist but no tension charts generated → WARN
+      if (tensions.length > 0 && !chartImages.tensionSeverityChart && !chartImages.tensionReviewStateChart) {
+        console.warn('⚠️  WARNING: Tensions exist but no tension charts were generated');
+      }
+      
+      // Guard 4: If evidence data exists but no evidence charts → WARN
+      if (analytics.evidenceMetrics?.typeDistribution?.length > 0 && !chartImages.evidenceTypeChart) {
+        console.warn('⚠️  WARNING: Evidence data exists but evidence type chart was not generated');
+      }
+      
+      console.log(`✅ Generated ${chartCount} chart(s): ${Object.keys(chartImages).join(', ')}`);
+      
+    } catch (error) {
+      console.error('❌ Chart generation pipeline failed:', error.message);
+      chartGenerationError = error;
+      // Continue with report generation even if charts fail (non-blocking)
+    }
+
+    // ============================================================
+    // STEP 2.5: NORMALIZE CHART OUTPUT (CRITICAL)
+    // ============================================================
+    console.log('🔄 Normalizing chart images format...');
+    
+    // Debug logging (temporary)
+    console.log('🧪 ChartImages raw keys:', Object.keys(chartImages || {}));
+    const chartTypes = {};
+    for (const [k, v] of Object.entries(chartImages || {})) {
+      if (!v) {
+        chartTypes[k] = 'null/undefined';
+      } else if (Buffer.isBuffer(v)) {
+        chartTypes[k] = `Buffer(${v.length} bytes)`;
+      } else if (v instanceof Uint8Array) {
+        chartTypes[k] = `Uint8Array(${v.length} bytes)`;
+      } else if (typeof v === 'string') {
+        chartTypes[k] = `string(${v.length} chars)`;
+      } else if (typeof v === 'object') {
+        chartTypes[k] = `object(${Object.keys(v).join(', ')})`;
+        // Log object structure for debugging
+        console.log(`🧪   ${k} object keys:`, Object.keys(v));
+        if (v.data) console.log(`🧪   ${k} has .data (type: ${typeof v.data}, length: ${v.data?.length || 'N/A'})`);
+        if (v.buffer) console.log(`🧪   ${k} has .buffer (type: ${typeof v.buffer}, isBuffer: ${Buffer.isBuffer(v.buffer)})`);
+      } else {
+        chartTypes[k] = typeof v;
+      }
+    }
+    console.log('🧪 ChartImages types:', chartTypes);
+    
+    // Normalize all chart images to base64 data URI strings
+    const normalizedChartImages = {};
+    for (const [key, value] of Object.entries(chartImages || {})) {
+      if (!value) {
+        console.warn(`⚠️  Chart ${key} is null/undefined, skipping`);
+        continue;
+      }
+
+      let bufferToConvert = null;
+      
+      // Case 1: already base64 string (data URI)
+      if (typeof value === 'string' && value.startsWith('data:image/')) {
+        normalizedChartImages[key] = value;
+        continue;
+      }
+      
+      // Case 2: Buffer (direct)
+      if (Buffer.isBuffer(value)) {
+        bufferToConvert = value;
+      }
+      // Case 3: Uint8Array (can be converted to Buffer)
+      else if (value instanceof Uint8Array) {
+        bufferToConvert = Buffer.from(value);
+      }
+      // Case 4: Object with .buffer property (common in some libraries)
+      else if (value && typeof value === 'object' && value.buffer) {
+        if (Buffer.isBuffer(value.buffer)) {
+          bufferToConvert = value.buffer;
+        } else if (value.buffer instanceof Uint8Array) {
+          bufferToConvert = Buffer.from(value.buffer);
+        } else if (Buffer.isBuffer(value)) {
+          bufferToConvert = value;
+        }
+      }
+      // Case 4b: Puppeteer screenshot returns Buffer-like object - try direct conversion
+      else if (value && typeof value === 'object' && value.length !== undefined && typeof value.length === 'number') {
+        // This might be a Buffer that Buffer.isBuffer() doesn't recognize
+        // Try to convert it
+        try {
+          // Check if it has Buffer-like properties
+          if (value.readUInt8 || value.toString) {
+            bufferToConvert = Buffer.from(value);
+          }
+        } catch (e) {
+          // Ignore conversion errors
+        }
+      }
+      // Case 5: Object with .data property
+      else if (value && typeof value === 'object' && value.data) {
+        if (Buffer.isBuffer(value.data)) {
+          bufferToConvert = value.data;
+        } else if (value.data instanceof Uint8Array) {
+          bufferToConvert = Buffer.from(value.data);
+        } else if (typeof value.data === 'string') {
+          // Might be base64 string
+          normalizedChartImages[key] = value.data.startsWith('data:') ? value.data : `data:image/png;base64,${value.data}`;
+          continue;
+        }
+      }
+      // Case 6: Object with .image field (string)
+      else if (value && typeof value === 'object' && value.image && typeof value.image === 'string') {
+        normalizedChartImages[key] = value.image.startsWith('data:') ? value.image : `data:image/png;base64,${value.image}`;
+        continue;
+      }
+      // Case 7: Try to convert object to Buffer (last resort - for objects that are actually Buffers but not detected)
+      else if (value && typeof value === 'object' && value.length !== undefined && typeof value.length === 'number') {
+        try {
+          bufferToConvert = Buffer.from(value);
+        } catch (e) {
+          console.warn(`⚠️  Chart ${key} object could not be converted to Buffer:`, e.message);
+        }
+      }
+      // Case 8: plain base64 string (without data: prefix)
+      else if (typeof value === 'string' && value.length > 0) {
+        normalizedChartImages[key] = `data:image/png;base64,${value}`;
+        continue;
+      }
+      
+      // Convert buffer to base64 data URI
+      if (bufferToConvert) {
+        try {
+          normalizedChartImages[key] = `data:image/png;base64,${bufferToConvert.toString('base64')}`;
+          console.log(`✅ Chart ${key} normalized from Buffer (${bufferToConvert.length} bytes)`);
+          continue;
+        } catch (e) {
+          console.error(`❌ Failed to convert ${key} Buffer to base64:`, e.message);
+        }
+      }
+      
+      // If we get here, we couldn't normalize it
+      console.warn(`⚠️  Chart ${key} has unknown format: ${typeof value}, structure: ${JSON.stringify(Object.keys(value || {}))}`);
+    }
+    
+    // Replace chartImages with normalized version
+    chartImages = normalizedChartImages;
+    const normalizedChartCount = Object.keys(chartImages).length;
+    console.log(`✅ Normalized ${normalizedChartCount} chart(s) to base64 data URIs`);
+
+    // ============================================================
+    // STEP 3: Generate report narrative using Gemini AI (NARRATIVE ONLY)
+    // ============================================================
+    console.log('🤖 Calling Gemini API for narrative generation...');
+    
+    // SAFETY GUARD: Validate charts before Gemini (check for base64 strings only)
+    const validCharts = Object.values(chartImages).filter(v => 
+      typeof v === 'string' && v.startsWith('data:image/')
+    );
+    
+    if (scores.length > 0 && validCharts.length === 0) {
+      console.error(`❌ ERROR: Charts must be generated before calling Gemini. Found ${normalizedChartCount} charts but none are valid base64 strings.`);
+      throw new Error('CRITICAL: Chart generation failed or produced invalid charts. Cannot proceed with report generation.');
+    }
+    
+    // SAFETY GUARD: Warn if chart generation had errors (non-blocking if charts exist)
+    if (chartGenerationError && scores.length > 0) {
+      if (validCharts.length > 0) {
+        console.warn('⚠️  WARNING: Chart generation had errors but some charts were generated. Continuing with report generation.');
+      } else {
+        console.error('❌ ERROR: Chart generation failed and no valid charts were produced.');
+        throw new Error('Chart generation failed. Cannot proceed with report generation.');
+      }
+    }
+    
+    console.log(`✅ Chart validation passed: ${validCharts.length} valid chart(s) ready for HTML report`);
+    
+    // SAFETY ASSERTION: Verify risk scale correctness
+    const { validateRiskScaleNotInverted } = require('../utils/riskScale');
+    if (scores.length > 0) {
+      const maxScore = Math.max(...scores.map(s => s.totals?.avg || 0));
+      const minScore = Math.min(...scores.map(s => s.totals?.avg || 4));
+      try {
+        // Use canonical risk scale validation
+        // Validate that high scores (>= 3.5) should be HIGH/CRITICAL, not MINIMAL/LOW
+        if (maxScore >= 3.5) {
+          validateRiskScaleNotInverted(maxScore, 'CRITICAL_RISK'); // Should be CRITICAL, not MINIMAL
+        }
+        // Validate that low scores (< 1) should be MINIMAL/LOW, not HIGH/CRITICAL
+        if (minScore < 1) {
+          validateRiskScaleNotInverted(minScore, 'MINIMAL_RISK'); // Should be MINIMAL, not HIGH
+        }
+        console.log('✅ Risk scale correctness verified');
+      } catch (riskError) {
+        console.error('❌ RISK SCALE INVERSION DETECTED:', riskError.message);
+        // Don't throw - log error but continue (non-blocking)
+      }
+    }
+    
+    // Enhance analysisData with chart metadata for Gemini (informational only - charts already generated)
+    const analysisDataWithCharts = {
+      ...analysisData,
+      chartMetadata: {
+        chartsGenerated: normalizedChartCount,
+        chartTypes: Object.keys(chartImages),
+        hasHeatmap: !!chartImages.principleEvaluatorHeatmap,
+        hasEvidenceChart: !!chartImages.evidenceTypeChart,
+        hasTensionCharts: !!(chartImages.tensionSeverityChart || chartImages.tensionReviewStateChart)
+      },
+      reportMetrics: reportMetrics || null
+    };
+    
+    // Call Gemini for NARRATIVE ONLY (no chart references)
+    const geminiNarrative = await generateReport(analysisDataWithCharts);
+    
+    // DEFENSIVE VALIDATION: Validate narrative quality
+    if (!geminiNarrative || geminiNarrative.trim().length === 0) {
+      const error = new Error('Report generation failed: Empty narrative generated');
       error.statusCode = 500;
       throw error;
     }
     
-    // Check if report has minimum content
-    const reportLength = reportContent.trim().length;
-    if (unifiedAnswers.length > 0 && reportLength < 500) {
-      console.error(`⚠️  WARNING: Report seems too short (${reportLength} chars) for ${unifiedAnswers.length} answers`);
+    // Check if narrative has minimum content
+    const narrativeLength = geminiNarrative.trim().length;
+    if (unifiedAnswers.length > 0 && narrativeLength < 500) {
+      console.error(`⚠️  WARNING: Narrative seems too short (${narrativeLength} chars) for ${unifiedAnswers.length} answers`);
       // Don't throw error, but log warning
     }
     
@@ -418,11 +739,83 @@ exports.generateReport = async (req, res) => {
       const tensionMentions = tensions.filter(t => {
         const principle1 = t.principle1 || '';
         const principle2 = t.principle2 || '';
-        return reportContent.includes(principle1) || reportContent.includes(principle2);
+        return geminiNarrative.includes(principle1) || geminiNarrative.includes(principle2);
       });
       if (tensionMentions.length < tensions.length * 0.5) {
-        console.warn(`⚠️  WARNING: Only ${tensionMentions.length}/${tensions.length} tensions appear to be mentioned in report`);
+        console.warn(`⚠️  WARNING: Only ${tensionMentions.length}/${tensions.length} tensions appear to be mentioned in narrative`);
       }
+    }
+
+    // ============================================================
+    // STEP 4: Generate HTML report with charts + narrative
+    // ============================================================
+    console.log('📄 Generating HTML report with charts and narrative...');
+    
+    // Get analytics for HTML template
+    const analytics = await getProjectAnalytics(projectId, 'general-v1');
+    
+    // Chart images are already normalized to base64 data URIs, use directly
+    const chartImagesBase64 = chartImages;
+    
+    // Debug: Verify chart images before HTML generation
+    console.log(`🔍 DEBUG: Chart images for HTML: ${Object.keys(chartImagesBase64).length} charts`);
+    Object.keys(chartImagesBase64).forEach(key => {
+      const img = chartImagesBase64[key];
+      const isDataUri = typeof img === 'string' && img.startsWith('data:image/');
+      console.log(`  - ${key}: ${isDataUri ? '✅ data URI' : '❌ NOT data URI'} (${typeof img}, ${img?.length || 0} chars)`);
+    });
+    
+    // Create structured narrative object for HTML template
+    // The template expects structured data, but we have markdown
+    // We'll pass markdown as a fallback and let the template render it
+    const structuredNarrative = {
+      markdown: geminiNarrative, // Full markdown narrative
+      executiveSummary: [], // Will be parsed from markdown if needed
+      topRiskDriversNarrative: [],
+      tensionsNarrative: [],
+      principleFindings: [],
+      recommendations: []
+    };
+    
+    // Generate HTML report
+    const htmlReport = generateHTMLReport(
+      reportMetrics || {},
+      structuredNarrative,
+      chartImagesBase64,
+      {
+        generatedAt: new Date(),
+        analytics: analytics,
+        reportMetrics: reportMetrics
+      }
+    );
+    
+    if (!htmlReport || htmlReport.trim().length === 0) {
+      throw new Error('HTML report generation failed: Empty HTML generated');
+    }
+    
+    // Debug: Check if charts are in HTML
+    // Count chart images embedded as data URIs (correct way to check)
+    const imgTagCount = (htmlReport.match(/<img[^>]*src=["']data:image\/[^"']+["']/g) || []).length;
+    const expectedChartCount = Object.keys(chartImagesBase64).length;
+    
+    console.log(`✅ HTML report generated (${htmlReport.length} chars)`);
+    console.log(`🔍 DEBUG: img tags with data URIs in HTML: ${imgTagCount} (expected: ${expectedChartCount})`);
+    
+    // Validation: Ensure all charts are embedded
+    if (imgTagCount < expectedChartCount) {
+      console.warn(`⚠️  WARNING: Only ${imgTagCount}/${expectedChartCount} charts found in HTML. Some charts may be missing.`);
+    } else {
+      console.log(`✅ All ${expectedChartCount} charts successfully embedded in HTML`);
+    }
+    
+    // Check if HTML is too large for MongoDB (16MB limit for String fields)
+    const htmlSizeMB = htmlReport.length / (1024 * 1024);
+    if (htmlSizeMB > 10) {
+      console.warn(`⚠️  WARNING: HTML report is very large (${htmlSizeMB.toFixed(2)} MB). MongoDB has a 16MB limit for String fields.`);
+    }
+    if (htmlSizeMB > 15) {
+      console.error(`❌ ERROR: HTML report is too large (${htmlSizeMB.toFixed(2)} MB) to save to MongoDB!`);
+      throw new Error(`HTML report is too large (${htmlSizeMB.toFixed(2)} MB) to save. MongoDB limit is 16MB.`);
     }
 
     // Calculate metadata
@@ -442,32 +835,112 @@ exports.generateReport = async (req, res) => {
     };
 
     // Save report to database
-    // Save report to database as DRAFT (AI output is not final)
     const projectIdObj = isValidObjectId(projectId)
       ? new mongoose.Types.ObjectId(projectId)
       : projectId;
+
+    // Convert chart images to base64 strings for MongoDB storage (without data: prefix)
+    // chartImages are already normalized to data URIs
+    const chartImagesForStorage = {};
+    for (const [key, dataUri] of Object.entries(chartImages)) {
+      if (typeof dataUri === 'string' && dataUri.startsWith('data:')) {
+        // Extract base64 from data URI
+        const base64Match = dataUri.match(/data:image\/[^;]+;base64,(.+)/);
+        if (base64Match) {
+          chartImagesForStorage[key] = base64Match[1];
+        } else {
+          // Fallback: store as-is if extraction fails
+          chartImagesForStorage[key] = dataUri;
+        }
+      } else if (typeof dataUri === 'string') {
+        // Already base64 without prefix
+        chartImagesForStorage[key] = dataUri;
+      }
+    }
+    
+    // Debug: Verify htmlReport before saving
+    console.log(`🔍 DEBUG: htmlReport type: ${typeof htmlReport}, length: ${htmlReport?.length || 0}, isString: ${typeof htmlReport === 'string'}`);
+
+    // TASK 6: HTML CONTENT PERSISTENCE - Use findByIdAndUpdate to ensure htmlContent is saved
+    // Mongoose may drop large htmlContent field during save(), so we save report first, then update htmlContent separately
 
     const report = new Report({
       projectId: projectIdObj,
       useCaseId: projectIdObj,
       title: `Analysis Report - ${analysisData.project.title || 'Project'}`,
-      // Legacy compatibility
-      content: reportContent,
+      // Legacy compatibility: store markdown narrative
+      content: geminiNarrative,
       // New workflow payload
       sections: [{
         principle: 'FULL_REPORT',
-        aiDraft: reportContent,
+        aiDraft: geminiNarrative,
         expertEdit: '',
         comments: []
       }],
       generatedBy: userIdObj,
-      metadata,
+      metadata: {
+        ...metadata,
+        chartsGenerated: normalizedChartCount,
+        chartTypes: Object.keys(chartImages),
+        hasHTMLReport: true
+      },
+      // Store chart images as base64 in computedMetrics
+      computedMetrics: reportMetrics ? {
+        ...reportMetrics,
+        chartImages: chartImagesForStorage
+      } : null,
       status: 'draft'
     });
 
-    await report.save();
-
-    console.log('✅ Report generated and saved:', report._id);
+    // Save report first (without htmlContent to avoid Mongoose dropping it)
+    const savedReportDoc = await report.save();
+    const reportId = savedReportDoc._id;
+    
+    // CRITICAL: Save htmlContent separately using findByIdAndUpdate to ensure it's persisted
+    // This avoids Mongoose strict mode issues with large fields
+    await Report.findByIdAndUpdate(
+      reportId, 
+      { htmlContent: htmlReport }, 
+      { 
+        runValidators: false,  // Skip validation for large HTML content
+        upsert: false,
+        new: false  // Don't return updated doc, we'll verify separately
+      }
+    );
+    
+    // CRITICAL: Verify HTML was actually saved with explicit check - HARD FAIL if not saved
+    const verificationReport = await Report.findById(reportId).select('htmlContent').lean();
+    if (!verificationReport) {
+      throw new Error(`CRITICAL: Report not found after save. Report ID: ${reportId}`);
+    } else if (!verificationReport.htmlContent || verificationReport.htmlContent.length === 0) {
+      console.error(`❌ ERROR: htmlContent not saved (length: ${verificationReport.htmlContent?.length || 0}). Report ID: ${reportId}`);
+      console.error(`   Original htmlReport length: ${htmlReport?.length || 0}`);
+      
+      // Final fallback: Try with set() and strict: false
+      const reportDoc = await Report.findById(reportId);
+      if (reportDoc) {
+        reportDoc.set('htmlContent', htmlReport, { strict: false });
+        await reportDoc.save({ validateBeforeSave: false });
+        const finalCheck = await Report.findById(reportId).select('htmlContent').lean();
+        if (finalCheck && finalCheck.htmlContent && finalCheck.htmlContent.length > 0) {
+          console.log(`✅ htmlContent saved after final fallback: ${finalCheck.htmlContent.length} chars`);
+        } else {
+          // HARD FAIL: htmlContent persistence failed after all attempts
+          throw new Error(
+            `CRITICAL: htmlContent persist edilemedi. Report ID: ${reportId}. ` +
+            `Original length: ${htmlReport?.length || 0}, Final check length: ${finalCheck?.htmlContent?.length || 0}. ` +
+            `Cannot proceed with report generation without htmlContent.`
+          );
+        }
+      } else {
+        throw new Error(`CRITICAL: Report document not found for final fallback. Report ID: ${reportId}`);
+      }
+    } else {
+      console.log(`✅ htmlContent saved successfully: ${verificationReport.htmlContent.length} chars`);
+    }
+    
+    console.log(`✅ Report generated and saved: ${reportId}`);
+    console.log(`📊 Report has ${normalizedChartCount} chart(s) in computedMetrics`);
 
     // Notify all assigned experts (excluding admin who generated the report)
     try {
@@ -744,6 +1217,47 @@ exports.getMyReports = async (req, res) => {
 };
 
 /**
+ * GET /api/reports/:id/download-html
+ * Download report as HTML
+ */
+exports.downloadReportHTML = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
+
+    const report = await Report.findById(id);
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Authorization: admin can export all. Expert/Viewer can export assigned reports.
+    if (roleCategory !== 'admin') {
+      const projectIdObj = report?.projectId?._id || report?.projectId;
+      const ok = await isUserAssignedToProject({
+        userIdObj,
+        projectIdObj: toObjectIdOrValue(projectIdObj)
+      });
+      if (!ok) {
+        return res.status(403).json({ error: 'Not authorized to download this report.' });
+      }
+    }
+
+    if (!report.htmlContent || report.htmlContent.length === 0) {
+      return res.status(404).json({ error: 'HTML content not found for this report.' });
+    }
+
+    // Set headers for HTML download
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="report-${id}.html"`);
+    res.send(report.htmlContent);
+  } catch (error) {
+    console.error('Error downloading HTML report:', error);
+    res.status(500).json({ error: error.message || 'Failed to download HTML report' });
+  }
+};
+
+/**
  * GET /api/reports/:id/download
  * Download report as PDF
  */
@@ -773,12 +1287,93 @@ exports.downloadReportPDF = async (req, res) => {
     }
 
     console.log('📄 Generating PDF for report:', id);
+    console.log(`📊 Report has htmlContent: ${!!report.htmlContent}, length: ${report.htmlContent?.length || 0}`);
 
-    // Generate PDF from markdown content
-    const pdfBuffer = await generatePDFFromMarkdown(
+    let pdfBuffer;
+    
+    // If HTML content exists (with charts), use it for PDF generation
+    if (report.htmlContent && report.htmlContent.trim().length > 0) {
+      console.log('✅ Using HTML content with embedded charts for PDF generation');
+      
+      const puppeteer = require('puppeteer');
+      let browser = null;
+      
+      try {
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        
+        const page = await browser.newPage();
+        
+        // Set viewport for consistent rendering
+        await page.setViewport({ width: 1200, height: 1600 });
+        
+        // Set HTML content and wait for images to load
+        await page.setContent(report.htmlContent, {
+          waitUntil: ['load', 'domcontentloaded', 'networkidle0']
+        });
+        
+        // Wait for all images (including base64 data URIs) to be fully loaded
+        await page.evaluate(() => {
+          return Promise.all(
+            Array.from(document.images)
+              .filter(img => !img.complete)
+              .map(img => new Promise((resolve) => {
+                img.onload = img.onerror = resolve;
+              }))
+          );
+        });
+        
+        // Additional wait for chart rendering
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Generate PDF from HTML
+        pdfBuffer = await page.pdf({
+          format: 'A4',
+          margin: {
+            top: '2cm',
+            right: '1.5cm',
+            bottom: '2cm',
+            left: '1.5cm'
+          },
+          printBackground: true,
+          preferCSSPageSize: true,
+          displayHeaderFooter: false
+        });
+        
+        await browser.close();
+        console.log('✅ PDF generated from HTML content with charts');
+      } catch (htmlPdfError) {
+        console.error('❌ Error generating PDF from HTML:', htmlPdfError);
+        if (browser) await browser.close();
+        // HARD FAIL: Do not fallback to markdown - HTML should always be available for new reports
+        throw new Error(
+          `CRITICAL: PDF generation from HTML failed. ` +
+          `HTML content exists (${report.htmlContent.length} chars) but PDF generation failed. ` +
+          `Error: ${htmlPdfError.message}. ` +
+          `Cannot proceed with markdown fallback - HTML content must be used.`
+        );
+      }
+    } else {
+      // Only allow markdown fallback for legacy reports (generated before HTML support)
+      // New reports MUST have htmlContent
+      const reportAge = new Date() - new Date(report.generatedAt);
+      const isLegacyReport = reportAge > (7 * 24 * 60 * 60 * 1000); // Older than 7 days
+      
+      if (isLegacyReport) {
+        console.log('⚠️ Legacy report without HTML content. Using markdown PDF generation...');
+        pdfBuffer = await generatePDFFromMarkdown(
       buildExportMarkdownFromReport(report),
       report.title
     );
+      } else {
+        throw new Error(
+          `CRITICAL: Report has no htmlContent but is not a legacy report (generated: ${report.generatedAt}). ` +
+          `Cannot generate PDF without HTML content. Report should be regenerated.`
+        );
+      }
+    }
 
     // Set response headers for PDF download
     const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.pdf`;

@@ -20,8 +20,9 @@ const AnswerSchema = new mongoose.Schema({
     type: Number, 
     min: 0, 
     max: 4,
-    required: true 
-  }, // Normalized 0-4 score
+    required: false, // Allow null for unanswered questions
+    default: null
+  }, // Normalized 0-4 score (null for unanswered questions)
   scoreSuggested: Number, // Optional: AI-suggested score for open_text
   scoreFinal: Number,     // Final score after review (for open_text)
   reviewerId: { 

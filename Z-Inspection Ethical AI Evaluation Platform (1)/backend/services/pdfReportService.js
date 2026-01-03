@@ -69,11 +69,22 @@ async function generateChartImagesFromAnalytics(analytics) {
 
     // Severity chart
     if (analytics.tensionsTable && analytics.tensionsTable.length > 0) {
-      charts.severityChart = await chartGenerationService.generateSeverityChart(
-        analytics.tensionsTable.map(t => ({
-          severityLevel: t.severityLevel
-        }))
-      );
+      // Convert tension list to severity distribution
+      const severityDistribution = {
+        low: 0,
+        medium: 0,
+        high: 0,
+        critical: 0
+      };
+      analytics.tensionsTable.forEach(t => {
+        const severity = String(t.severityLevel || t.severity || 'medium').toLowerCase();
+        if (severityDistribution.hasOwnProperty(severity)) {
+          severityDistribution[severity]++;
+        } else {
+          severityDistribution.medium++; // Default to medium if unknown
+        }
+      });
+      charts.severityChart = await chartGenerationService.generateTensionSeverityChart(severityDistribution);
     }
   } catch (error) {
     console.warn('⚠️ Chart generation failed (non-critical):', error.message);
@@ -128,9 +139,22 @@ async function generateChartImages(reportMetrics) {
       }
       
       if (reportMetrics.tensions.list?.length > 0) {
-        charts.severityChart = await chartGenerationService.generateSeverityChart(
-          reportMetrics.tensions.list
-        );
+        // Convert tension list to severity distribution
+        const severityDistribution = {
+          low: 0,
+          medium: 0,
+          high: 0,
+          critical: 0
+        };
+        reportMetrics.tensions.list.forEach(t => {
+          const severity = String(t.severityLevel || t.severity || 'medium').toLowerCase();
+          if (severityDistribution.hasOwnProperty(severity)) {
+            severityDistribution[severity]++;
+          } else {
+            severityDistribution.medium++; // Default to medium if unknown
+          }
+        });
+        charts.severityChart = await chartGenerationService.generateTensionSeverityChart(severityDistribution);
       }
     }
   } catch (error) {

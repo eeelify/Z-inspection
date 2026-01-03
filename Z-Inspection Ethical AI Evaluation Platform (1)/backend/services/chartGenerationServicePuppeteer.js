@@ -13,7 +13,7 @@ const puppeteer = require('puppeteer');
  * @param {Number} height - Image height in pixels
  * @returns {Promise<Buffer>} PNG image buffer
  */
-async function generateChartImagePuppeteer(chartConfig, width = 800, height = 400) {
+async function generateChartImagePuppeteer(chartConfig, width = 1200, height = 600) {
   let browser = null;
   try {
     browser = await puppeteer.launch({
@@ -33,31 +33,48 @@ async function generateChartImagePuppeteer(chartConfig, width = 800, height = 40
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
     body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
       margin: 0;
-      padding: 0;
+      padding: 20px;
       background: white;
     }
     #chartContainer {
       width: ${width}px;
       height: ${height}px;
+      padding: 20px;
+      box-sizing: border-box;
+      background: white;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
     }
   </style>
 </head>
 <body>
-  <canvas id="chartCanvas"></canvas>
+  <div id="chartContainer">
+    <canvas id="chartCanvas" width="${width}" height="${height}"></canvas>
+  </div>
   <script>
     const ctx = document.getElementById('chartCanvas').getContext('2d');
     const config = ${JSON.stringify(chartConfig)};
     // Register datalabels plugin
-    if (typeof Chart !== 'undefined' && Chart.register) {
+    if (typeof Chart !== 'undefined' && Chart.register && typeof ChartDataLabels !== 'undefined') {
       Chart.register(ChartDataLabels);
     }
     const chart = new Chart(ctx, config);
     
-    // Wait for chart to render
+    // Wait for chart to fully render with animations
+    chart.options.animation = {
+      duration: 0 // Disable animation for faster rendering
+    };
+    chart.update();
+    
     setTimeout(() => {
       window.chartReady = true;
-    }, 1500);
+    }, 2000);
   </script>
 </body>
 </html>
@@ -68,10 +85,10 @@ async function generateChartImagePuppeteer(chartConfig, width = 800, height = 40
     // Wait for chart to be ready
     await page.waitForFunction('window.chartReady === true', { timeout: 5000 });
 
-    // Take screenshot
-    const screenshot = await page.screenshot({
-      type: 'png',
-      clip: { x: 0, y: 0, width, height }
+    // Take screenshot of the chart container (better quality)
+    const chartElement = await page.$('#chartContainer');
+    const screenshot = await chartElement.screenshot({
+      type: 'png'
     });
 
     return screenshot;
@@ -88,25 +105,48 @@ async function generateChartImagePuppeteer(chartConfig, width = 800, height = 40
  * Generate a bar chart for ethical principles with average scores
  */
 async function generatePrincipleBarChart(byPrincipleOverall) {
-  const principles = Object.keys(byPrincipleOverall);
-  const scores = principles.map(p => byPrincipleOverall[p].avg || 0);
+  // TASK B: Handle null values (missing principles) - show N/A, not 0
+  const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
+  const scores = principles.map(p => {
+    const data = byPrincipleOverall[p];
+    // TASK B: If null, return null (will be handled specially in chart)
+    return data && typeof data.avgScore === 'number' ? data.avgScore : 
+           data && typeof data.avg === 'number' ? data.avg : null;
+  });
+  
+  // Add N/A labels for missing principles
+  const labels = principles.map((p, idx) => {
+    if (scores[idx] === null) {
+      return `${p} (N/A)`;
+    }
+    return p;
+  });
 
   const chartConfig = {
     type: 'bar',
     data: {
-      labels: principles,
+      labels: labels,
       datasets: [{
         label: 'Average Score',
         data: scores,
         backgroundColor: scores.map(s => {
-          // 0 = lowest risk, 4 = highest risk
-          if (s >= 3.0 && s <= 4.0) return '#dc2626'; // Critical (red) - highest risk
-          if (s >= 2.0 && s < 3.0) return '#ef4444'; // High (red-500)
-          if (s >= 1.0 && s < 2.0) return '#f59e0b'; // Moderate (amber)
-          return '#10b981'; // Low (emerald) - lowest risk
+          // TASK 3 & 5: Handle null (N/A) - use gray color, preserve null values
+          if (s === null || s === undefined || isNaN(s)) {
+            return '#9ca3af'; // Gray for N/A
+          }
+          // TASK 7: Validate score range before using
+          if (s < 0 || s > 4) {
+            throw new Error(`INVALID SCORE FOR CHART: Score ${s} is outside valid range [0-4]`);
+          }
+          // CORRECT SCALE: 0 = MINIMAL RISK (green), 4 = CRITICAL RISK (red)
+          // Higher score = Higher risk
+          const { colorForScore } = require('../utils/riskUtils');
+          return colorForScore(s);
         }),
         borderColor: '#ffffff',
-        borderWidth: 2
+        borderWidth: 3,
+        borderRadius: 4,
+        borderSkipped: false
       }]
     },
     options: {
@@ -116,38 +156,75 @@ async function generatePrincipleBarChart(byPrincipleOverall) {
         title: {
           display: true,
           text: '7 Ethical Principles Score Overview',
-          font: { size: 16, weight: 'bold' }
+          font: { size: 24, weight: 'bold', family: 'Arial, sans-serif' },
+          padding: { top: 20, bottom: 20 }
         },
         legend: {
           display: true,
-          position: 'top'
+          position: 'top',
+          labels: {
+            font: { size: 14, family: 'Arial, sans-serif' },
+            padding: 15,
+            boxWidth: 20
+          }
         },
         datalabels: {
           anchor: 'end',
           align: 'top',
-          formatter: (value) => value.toFixed(2),
+          formatter: (value) => {
+            // TASK B: Show N/A for null values
+            if (value === null || value === undefined) {
+              return 'N/A';
+            }
+            return value.toFixed(2);
+          },
           font: {
-            size: 12,
-            weight: 'bold'
+            size: 16,
+            weight: 'bold',
+            family: 'Arial, sans-serif'
           },
           color: '#1f2937',
-          display: true
+          display: true,
+          padding: 6
         }
       },
       scales: {
         y: {
           beginAtZero: true,
           max: 4,
+          ticks: {
+            font: { size: 14, family: 'Arial, sans-serif' },
+            stepSize: 0.5
+          },
           title: {
             display: true,
-            text: 'Score (0-4, 0=lowest risk, 4=highest risk)'
+            text: 'Score (0-4, 0=MINIMAL risk, 4=CRITICAL risk)',
+            font: { size: 16, weight: 'bold', family: 'Arial, sans-serif' },
+            padding: { top: 10, bottom: 10 }
+          },
+          grid: {
+            color: '#e5e7eb',
+            lineWidth: 1
+          }
+        },
+        x: {
+          ticks: {
+            font: { size: 12, family: 'Arial, sans-serif' },
+            maxRotation: 45,
+            minRotation: 45
+          },
+          grid: {
+            display: false
           }
         }
+      },
+      layout: {
+        padding: { left: 20, right: 20, top: 20, bottom: 20 }
       }
     }
   };
 
-  return generateChartImagePuppeteer(chartConfig, 800, 400);
+  return generateChartImagePuppeteer(chartConfig, 1200, 700);
 }
 
 /**
@@ -174,7 +251,7 @@ async function generatePrincipleEvaluatorHeatmap(byPrincipleTable, evaluatorsWit
     }
   };
 
-  return generateChartImagePuppeteer(chartConfig, 1000, 500);
+  return generateChartImagePuppeteer(chartConfig, 1400, 800);
 }
 
 /**
@@ -225,13 +302,159 @@ async function generateEvidenceCoverageChart(evidenceTypeDistribution, tensionsW
     }
   };
 
-  return generateChartImagePuppeteer(chartConfig, 600, 500);
+  return generateChartImagePuppeteer(chartConfig, 1000, 700);
 }
 
-/**
- * Generate tension review state chart
- */
-async function generateTensionReviewStateChart(tensionsSummary) {
+  /**
+   * Generate tension severity distribution chart
+   */
+  async function generateTensionSeverityChart(severityDistribution) {
+    const severities = ['low', 'medium', 'high', 'critical'];
+    const counts = severities.map(s => severityDistribution[s] || severityDistribution[s.toLowerCase()] || 0);
+    
+    const severityColors = {
+      'low': '#10b981',
+      'medium': '#f59e0b',
+      'high': '#ef4444',
+      'critical': '#dc2626'
+    };
+    
+    const colors = severities.map(s => severityColors[s] || '#6b7280');
+    
+    const chartConfig = {
+      type: 'bar',
+      data: {
+        labels: severities.map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+        datasets: [{
+          label: 'Number of Tensions',
+          data: counts,
+          backgroundColor: colors,
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Ethical Tension Severity Distribution',
+            font: { size: 16, weight: 'bold' }
+          },
+          legend: {
+            display: false
+          },
+          datalabels: {
+            anchor: 'end',
+            align: 'top',
+            formatter: (value) => value > 0 ? value : '',
+            font: {
+              size: 12,
+              weight: 'bold'
+            },
+            color: '#1f2937'
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Number of Tensions'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Severity Level'
+            }
+          }
+        }
+      }
+    };
+    
+    return generateChartImagePuppeteer(chartConfig, 1000, 700);
+  }
+
+  /**
+   * Generate evidence type distribution chart (bar chart)
+   */
+  async function generateEvidenceTypeChart(evidenceTypeDistribution) {
+    const types = Object.keys(evidenceTypeDistribution || {});
+    const counts = types.map(t => evidenceTypeDistribution[t]);
+    
+    const typeColors = {
+      'Policy': '#3b82f6',
+      'Test': '#10b981',
+      'User feedback': '#f59e0b',
+      'Logs': '#8b5cf6',
+      'Incident': '#ef4444',
+      'Other': '#6b7280'
+    };
+    
+    const colors = types.map(t => typeColors[t] || '#6b7280');
+    
+    const chartConfig = {
+      type: 'bar',
+      data: {
+        labels: types.length > 0 ? types : ['No Evidence'],
+        datasets: [{
+          label: 'Evidence Count',
+          data: types.length > 0 ? counts : [0],
+          backgroundColor: types.length > 0 ? colors : ['#e5e7eb'],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Evidence Type Distribution',
+            font: { size: 16, weight: 'bold' }
+          },
+          legend: {
+            display: false
+          },
+          datalabels: {
+            anchor: 'end',
+            align: 'top',
+            formatter: (value) => value > 0 ? value : '',
+            font: {
+              size: 12,
+              weight: 'bold'
+            },
+            color: '#1f2937'
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Count'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Evidence Type'
+            }
+          }
+        }
+      }
+    };
+    
+    return generateChartImagePuppeteer(chartConfig, 1200, 700);
+  }
+
+  /**
+   * Generate tension review state chart
+   */
+  async function generateTensionReviewStateChart(tensionsSummary) {
   // Include all possible review states, including "Resolved" if present
   const reviewStates = ['Proposed', 'Under Review', 'Accepted', 'Disputed', 'Resolved'];
   const counts = reviewStates.map(state => {
@@ -284,14 +507,80 @@ async function generateTensionReviewStateChart(tensionsSummary) {
     }
   };
 
-  return generateChartImagePuppeteer(chartConfig, 600, 500);
+  return generateChartImagePuppeteer(chartConfig, 1000, 700);
+}
+
+/**
+ * Generate team completion donut chart
+ * Shows completion status: submitted vs assigned
+ */
+async function generateTeamCompletionDonut(coverage) {
+  if (!coverage) {
+    console.warn('⚠️  generateTeamCompletionDonut: coverage data missing, returning null');
+    return null;
+  }
+
+  // DEĞİŞİKLİK: Artık sadece submit edenleri gösteriyoruz, assignedCount'a bakmıyoruz
+  const submitted = coverage.expertsSubmittedCount || 0;
+
+  if (submitted === 0) {
+    console.warn('⚠️  generateTeamCompletionDonut: no submitted experts, returning null');
+    return null;
+  }
+
+  const chartConfig = {
+    type: 'doughnut',
+    data: {
+      labels: ['Submitted'],
+      datasets: [{
+        label: 'Team Completion',
+        data: [submitted],
+        backgroundColor: ['#10b981'], // Green for submitted
+        borderColor: '#ffffff',
+        borderWidth: 3,
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: `Team Completion: ${submitted} Expert${submitted > 1 ? 's' : ''} Submitted`,
+          font: { size: 16, weight: 'bold' }
+        },
+        legend: {
+          display: true,
+          position: 'bottom'
+        },
+        datalabels: {
+          anchor: 'center',
+          align: 'center',
+          formatter: (value, ctx) => {
+            return `${value}`;
+          },
+          font: {
+            size: 12,
+            weight: 'bold'
+          },
+          color: '#ffffff'
+        }
+      }
+    }
+  };
+
+  return generateChartImagePuppeteer(chartConfig, 1000, 700);
 }
 
 module.exports = {
   generatePrincipleBarChart,
   generatePrincipleEvaluatorHeatmap,
   generateEvidenceCoverageChart,
+  generateEvidenceTypeChart,
+  generateTensionSeverityChart,
   generateTensionReviewStateChart,
+  generateTeamCompletionDonut,
   generateChartImage: generateChartImagePuppeteer
 };
 

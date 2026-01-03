@@ -55,6 +55,9 @@ router.patch('/:id/sections/:principle/expert-edit', reportController.updateSect
 // POST /api/reports/:id/sections/:principle/comments - Add comment to a section (expert/admin)
 router.post('/:id/sections/:principle/comments', reportController.addSectionComment);
 
+// GET /api/reports/:id/download-html - Download report as HTML (must be before /:id route)
+router.get('/:id/download-html', reportController.downloadReportHTML);
+
 // GET /api/reports/:id/download - Download report as PDF (must be before /:id route)
 router.get('/:id/download', reportController.downloadReportPDF);
 

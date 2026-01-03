@@ -39,10 +39,15 @@ export function ReportViewer({ reportId, currentUser, onBack }: ReportViewerProp
     }
   }, [reportId]);
 
-  const handleDownload = () => {
+  const handleDownloadPDF = () => {
     if (reportUrl) {
       window.open(reportUrl, '_blank');
     }
+  };
+
+  const handleDownloadHTML = () => {
+    const htmlUrl = api(`/api/reports/${reportId}/download-html?userId=${currentUser._id}`);
+    window.open(htmlUrl, '_blank');
   };
 
   const handleOpenInNewTab = () => {
@@ -103,11 +108,18 @@ export function ReportViewer({ reportId, currentUser, onBack }: ReportViewerProp
               Open in New Tab
             </button>
             <button
-              onClick={handleDownload}
+              onClick={handleDownloadHTML}
+              className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download HTML
+            </button>
+            <button
+              onClick={handleDownloadPDF}
               className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
             >
               <Download className="h-4 w-4 mr-2" />
-              Download
+              Download PDF
             </button>
           </div>
         </div>

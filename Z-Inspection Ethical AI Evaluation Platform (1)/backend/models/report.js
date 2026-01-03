@@ -24,9 +24,16 @@ const ReportSchema = new mongoose.Schema({
     type: String,
     default: 'Analysis Report'
   },
-  // Legacy single-body content
+  // Legacy single-body content (markdown)
   content: {
     type: String
+  },
+  // HTML report content (with embedded charts)
+  htmlContent: {
+    type: String,
+    default: null,
+    select: true, // Ensure htmlContent is always selected in queries
+    required: false // Not required for legacy reports
   },
   // Expert comments (one per expert)
   expertComments: {
