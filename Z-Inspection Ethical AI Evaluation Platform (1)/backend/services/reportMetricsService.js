@@ -37,11 +37,18 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
     ? new mongoose.Types.ObjectId(projectId)
     : projectId;
 
-  // Fetch ALL Score documents for this project
-  const scores = await Score.find({
-    projectId: projectIdObj,
-    questionnaireKey: questionnaireKey || { $exists: true }
-  }).lean();
+  // CRITICAL: Fetch ALL Score documents for this project (all questionnaires)
+  // This ensures that legal questions and other role-specific questionnaires are included
+  // We aggregate scores across all questionnaires for the report
+  const scoreQuery = {
+    projectId: projectIdObj
+  };
+  // Only filter by questionnaireKey if explicitly provided (for backward compatibility)
+  // if (questionnaireKey) {
+  //   scoreQuery.questionnaireKey = questionnaireKey;
+  // }
+  
+  const scores = await Score.find(scoreQuery).lean();
 
   // Debug: Log found scores with DETAILED principle data
   console.log(`📊 [DEBUG buildPrincipleScores] Found ${scores.length} Score documents for project ${projectId}`);
@@ -50,14 +57,25 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
       const principleCount = s.byPrinciple ? Object.keys(s.byPrinciple).filter(p => s.byPrinciple[p] !== null && s.byPrinciple[p] !== undefined).length : 0;
       console.log(`  Score ${idx + 1}: userId=${s.userId}, questionnaireKey=${s.questionnaireKey}, principles with data=${principleCount}`);
       
-      // CRITICAL DEBUG: Log actual avg values for each principle in this Score document
+      // CRITICAL DEBUG: Log ALL principle keys in Score document (both canonical and non-canonical)
       if (s.byPrinciple) {
+        console.log(`    📋 ALL principle keys in Score document: [${Object.keys(s.byPrinciple).join(', ')}]`);
+        
+        // Log canonical principles
         CANONICAL_PRINCIPLES.forEach(principle => {
           const data = s.byPrinciple[principle];
           if (data && typeof data === 'object' && data.avg !== undefined) {
-            console.log(`    ${principle}: avg=${data.avg}, n=${data.n}, min=${data.min}, max=${data.max}`);
+            console.log(`    ✅ ${principle}: avg=${data.avg}, n=${data.n}, min=${data.min}, max=${data.max}`);
           } else {
-            console.log(`    ${principle}: null/undefined`);
+            console.log(`    ❌ ${principle}: null/undefined`);
+          }
+        });
+        
+        // Log non-canonical principles (that will be mapped)
+        Object.keys(s.byPrinciple).forEach(rawPrinciple => {
+          if (!CANONICAL_PRINCIPLES.includes(rawPrinciple)) {
+            const data = s.byPrinciple[rawPrinciple];
+            console.log(`    🔄 NON-CANONICAL "${rawPrinciple}": avg=${data?.avg || 'N/A'}, n=${data?.n || 'N/A'}`);
           }
         });
       }
@@ -496,13 +514,25 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   // This ensures that even if old Score documents exist, we use the most up-to-date Response data
   try {
     const { computeScores } = require('./evaluationService');
-    console.log(`🔄 [DEBUG buildReportMetrics] Recomputing scores for project ${projectId}, questionnaireKey ${questionnaireKey}...`);
+    const Response = require('../models/response');
     
-    // Recompute scores for all users (userId = null means all users)
-    await computeScores(projectId, null, questionnaireKey);
-    console.log(`✅ [DEBUG buildReportMetrics] Scores recomputed successfully`);
+    // CRITICAL: Recompute scores for ALL questionnaires, not just the specified one
+    // This is because legal questions might be in a different questionnaireKey
+    // but we want them to be included in the report
+    const allQuestionnaireKeys = await Response.distinct('questionnaireKey', { projectId });
+    console.log(`🔄 [DEBUG buildReportMetrics] Recomputing scores for project ${projectId}`);
+    console.log(`   Found ${allQuestionnaireKeys.length} questionnaire keys: [${allQuestionnaireKeys.join(', ')}]`);
+    
+    // Recompute scores for each questionnaire key (userId = null means all users)
+    for (const qKey of allQuestionnaireKeys) {
+      console.log(`   Recomputing scores for questionnaireKey: ${qKey}`);
+      await computeScores(projectId, null, qKey);
+    }
+    
+    console.log(`✅ [DEBUG buildReportMetrics] Scores recomputed successfully for all questionnaires`);
   } catch (scoreError) {
     console.warn(`⚠️ [WARNING buildReportMetrics] Failed to recompute scores, continuing with existing Score documents: ${scoreError.message}`);
+    console.error(`   Error details:`, scoreError);
     // Continue anyway - we'll use existing Score documents
   }
   const projectIdObj = isValidObjectId(projectId)
@@ -524,11 +554,19 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   // Get data quality notes (evaluators who submitted but have no scores)
   const dataQualityNotes = evaluators.withScores.dataQualityNotes || [];
 
-  // Get scores for this project and questionnaire
-  const scores = await Score.find({
-    projectId: projectIdObj,
-    questionnaireKey: questionnaireKey || { $exists: true }
-  }).lean();
+  // CRITICAL: Get scores for this project and ALL questionnaires (not just the specified one)
+  // This is because we want to include legal questions and other role-specific questionnaires in the report
+  // If questionnaireKey is specified, we can optionally filter, but for now we include all
+  const scoreQuery = {
+    projectId: projectIdObj
+  };
+  // Only filter by questionnaireKey if explicitly provided and not null
+  // if (questionnaireKey) {
+  //   scoreQuery.questionnaireKey = questionnaireKey;
+  // }
+  
+  const scores = await Score.find(scoreQuery).lean();
+  console.log(`📊 [DEBUG buildReportMetrics] Found ${scores.length} Score documents (all questionnaires)`);
 
   // Get responses - CRITICAL: Get ALL responses (draft and submitted) for started count
   // Submitted responses are used for submitted count, all responses for started count

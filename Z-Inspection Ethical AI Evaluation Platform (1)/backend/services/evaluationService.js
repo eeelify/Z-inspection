@@ -520,13 +520,21 @@ async function computeScores(projectId, userId = null, questionnaireKey = null) 
       const byPrinciple = {};
       for (const principle in scoresByPrinciple) {
         const principleScores = scoresByPrinciple[principle];
+        const avg = principleScores.reduce((a, b) => a + b, 0) / principleScores.length;
+        const min = Math.min(...principleScores);
+        const max = Math.max(...principleScores);
+        
+        console.log(`📊 [DEBUG computeScores] Principle "${principle}": scores=[${principleScores.join(', ')}], avg=${avg.toFixed(2)}, n=${principleScores.length}, min=${min}, max=${max}`);
+        
         byPrinciple[principle] = {
-          avg: principleScores.reduce((a, b) => a + b, 0) / principleScores.length,
+          avg: Math.round(avg * 100) / 100, // Round to 2 decimal places
           n: principleScores.length,
-          min: Math.min(...principleScores),
-          max: Math.max(...principleScores)
+          min: min,
+          max: max
         };
       }
+      
+      console.log(`📊 [DEBUG computeScores] Final byPrinciple object:`, JSON.stringify(byPrinciple, null, 2));
 
       const totalAvg = allScores.length > 0 
         ? allScores.reduce((a, b) => a + b, 0) / allScores.length 
@@ -549,11 +557,14 @@ async function computeScores(projectId, userId = null, questionnaireKey = null) 
       };
 
       // Save or update score
-      await Score.findOneAndUpdate(
+      const savedScore = await Score.findOneAndUpdate(
         { projectId, userId: group.userId, questionnaireKey: group.questionnaireKey },
         scoreDoc,
         { new: true, upsert: true }
       );
+      
+      console.log(`✅ [DEBUG computeScores] Saved Score document: _id=${savedScore._id}, byPrinciple keys: [${Object.keys(savedScore.byPrinciple || {}).join(', ')}]`);
+      console.log(`📊 [DEBUG computeScores] Saved Score byPrinciple content:`, JSON.stringify(savedScore.byPrinciple, null, 2));
 
       scores.push(scoreDoc);
     }
