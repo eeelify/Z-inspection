@@ -498,26 +498,66 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         const loadedPriorities: Record<string, RiskLevel> = {};
         const loadedRiskScores: Record<string, 0 | 1 | 2 | 3 | 4> = {};
         
-        responses.forEach(({ response }) => {
+        responses.forEach(({ questionnaireKey, response }) => {
           if (response && response.answers && Array.isArray(response.answers)) {
-            console.log(`📝 Loading ${response.answers.length} answers from response`);
+            console.log(`📝 Loading ${response.answers.length} answers from ${questionnaireKey} response`);
             response.answers.forEach((responseAnswer: any) => {
-              if (!responseAnswer.questionCode) return;
+              // Try to find question by questionCode first, then by questionId
+              let question: Question | null = null;
               
-              // Find question by code in loadedQuestions (MongoDB questions)
-              const question = allLoadedQuestions.find(q => 
-                q.code === responseAnswer.questionCode || 
-                q.id === responseAnswer.questionCode ||
-                (q._id && String(q._id) === String(responseAnswer.questionId))
-              );
+              if (responseAnswer.questionCode) {
+                question = allLoadedQuestions.find(q => 
+                  q.code === responseAnswer.questionCode
+                ) || null;
+                if (question) {
+                  console.log(`✅ Found question by code: ${responseAnswer.questionCode}`);
+                }
+              }
+              
+              // If not found by code, try by questionId
+              if (!question && responseAnswer.questionId) {
+                const questionIdStr = String(responseAnswer.questionId._id || responseAnswer.questionId);
+                question = allLoadedQuestions.find(q => 
+                  (q._id && String(q._id) === questionIdStr) ||
+                  (q.id === questionIdStr)
+                ) || null;
+                if (question) {
+                  console.log(`✅ Found question by ID: ${questionIdStr} -> code: ${question.code}`);
+                }
+              }
+              
+              // If still not found, try to find by any matching identifier
+              if (!question) {
+                // Try to find by questionCode in the answer (might be stored differently)
+                const possibleCode = responseAnswer.questionCode || 
+                                   (responseAnswer.questionId?.code) ||
+                                   (responseAnswer.questionId?._id ? String(responseAnswer.questionId._id) : null);
+                if (possibleCode) {
+                  question = allLoadedQuestions.find(q => 
+                    q.code === possibleCode ||
+                    q.id === possibleCode ||
+                    (q._id && String(q._id) === possibleCode)
+                  ) || null;
+                }
+              }
               
               if (!question) {
-                console.warn(`⚠️ Question not found for code: ${responseAnswer.questionCode}`);
+                console.warn(`⚠️ Question not found for answer:`, {
+                  questionCode: responseAnswer.questionCode,
+                  questionId: responseAnswer.questionId?._id || responseAnswer.questionId,
+                  questionnaireKey: questionnaireKey
+                });
                 return;
               }
               
               const questionKey = question.id;
               const mapped = mapResponseAnswerToLocalState(responseAnswer);
+              
+              console.log(`💾 Mapping answer for question ${question.code} (key: ${questionKey}):`, {
+                hasAnswer: mapped.answer !== null && mapped.answer !== undefined && mapped.answer !== '',
+                hasRiskScore: mapped.riskScore !== undefined,
+                answerValue: mapped.answer
+              });
               
               if (mapped.answer !== null && mapped.answer !== undefined && mapped.answer !== '') {
                 loadedAnswers[questionKey] = mapped.answer;
@@ -527,6 +567,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 loadedRiskScores[questionKey] = mapped.riskScore;
               }
             });
+          } else {
+            console.log(`⚠️ No answers found in response for ${questionnaireKey}`);
           }
         });
         
@@ -627,9 +669,32 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           const data = await response.json();
           // Only load if we haven't loaded from MongoDB responses yet
           if (!hasLoadedResponses) {
-            if (data.answers) setAnswers(data.answers);
+            if (data.answers) {
+              setAnswers(data.answers);
+              // Ensure custom question answers are also loaded
+              console.log('📝 Loaded answers from Evaluation:', Object.keys(data.answers).length, 'keys');
+            }
             if (data.questionPriorities) setQuestionPriorities(data.questionPriorities);
             if (data.riskScores) setRiskScores(data.riskScores);
+          } else {
+            // Even if responses are loaded, we should still load custom question answers from Evaluation
+            // because custom questions are stored in Evaluation, not in Response collection
+            if (data.answers) {
+              setAnswers((prev) => {
+                // Merge custom question answers (those starting with 'custom_') from Evaluation
+                const customAnswers: Record<string, any> = {};
+                Object.keys(data.answers).forEach(key => {
+                  if (key.startsWith('custom_')) {
+                    customAnswers[key] = data.answers[key];
+                  }
+                });
+                if (Object.keys(customAnswers).length > 0) {
+                  console.log('📝 Merging custom question answers:', Object.keys(customAnswers).length, 'custom answers');
+                  return { ...prev, ...customAnswers };
+                }
+                return prev;
+              });
+            }
           }
           if (data.riskLevel) setRiskLevel(data.riskLevel as RiskLevel);
           // Custom questions (persisted)
@@ -641,7 +706,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
               for (const q of data.customQuestions) {
                 if (q && q.id) merged.set(q.id, q);
               }
-              return Array.from(merged.values());
+              const mergedArray = Array.from(merged.values());
+              console.log('📝 Loaded custom questions:', mergedArray.length, 'questions for stage', currentStage);
+              return mergedArray;
             });
           }
           // Genel riskleri yükle - eğer veritabanında varsa yükle
@@ -967,6 +1034,15 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const saveEvaluation = useCallback(async (status: 'draft' | 'completed' = 'draft', silent: boolean = false) => {
     setSaving(true);
     try {
+      // Log which questions are being saved
+      const answerKeys = Object.keys(answers);
+      console.log(`💾 Saving ${answerKeys.length} answers:`, {
+        answerKeys: answerKeys.slice(0, 20),
+        currentStage,
+        currentQuestionIndex,
+        activeQuestion: activeQuestion ? { id: activeQuestion.id, code: activeQuestion.code, stage: activeQuestion.stage } : null
+      });
+      
       const response = await fetch(api('/api/evaluations'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -983,19 +1059,31 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         })
       });
 
-      if (!response.ok) throw new Error('Kaydetme başarısız');
+      if (!response.ok) {
+        let errorMessage = 'Kaydetme başarısız';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.details || errorMessage;
+          console.error('❌ Save error from backend:', errorData);
+        } catch {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
       
       const savedData = await response.json();
-      console.log('Saved:', savedData);
+      console.log('✅ Saved successfully:', savedData);
       
       if (status === 'draft' && !silent) {
         alert('✅ Draft saved successfully to Database!');
       }
       return true;
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('❌ Error saving evaluation:', error);
       if (!silent) {
-        alert('❌ Error saving data. Please check your connection.');
+        const errorMsg = error?.message || error?.error || 'Error saving data. Please check your connection.';
+        alert(`❌ Error saving data:\n\n${errorMsg}\n\nPlease check the console for more details.`);
       }
       return false;
     } finally {

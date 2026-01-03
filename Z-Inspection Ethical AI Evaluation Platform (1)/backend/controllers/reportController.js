@@ -1168,6 +1168,23 @@ exports.getReportById = async (req, res) => {
       }
     }
 
+    // For draft reports, also include fresh metrics so users can see current data
+    // This ensures the review screen shows up-to-date information
+    if (report.status === 'draft' && report.projectId) {
+      try {
+        const { buildReportMetrics } = require('../services/reportMetricsService');
+        const projectIdObj = report?.projectId?._id || report?.projectId;
+        const freshMetrics = await buildReportMetrics(projectIdObj, 'general-v1');
+        
+        // Add fresh metrics to report response
+        report.freshMetrics = freshMetrics;
+        console.log('✅ Added fresh metrics to draft report for review');
+      } catch (metricsError) {
+        // Don't fail the request if metrics can't be computed
+        console.warn('⚠️ Could not compute fresh metrics for report review:', metricsError.message);
+      }
+    }
+
     res.json(report);
   } catch (err) {
     console.error('Error fetching report:', err);

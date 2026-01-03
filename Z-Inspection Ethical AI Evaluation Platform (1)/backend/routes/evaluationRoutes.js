@@ -80,10 +80,48 @@ router.post('/responses/submit', async (req, res) => {
 router.get('/responses', async (req, res) => {
   try {
     const { projectId, userId, questionnaireKey } = req.query;
-    const response = await Response.findOne({ projectId, userId, questionnaireKey })
-      .populate('answers.questionId');
+    
+    if (!projectId || !userId || !questionnaireKey) {
+      return res.status(400).json({ error: 'projectId, userId, and questionnaireKey are required' });
+    }
+    
+    const mongoose = require('mongoose');
+    const isValidObjectId = (id) => {
+      if (!id) return false;
+      try {
+        return mongoose.Types.ObjectId.isValid(id) && new mongoose.Types.ObjectId(id).toString() === id.toString();
+      } catch {
+        return false;
+      }
+    };
+    
+    // Convert to ObjectId if valid
+    const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    
+    console.log(`📥 GET /api/evaluations/responses: projectId=${projectId}, userId=${userId}, questionnaireKey=${questionnaireKey}`);
+    
+    const response = await Response.findOne({ 
+      projectId: projectIdObj, 
+      userId: userIdObj, 
+      questionnaireKey: questionnaireKey 
+    })
+      .populate('answers.questionId', 'code text answerType options')
+      .lean();
+    
+    if (response) {
+      console.log(`✅ Found response with ${response.answers?.length || 0} answers`);
+      // Ensure answers array exists
+      if (!response.answers) {
+        response.answers = [];
+      }
+    } else {
+      console.log(`⚠️ No response found for projectId=${projectId}, userId=${userId}, questionnaireKey=${questionnaireKey}`);
+    }
+    
     res.json(response || null);
   } catch (error) {
+    console.error('❌ Error fetching response:', error);
     res.status(500).json({ error: error.message });
   }
 });

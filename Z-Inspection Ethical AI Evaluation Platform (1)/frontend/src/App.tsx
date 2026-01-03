@@ -330,7 +330,42 @@ function App() {
         })();
 
         if ((err as any)?.error === "NOT_ALL_TENSIONS_VOTED") {
-          alert("Please make sure you have voted on all tensions.");
+          const totalTensions = (err as any)?.totalTensions || 0;
+          const expertNames = (err as any)?.expertNames || 'some experts';
+          alert(
+            `Cannot finish evolution: Not all experts have voted on all tensions.\n\n` +
+            `Total tensions: ${totalTensions}\n` +
+            `Please wait for ${expertNames} to vote on all tensions.`
+          );
+          return;
+        }
+        if ((err as any)?.error === "NOT_ALL_QUESTIONS_ANSWERED") {
+          const unansweredCount = (err as any)?.unansweredCount || 0;
+          const totalQuestions = (err as any)?.totalQuestions || 0;
+          const answeredQuestions = (err as any)?.answeredQuestions || 0;
+          alert(
+            `Cannot finish evolution: ${unansweredCount} question(s) are not answered.\n\n` +
+            `Progress: ${answeredQuestions}/${totalQuestions} questions answered.\n\n` +
+            `Please answer all questions before finishing evolution.`
+          );
+          return;
+        }
+        if ((err as any)?.error === "WAITING_FOR_OTHER_EXPERTS") {
+          const totalExperts = (err as any)?.totalExperts || 0;
+          const completedExperts = (err as any)?.completedExperts || 0;
+          const incompleteExperts = (err as any)?.incompleteExperts || 0;
+          const expertProgresses = (err as any)?.expertProgresses || [];
+          const incompleteList = expertProgresses
+            .filter((ep: any) => ep.progress < 100)
+            .map((ep: any) => `- ${ep.name || 'Expert'}: ${ep.progress}%`)
+            .join('\n');
+          
+          alert(
+            `Please wait for other experts to complete their evaluations.\n\n` +
+            `Progress: ${completedExperts}/${totalExperts} experts completed (100%)\n` +
+            `${incompleteExperts} expert(s) still working:\n${incompleteList || 'No experts listed'}\n\n` +
+            `All experts must complete their evaluations before the project can be finished.`
+          );
           return;
         }
         const details = rawText && rawText.length < 500 ? rawText : "";

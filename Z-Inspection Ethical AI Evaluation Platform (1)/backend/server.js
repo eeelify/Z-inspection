@@ -1107,9 +1107,9 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     // Check tension votes
-    const tensions = await Tension.find({ projectId: projectIdObj }).select('votes').lean();
-    const totalTensions = tensions.length;
-    const votedTensions = tensions.filter((t) => {
+    const userTensions = await Tension.find({ projectId: projectIdObj }).select('votes').lean();
+    const totalTensions = userTensions.length;
+    const votedTensions = userTensions.filter((t) => {
       const votes = Array.isArray(t.votes) ? t.votes : [];
       return votes.some((v) => String(v.userId) === userIdStr);
     }).length;
@@ -1122,8 +1122,407 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
       });
     }
 
+    // Check if all questions are answered
+    const Response = require('./models/response');
+    const Question = require('./models/question');
+    
+    // Get assignment (will be created below if missing)
     const ProjectAssignment = require('./models/projectAssignment');
-    let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+    let assignmentForCheck = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
+    if (!assignmentForCheck) {
+      // Create assignment if missing (should be rare)
+      try {
+        const { createAssignment } = require('./services/evaluationService');
+        const role = user.role || 'unknown';
+        const questionnaires = ['general-v1'];
+        assignmentForCheck = await createAssignment(projectIdObj, userIdObj, role, questionnaires);
+      } catch {
+        // fallback: create minimal assignment doc
+        assignmentForCheck = await ProjectAssignment.create({
+          projectId: projectIdObj,
+          userId: userIdObj,
+          role: user.role || 'unknown',
+          questionnaires: ['general-v1'],
+          status: 'assigned',
+        });
+      }
+    }
+
+    // Get all assigned questionnaires
+    const assignedQuestionnaireKeys = assignmentForCheck.questionnaires || [];
+    if (assignedQuestionnaireKeys.length === 0) {
+      // If no questionnaires assigned, try to determine from role
+      const role = user.role || 'unknown';
+      if (role === 'ethical-expert') assignedQuestionnaireKeys.push('ethical-expert-v1');
+      else if (role === 'medical-expert') assignedQuestionnaireKeys.push('medical-expert-v1');
+      else if (role === 'technical-expert') assignedQuestionnaireKeys.push('technical-expert-v1');
+      else if (role === 'legal-expert') assignedQuestionnaireKeys.push('legal-expert-v1');
+      else if (role === 'education-expert') assignedQuestionnaireKeys.push('education-expert-v1');
+      assignedQuestionnaireKeys.push('general-v1'); // Always include general
+    }
+
+    // Check which questionnaires actually have responses in the database
+    const existingResponses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj,
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('questionnaireKey').lean();
+    
+    const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
+    
+    let questionnairesToCount = assignedQuestionnaireKeys.slice();
+    const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
+    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key => 
+      key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+    );
+    
+    // If both general-v1 and role-specific responses exist, count both
+    // If only role-specific exists and has 30+ questions, it likely includes general questions
+    if (!hasGeneralResponse && hasRoleSpecificResponse) {
+      const roleSpecificKey = assignedQuestionnaireKeys.find(key => 
+        key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+      );
+      
+      if (roleSpecificKey) {
+        const roleSpecificCount = await Question.countDocuments({ questionnaireKey: roleSpecificKey });
+        if (roleSpecificCount >= 30) {
+          questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
+          console.log(`📊 Finish evolution: Only role-specific response exists (${roleSpecificKey}, ${roleSpecificCount} questions), excluding general-v1 from count`);
+        }
+      }
+    } else if (hasGeneralResponse && hasRoleSpecificResponse) {
+      console.log(`📊 Finish evolution: Both general-v1 and role-specific responses exist, counting both`);
+    }
+    
+    // Get all assigned questions
+    const allAssignedQuestions = await Question.find({
+      questionnaireKey: { $in: questionnairesToCount }
+    }).select('code _id required').lean();
+
+    // Get all responses for this user and project across all assigned questionnaires
+    // questionnairesToCount is only for question count, but we need to fetch all responses
+    const responses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj,
+      questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('questionnaireKey answers').lean();
+    
+    console.log(`📊 Finish evolution: Fetched ${responses.length} response(s) for questionnaires: ${responses.map(r => r.questionnaireKey).join(', ')}`);
+
+    // Check custom questions from Evaluation
+    const evaluation = await Evaluation.findOne({
+      projectId: projectIdObj,
+      userId: userIdObj
+    }).select('customQuestions answers').lean();
+
+    const customQuestions = evaluation?.customQuestions || [];
+    const customQuestionIds = customQuestions.map((q) => q.id).filter(Boolean);
+
+    // Helper function to check if answer is answered
+    const isAnswerAnswered = (answer) => {
+      if (answer === null || answer === undefined) return false;
+      if (typeof answer === 'string') return answer.trim().length > 0;
+      if (Array.isArray(answer)) return answer.length > 0;
+      if (typeof answer === 'object') {
+        // Check for answer object structure
+        if (answer.choiceKey) return true;
+        if (answer.text && answer.text.trim().length > 0) return true;
+        if (answer.numeric !== undefined && answer.numeric !== null) return true;
+        if (answer.multiChoiceKeys && answer.multiChoiceKeys.length > 0) return true;
+        return false;
+      }
+      return true; // numbers/booleans count as answered
+    };
+
+    // Check all assigned questions are answered
+    const unansweredQuestions = [];
+    
+    for (const question of allAssignedQuestions) {
+      const questionCode = question.code;
+      const questionId = question._id.toString();
+      
+      // Find response for this question
+      let isAnswered = false;
+      for (const response of responses) {
+        if (response.answers && Array.isArray(response.answers)) {
+          const answer = response.answers.find((a) => 
+            a.questionCode === questionCode || 
+            a.questionId?.toString() === questionId ||
+            String(a.questionId) === questionId
+          );
+          if (answer && isAnswerAnswered(answer.answer)) {
+            isAnswered = true;
+            break;
+          }
+        }
+      }
+      
+      // Also check Evaluation answers for custom questions or legacy answers
+      if (!isAnswered && evaluation?.answers) {
+        const evalAnswer = evaluation.answers[questionId] || evaluation.answers[questionCode];
+        if (evalAnswer !== undefined && evalAnswer !== null) {
+          if (typeof evalAnswer === 'string' && evalAnswer.trim().length > 0) {
+            isAnswered = true;
+          } else if (typeof evalAnswer !== 'string') {
+            isAnswered = true;
+          }
+        }
+      }
+      
+      if (!isAnswered && question.required !== false) {
+        unansweredQuestions.push(questionCode || questionId);
+      }
+    }
+
+    // Check custom questions are answered
+    for (const customQuestion of customQuestions) {
+      const customQuestionId = customQuestion.id;
+      if (!customQuestionId) continue;
+      
+      let isAnswered = false;
+      if (evaluation?.answers) {
+        const customAnswer = evaluation.answers[customQuestionId];
+        if (customAnswer !== undefined && customAnswer !== null) {
+          if (typeof customAnswer === 'string' && customAnswer.trim().length > 0) {
+            isAnswered = true;
+          } else if (typeof customAnswer !== 'string') {
+            isAnswered = true;
+          }
+        }
+      }
+      
+      if (!isAnswered && customQuestion.required !== false) {
+        unansweredQuestions.push(`custom_${customQuestionId}`);
+      }
+    }
+
+    if (unansweredQuestions.length > 0) {
+      return res.status(400).json({
+        error: 'NOT_ALL_QUESTIONS_ANSWERED',
+        unansweredCount: unansweredQuestions.length,
+        unansweredQuestions: unansweredQuestions.slice(0, 10), // Limit to first 10 for response size
+        totalQuestions: allAssignedQuestions.length + customQuestions.length,
+        answeredQuestions: (allAssignedQuestions.length + customQuestions.length) - unansweredQuestions.length,
+      });
+    }
+
+    // Check if ALL assigned experts have completed their evaluations (progress = 100%)
+    const { getAssignedExperts } = require('./services/notificationService');
+    
+    const assignedExpertIds = await getAssignedExperts(projectIdObj);
+    if (assignedExpertIds.length > 0) {
+      // Check progress for all assigned experts using the same logic as /api/user-progress
+      const expertProgresses = [];
+      
+      for (const expertId of assignedExpertIds) {
+        // Get assignment for this expert
+        const expertAssignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: expertId });
+        if (!expertAssignment) {
+          expertProgresses.push({ userId: expertId, progress: 0 });
+          continue;
+        }
+        
+        // Get assigned questionnaires (same logic as /api/user-progress)
+        let assignedQuestionnaireKeys = Array.isArray(expertAssignment.questionnaires) ? expertAssignment.questionnaires.slice() : [];
+        if (!assignedQuestionnaireKeys.includes('general-v1')) {
+          assignedQuestionnaireKeys.unshift('general-v1');
+        }
+        
+        // If questionnaires are empty, derive from role
+        if (assignedQuestionnaireKeys.length === 0) {
+          const role = String(expertAssignment.role || '').toLowerCase();
+          const roleMap = {
+            'ethical-expert': 'ethical-expert-v1',
+            'medical-expert': 'medical-expert-v1',
+            'technical-expert': 'technical-expert-v1',
+            'legal-expert': 'legal-expert-v1',
+            'education-expert': 'education-expert-v1',
+          };
+          const roleKey = roleMap[role] || null;
+          assignedQuestionnaireKeys = roleKey ? ['general-v1', roleKey] : ['general-v1'];
+        }
+        
+        // Check which questionnaires actually have responses in the database
+        const existingResponses = await Response.find({
+          projectId: projectIdObj,
+          userId: expertId,
+          questionnaireKey: { $in: assignedQuestionnaireKeys }
+        }).select('questionnaireKey').lean();
+        
+        const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
+        
+        let questionnairesToCount = assignedQuestionnaireKeys.slice();
+        const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
+        const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key => 
+          key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+        );
+        
+        // If both general-v1 and role-specific responses exist, count both
+        // If only role-specific exists and has 30+ questions, it likely includes general questions
+        if (!hasGeneralResponse && hasRoleSpecificResponse) {
+          const roleSpecificKey = assignedQuestionnaireKeys.find(key => 
+            key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+          );
+          
+          if (roleSpecificKey) {
+            const roleSpecificCount = await Question.countDocuments({ questionnaireKey: roleSpecificKey });
+            if (roleSpecificCount >= 30) {
+              questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
+            }
+          }
+        }
+        
+        // Count total questions (all questionnaires including role-specific)
+        const totalQuestions = await Question.countDocuments({
+          questionnaireKey: { $in: questionnairesToCount }
+        });
+        
+        if (totalQuestions === 0) {
+          expertProgresses.push({ userId: expertId, progress: 0 });
+          continue;
+        }
+        
+        // Get all responses for this expert across all assigned questionnaires
+        // questionnairesToCount is only for question count, but we need to fetch all responses
+        const responses = await Response.find({
+          projectId: projectIdObj,
+          userId: expertId,
+          questionnaireKey: { $in: assignedQuestionnaireKeys }
+        }).select('questionnaireKey answers').lean();
+        
+        console.log(`📊 Expert ${expertId}: Fetched ${responses.length} response(s) for questionnaires: ${responses.map(r => r.questionnaireKey).join(', ')}`);
+        
+        // Count answered questions (same logic as /api/user-progress)
+        const answeredKeys = new Set();
+        for (const r of (responses || [])) {
+          const qKey = r.questionnaireKey;
+          const arr = Array.isArray(r.answers) ? r.answers : [];
+          for (const a of arr) {
+            const idKey = a?.questionId ? String(a.questionId) : '';
+            const codeKey = a?.questionCode !== undefined && a?.questionCode !== null ? String(a.questionCode).trim() : '';
+            const key = idKey.length > 0 ? idKey : (codeKey.length > 0 ? `${qKey}:${codeKey}` : '');
+            if (!key || answeredKeys.has(key)) continue;
+            
+            let hasAnswer = false;
+            if (a?.answer) {
+              if (a.answer.choiceKey !== null && a.answer.choiceKey !== undefined && a.answer.choiceKey !== '') hasAnswer = true;
+              else if (a.answer.text !== null && a.answer.text !== undefined && String(a.answer.text).trim().length > 0) hasAnswer = true;
+              else if (a.answer.numeric !== null && a.answer.numeric !== undefined) hasAnswer = true;
+              else if (Array.isArray(a.answer.multiChoiceKeys) && a.answer.multiChoiceKeys.length > 0) hasAnswer = true;
+            } else if (a.choiceKey || (a.text && String(a.text).trim().length > 0) || a.numeric !== undefined || (Array.isArray(a.multiChoiceKeys) && a.multiChoiceKeys.length > 0)) {
+              hasAnswer = true;
+            }
+            
+            if (hasAnswer) answeredKeys.add(key);
+          }
+        }
+        
+        // Also check custom questions from Evaluation
+        const expertEvaluation = await Evaluation.findOne({
+          projectId: projectIdObj,
+          userId: expertId
+        }).select('customQuestions answers').lean();
+        
+        const customQuestions = expertEvaluation?.customQuestions || [];
+        let customQuestionsTotal = 0;
+        let customQuestionsAnswered = 0;
+        
+        for (const customQuestion of customQuestions) {
+          if (customQuestion.required !== false) {
+            customQuestionsTotal++;
+            const customQuestionId = customQuestion.id;
+            if (customQuestionId && expertEvaluation?.answers) {
+              const customAnswer = expertEvaluation.answers[customQuestionId];
+              if (customAnswer !== undefined && customAnswer !== null) {
+                if (typeof customAnswer === 'string' && customAnswer.trim().length > 0) {
+                  customQuestionsAnswered++;
+                } else if (typeof customAnswer !== 'string') {
+                  customQuestionsAnswered++;
+                }
+              }
+            }
+          }
+        }
+        
+        // Total = regular questions + custom questions
+        const totalWithCustom = totalQuestions + customQuestionsTotal;
+        const answeredWithCustom = answeredKeys.size + customQuestionsAnswered;
+        const progress = totalWithCustom > 0 ? Math.round((answeredWithCustom / totalWithCustom) * 100) : 0;
+        
+        expertProgresses.push({
+          userId: expertId,
+          progress: Math.max(0, Math.min(100, progress))
+        });
+      }
+      
+      // Check if all experts have 100% progress
+      const allExpertsCompleted = expertProgresses.every(ep => ep.progress >= 100);
+      if (!allExpertsCompleted) {
+        const incompleteExperts = expertProgresses.filter(ep => ep.progress < 100);
+        const incompleteCount = incompleteExperts.length;
+        const totalExperts = expertProgresses.length;
+        
+        // Get expert names for better error message
+        const expertUsers = await User.find({ _id: { $in: assignedExpertIds } }).select('name email role').lean();
+        const expertNames = expertUsers.map(u => u.name || u.email).join(', ');
+        
+        return res.status(400).json({
+          error: 'WAITING_FOR_OTHER_EXPERTS',
+          message: 'Not all experts have completed their evaluations',
+          totalExperts: totalExperts,
+          completedExperts: totalExperts - incompleteCount,
+          incompleteExperts: incompleteCount,
+          expertNames: expertNames,
+          expertProgresses: expertProgresses.map(ep => {
+            const expertUser = expertUsers.find(u => u._id.toString() === ep.userId.toString());
+            return {
+              userId: ep.userId.toString(),
+              name: expertUser?.name || expertUser?.email || 'Unknown',
+              progress: ep.progress
+            };
+          })
+        });
+      }
+    }
+
+    // Check if all tensions (if any) have been voted on by all assigned experts
+    const projectTensions = await Tension.find({ projectId: projectIdObj }).lean();
+    if (projectTensions.length > 0) {
+      const assignedExpertIds = await getAssignedExperts(projectIdObj);
+      const assignedExpertIdsStr = assignedExpertIds.map(id => id.toString());
+      
+      for (const tension of projectTensions) {
+        const tensionVotes = tension.votes || [];
+        const votedUserIds = tensionVotes.map(v => String(v.userId));
+        
+        // Check if all assigned experts have voted on this tension
+        const missingVotes = assignedExpertIdsStr.filter(expertId => !votedUserIds.includes(expertId));
+        
+        if (missingVotes.length > 0) {
+          const expertUsers = await User.find({ _id: { $in: missingVotes.map(id => new mongoose.Types.ObjectId(id)) } }).select('name email').lean();
+          const expertNames = expertUsers.map(u => u.name || u.email).join(', ');
+          
+          return res.status(400).json({
+            error: 'NOT_ALL_TENSIONS_VOTED',
+            message: 'Not all experts have voted on all tensions',
+            totalTensions: projectTensions.length,
+            tensionsWithMissingVotes: projectTensions.map(t => ({
+              tensionId: t._id.toString(),
+              claimStatement: t.claimStatement,
+              missingVotes: assignedExpertIdsStr.filter(expertId => {
+                const votes = t.votes || [];
+                const votedUserIds = votes.map(v => String(v.userId));
+                return !votedUserIds.includes(expertId);
+              })
+            })).filter(t => t.missingVotes.length > 0),
+            expertNames: expertNames
+          });
+        }
+      }
+    }
+
+    // Get assignment for evolution completion (reuse if already fetched)
+    let assignment = assignmentForCheck || await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
 
     // Create assignment if missing (should be rare)
     if (!assignment) {
@@ -1285,11 +1684,13 @@ app.post('/api/evaluations', async (req, res) => {
         });
         
         // Separate answers by questionnaire
+        // Use Maps to track processed questions by code to avoid duplicates
         const generalAnswersMap = {};
         const roleSpecificAnswersMap = {};
+        const processedQuestionCodes = new Set(); // Track processed questions to avoid duplicates
         
         console.log(`📝 Processing ${Object.keys(answers).length} answers for project ${projectId}, user ${userId}, role ${role}`);
-        console.log(`📝 Answer keys (first 10): ${Object.keys(answers).slice(0, 10).join(', ')}${Object.keys(answers).length > 10 ? '...' : ''}`);
+        console.log(`📝 Answer keys (first 20): ${Object.keys(answers).slice(0, 20).join(', ')}${Object.keys(answers).length > 20 ? '...' : ''}`);
         console.log(`📝 General codes count: ${generalCodes.size}, Role codes count: ${roleCodes.size}`);
         console.log(`📝 Sample general codes: ${Array.from(generalCodes).slice(0, 5).join(', ')}`);
         console.log(`📝 Sample role codes: ${Array.from(roleCodes).slice(0, 5).join(', ')}`);
@@ -1311,11 +1712,25 @@ app.post('/api/evaluations', async (req, res) => {
             query.$or.push({ code: questionKey });
             
             question = await Question.findOne(query).lean();
+            
+            if (question) {
+              console.log(`🔍 Found question via DB lookup: "${questionKey}" -> code: "${question.code}", questionnaire: "${question.questionnaireKey}"`);
+            } else {
+              console.warn(`⚠️ Question not found in DB for key: "${questionKey}"`);
+            }
           }
           
           if (question) {
             const questionCode = question.code; // Use code as the canonical identifier
-            console.log(`✅ Found question "${questionKey}" -> code: "${questionCode}", questionnaire: "${question.questionnaireKey}"`);
+            
+            // Skip if we've already processed this question code (avoid duplicates from ObjectId + code keys)
+            if (processedQuestionCodes.has(questionCode)) {
+              console.log(`⏭️ Skipping duplicate answer for question code "${questionCode}" (already processed)`);
+              continue;
+            }
+            processedQuestionCodes.add(questionCode);
+            
+            console.log(`✅ Found question "${questionKey}" -> code: "${questionCode}", questionnaire: "${question.questionnaireKey}", role: ${role}, expected roleQuestionnaireKey: ${roleQuestionnaireKey}`);
             
             if (question.questionnaireKey === 'general-v1') {
               // Use questionCode as key for consistency
@@ -1325,26 +1740,53 @@ app.post('/api/evaluations', async (req, res) => {
               // Use questionCode as key for consistency
               roleSpecificAnswersMap[questionCode] = answerValue;
               console.log(`✅ Added to roleSpecificAnswersMap: "${questionCode}" = ${typeof answerValue === 'string' ? answerValue.substring(0, 30) : answerValue}`);
+              console.log(`📊 roleSpecificAnswersMap now has ${Object.keys(roleSpecificAnswersMap).length} answers: ${Object.keys(roleSpecificAnswersMap).slice(0, 10).join(', ')}${Object.keys(roleSpecificAnswersMap).length > 10 ? '...' : ''}`);
             } else {
               console.warn(`⚠️ Question "${questionKey}" (code: "${questionCode}") belongs to "${question.questionnaireKey}", not expected questionnaire (general-v1 or ${roleQuestionnaireKey})`);
+              console.warn(`⚠️ This answer will NOT be saved to Response collection!`);
+              // Still try to save to the correct questionnaire if it exists
+              if (question.questionnaireKey && question.questionnaireKey !== 'general-v1') {
+                console.log(`🔄 Attempting to save to correct questionnaire: ${question.questionnaireKey}`);
+                // Try to add to roleSpecificAnswersMap anyway if it's a role-specific questionnaire
+                if (question.questionnaireKey.includes('-expert-v1')) {
+                  console.log(`🔄 Adding to roleSpecificAnswersMap anyway for questionnaire: ${question.questionnaireKey}`);
+                  roleSpecificAnswersMap[questionCode] = answerValue;
+                }
+              }
             }
           } else {
             // Fallback: check if it matches codes directly
             if (generalCodes.has(questionKey)) {
+              // Skip if already processed
+              if (processedQuestionCodes.has(questionKey)) {
+                console.log(`⏭️ Skipping duplicate answer for question code "${questionKey}" (already processed)`);
+                continue;
+              }
+              processedQuestionCodes.add(questionKey);
               console.log(`📌 Question "${questionKey}" matched general codes directly, adding to generalAnswersMap`);
               generalAnswersMap[questionKey] = answerValue;
             } else if (roleCodes.has(questionKey)) {
+              // Skip if already processed
+              if (processedQuestionCodes.has(questionKey)) {
+                console.log(`⏭️ Skipping duplicate answer for question code "${questionKey}" (already processed)`);
+                continue;
+              }
+              processedQuestionCodes.add(questionKey);
               console.log(`📌 Question "${questionKey}" matched role codes directly, adding to roleSpecificAnswersMap`);
               roleSpecificAnswersMap[questionKey] = answerValue;
             } else {
               console.warn(`⚠️ Question "${questionKey}" not found in DB and doesn't match any questionnaire codes`);
               console.warn(`⚠️ Available general codes (first 10): ${Array.from(generalCodes).slice(0, 10).join(', ')}`);
               console.warn(`⚠️ Available role codes (first 10): ${Array.from(roleCodes).slice(0, 10).join(', ')}`);
+              console.warn(`⚠️ This answer will NOT be saved to Response collection!`);
             }
           }
         }
         
         console.log(`📊 Separated answers: ${Object.keys(generalAnswersMap).length} general, ${Object.keys(roleSpecificAnswersMap).length} role-specific`);
+        console.log(`📊 General answer codes: ${Object.keys(generalAnswersMap).slice(0, 10).join(', ')}${Object.keys(generalAnswersMap).length > 10 ? '...' : ''}`);
+        console.log(`📊 Role-specific answer codes: ${Object.keys(roleSpecificAnswersMap).slice(0, 10).join(', ')}${Object.keys(roleSpecificAnswersMap).length > 10 ? '...' : ''}`);
+        console.log(`📊 Role: ${role}, roleQuestionnaireKey: ${roleQuestionnaireKey}`);
         
         // Prepare response saving tasks (parallel execution)
         const saveTasks = [];
@@ -1454,12 +1896,16 @@ app.post('/api/evaluations', async (req, res) => {
               
               if (existingResponse) {
                 const answerMap = new Map(generalResponseAnswers.map(a => [a.questionCode, a]));
+                // Get existing codes BEFORE updating answers
+                const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+                
+                // Update existing answers
                 existingResponse.answers = existingResponse.answers.map(existingAnswer => {
                   const updatedAnswer = answerMap.get(existingAnswer.questionCode);
                   return updatedAnswer || existingAnswer;
                 });
                 
-                const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+                // Add new answers that don't exist yet
                 generalResponseAnswers.forEach(newAnswer => {
                   if (!existingCodes.has(newAnswer.questionCode)) {
                     existingResponse.answers.push(newAnswer);
@@ -1498,7 +1944,10 @@ app.post('/api/evaluations', async (req, res) => {
         }
         
         // Save role-specific responses
+        console.log(`🔍 Checking role-specific responses: roleQuestionnaireKey=${roleQuestionnaireKey}, roleSpecificAnswersMap.length=${Object.keys(roleSpecificAnswersMap).length}`);
+        console.log(`🔍 roleSpecificAnswersMap keys: ${Object.keys(roleSpecificAnswersMap).slice(0, 20).join(', ')}${Object.keys(roleSpecificAnswersMap).length > 20 ? '...' : ''}`);
         if (roleQuestionnaireKey !== 'general-v1' && Object.keys(roleSpecificAnswersMap).length > 0) {
+          console.log(`✅ Saving ${Object.keys(roleSpecificAnswersMap).length} role-specific responses to ${roleQuestionnaireKey}...`);
           saveTasks.push(async () => {
             try {
               const roleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
@@ -1599,6 +2048,7 @@ app.post('/api/evaluations', async (req, res) => {
             }
             
             if (roleResponseAnswers.length > 0) {
+              console.log(`💾 Saving ${roleResponseAnswers.length} role-specific answers to ${roleQuestionnaireKey} response...`);
               const existingResponse = await Response.findOne({
                 projectId: projectIdObj,
                 userId: userIdObj,
@@ -1606,27 +2056,37 @@ app.post('/api/evaluations', async (req, res) => {
               });
               
               if (existingResponse) {
+                console.log(`📝 Found existing response for ${roleQuestionnaireKey}, updating...`);
                 const answerMap = new Map(roleResponseAnswers.map(a => [a.questionCode, a]));
+                // Get existing codes BEFORE updating answers
+                const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+                console.log(`📝 Existing response has ${existingResponse.answers.length} answers, adding/updating ${roleResponseAnswers.length} answers`);
+                
+                // Update existing answers
                 existingResponse.answers = existingResponse.answers.map(existingAnswer => {
                   const updatedAnswer = answerMap.get(existingAnswer.questionCode);
                   return updatedAnswer || existingAnswer;
                 });
                 
-                const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+                // Add new answers that don't exist yet
+                let addedCount = 0;
                 roleResponseAnswers.forEach(newAnswer => {
                   if (!existingCodes.has(newAnswer.questionCode)) {
                     existingResponse.answers.push(newAnswer);
+                    addedCount++;
                   }
                 });
+                console.log(`📝 Added ${addedCount} new answers, updated ${roleResponseAnswers.length - addedCount} existing answers`);
                 
                 existingResponse.status = status === 'completed' ? 'submitted' : 'draft';
                 existingResponse.submittedAt = status === 'completed' ? new Date() : null;
                 existingResponse.updatedAt = new Date();
                 await existingResponse.save();
-                console.log(`✅ Updated ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
+                console.log(`✅ Updated ${roleQuestionnaireKey} response with ${existingResponse.answers.length} total answered questions (${roleResponseAnswers.length} in this batch)`);
               } else {
+                console.log(`📝 No existing response found for ${roleQuestionnaireKey}, creating new one...`);
                 const finalRoleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
-                await Response.create({
+                const newResponse = await Response.create({
                   projectId: projectIdObj,
                   assignmentId: assignment._id,
                   userId: userIdObj,
@@ -1638,10 +2098,11 @@ app.post('/api/evaluations', async (req, res) => {
                   submittedAt: status === 'completed' ? new Date() : null,
                   updatedAt: new Date()
                 });
-                console.log(`✅ Created ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
+                console.log(`✅ Created ${roleQuestionnaireKey} response with ID ${newResponse._id} and ${roleResponseAnswers.length} answered questions`);
               }
             } else {
               console.warn(`⚠️ No role-specific answers to save (roleResponseAnswers.length = ${roleResponseAnswers.length})`);
+              console.warn(`⚠️ roleSpecificAnswersMap had ${Object.keys(roleSpecificAnswersMap).length} keys but no answers were processed`);
             }
             } catch (error) {
               console.error(`❌ Error saving ${roleQuestionnaireKey} responses:`, error);
@@ -1653,17 +2114,33 @@ app.post('/api/evaluations', async (req, res) => {
         
         // Execute all save tasks in parallel
         if (saveTasks.length > 0) {
-          console.log(`🚀 Executing ${saveTasks.length} save tasks...`);
+          console.log(`🚀 Executing ${saveTasks.length} save task(s) to Response collection...`);
           try {
             await Promise.all(saveTasks.map(task => task()));
-            console.log(`✅ All save tasks completed successfully`);
+            console.log(`✅ All responses saved successfully to Response collection`);
           } catch (saveError) {
             console.error(`❌ Error in save tasks:`, saveError);
             console.error(`❌ Save error stack:`, saveError.stack);
+            // Re-throw to be caught by outer catch and return error to frontend
             throw saveError;
           }
         } else {
           console.warn(`⚠️ No save tasks to execute! generalAnswersMap: ${Object.keys(generalAnswersMap).length}, roleSpecificAnswersMap: ${Object.keys(roleSpecificAnswersMap).length}, answers: ${Object.keys(answers).length}`);
+          console.warn(`⚠️ This means answers were NOT saved to Response collection!`);
+          // Check if answers are only custom questions (which are saved to Evaluation collection, not Response)
+          const customAnswerKeys = Object.keys(answers).filter(key => String(key).startsWith('custom_'));
+          const nonCustomAnswers = Object.keys(answers).filter(key => !String(key).startsWith('custom_'));
+          
+          if (nonCustomAnswers.length > 0) {
+            // We have non-custom answers but no save tasks - this is a problem
+            console.error(`❌ CRITICAL: ${nonCustomAnswers.length} non-custom answer(s) exist but no save tasks were created!`);
+            console.error(`❌ Non-custom answer keys (first 10): ${nonCustomAnswers.slice(0, 10).join(', ')}`);
+            console.error(`❌ This means answers could not be matched to questions. Check question codes/IDs.`);
+            throw new Error(`Failed to save answers: Could not match ${nonCustomAnswers.length} answer(s) to questions. Please check question codes/IDs.`);
+          } else if (customAnswerKeys.length > 0) {
+            // Only custom questions - these are saved to Evaluation collection, which is fine
+            console.log(`ℹ️ Only custom questions found (${customAnswerKeys.length}), these are saved to Evaluation collection`);
+          }
         }
         
         // Validate submissions if completed
@@ -1679,10 +2156,15 @@ app.post('/api/evaluations', async (req, res) => {
           }
         }
       } catch (newSystemError) {
-        // Log error but don't fail the request - old system still works
+        // CRITICAL: Don't silently fail - return error to frontend
         console.error('❌ CRITICAL: Error saving to new responses collection:', newSystemError);
         console.error('❌ Error stack:', newSystemError.stack);
-        // Still log but make it more visible
+        // Return error response to frontend so user knows save failed
+        return res.status(500).json({ 
+          error: 'Failed to save answers to database',
+          details: newSystemError.message,
+          savedToEvaluation: true // Old system still saved
+        });
       }
     }
     
@@ -1755,6 +2237,49 @@ app.post('/api/evaluations/custom-questions', async (req, res) => {
       },
       { upsert: true, new: true }
     );
+
+    // Notify admins about the new custom question
+    try {
+      const { getAllAdmins, createNotifications } = require('./services/notificationService');
+      const user = await User.findById(userIdObj).select('name email role').lean();
+      const project = await Project.findById(projectIdObj).select('title').lean();
+      
+      const admins = await getAllAdmins();
+      if (admins.length > 0 && user && project) {
+        const userName = user.name || user.email || 'Expert';
+        const userRole = user.role || 'expert';
+        const projectTitle = project.title || 'Project';
+        const questionText = doc.text.length > 100 ? doc.text.substring(0, 100) + '...' : doc.text;
+        
+        const dedupeKey = `custom_question_${projectIdObj}_${userIdObj}_${doc.id}_${Date.now()}`;
+        
+        const payload = {
+          projectId: projectIdObj,
+          entityType: 'custom_question',
+          entityId: doc.id,
+          type: 'custom_question_added',
+          title: 'New custom question added',
+          message: `${userRole === 'admin' ? 'Admin' : 'Expert'} "${userName}" added a custom question to project "${projectTitle}" (Stage: ${stage}): "${questionText}"`,
+          actorId: userIdObj,
+          actorRole: userRole,
+          metadata: {
+            questionId: doc.id,
+            questionText: doc.text,
+            stage: stage,
+            questionType: doc.type,
+            principle: doc.principle || null
+          },
+          url: `/admin/projects/${projectIdObj}/evaluations`,
+          dedupeKey
+        };
+
+        await createNotifications(admins.map(a => a._id), payload);
+        console.log(`📬 Custom question notification sent to ${admins.length} admin(s)`);
+      }
+    } catch (notificationError) {
+      // Don't fail the request if notification fails
+      console.error('⚠️ Error sending custom question notification:', notificationError);
+    }
 
     res.json({ success: true, question: doc });
   } catch (err) {
@@ -2062,13 +2587,16 @@ app.post('/api/general-questions', async (req, res) => {
             if (existingResponse) {
               // Merge answered questions with existing response
               const answerMap = new Map(generalResponseAnswers.map(a => [a.questionCode, a]));
+              // Get existing codes BEFORE updating answers
+              const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+              
+              // Update existing answers
               existingResponse.answers = existingResponse.answers.map(existingAnswer => {
                 const updatedAnswer = answerMap.get(existingAnswer.questionCode);
                 return updatedAnswer || existingAnswer; // Use updated answer if available, otherwise keep existing
               });
               
               // Add any new answers that weren't in existing response
-              const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
               generalResponseAnswers.forEach(newAnswer => {
                 if (!existingCodes.has(newAnswer.questionCode)) {
                   existingResponse.answers.push(newAnswer);
@@ -2197,13 +2725,16 @@ app.post('/api/general-questions', async (req, res) => {
             if (existingRoleResponse) {
               // Merge answered questions with existing response
               const roleAnswerMap = new Map(roleResponseAnswers.map(a => [a.questionCode, a]));
+              // Get existing codes BEFORE updating answers
+              const existingRoleCodes = new Set(existingRoleResponse.answers.map(a => a.questionCode));
+              
+              // Update existing answers
               existingRoleResponse.answers = existingRoleResponse.answers.map(existingAnswer => {
                 const updatedAnswer = roleAnswerMap.get(existingAnswer.questionCode);
                 return updatedAnswer || existingAnswer; // Use updated answer if available, otherwise keep existing
               });
               
               // Add any new answers that weren't in existing response
-              const existingRoleCodes = new Set(existingRoleResponse.answers.map(a => a.questionCode));
               roleResponseAnswers.forEach(newAnswer => {
                 if (!existingRoleCodes.has(newAnswer.questionCode)) {
                   existingRoleResponse.answers.push(newAnswer);
@@ -2355,19 +2886,60 @@ app.get('/api/user-progress', async (req, res) => {
       assignedQuestionnaireKeys = roleKey ? ['general-v1', roleKey] : ['general-v1'];
     }
 
-    const totalQuestions = await Question.countDocuments({
+    // Check which questionnaires actually have responses in the database
+    // If both general-v1 and role-specific responses exist, count both
+    // If only role-specific exists and has 30+ questions, it likely includes general questions
+    const existingResponses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
+    }).select('questionnaireKey').lean();
+    
+    const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
+    
+    let questionnairesToCount = assignedQuestionnaireKeys.slice();
+    const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
+    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key => 
+      key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+    );
+    
+    // If both general-v1 and role-specific responses exist, count both (no duplicate exclusion)
+    // If only role-specific exists and has 30+ questions, it likely includes general questions
+    if (!hasGeneralResponse && hasRoleSpecificResponse) {
+      const roleSpecificKey = assignedQuestionnaireKeys.find(key => 
+        key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+      );
+      
+      if (roleSpecificKey) {
+        const roleSpecificCount = await Question.countDocuments({ questionnaireKey: roleSpecificKey });
+        // If role-specific has 30+ questions and no general response exists, it likely includes general questions
+        if (roleSpecificCount >= 30) {
+          questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
+          console.log(`📊 Only role-specific response exists (${roleSpecificKey}, ${roleSpecificCount} questions), excluding general-v1 from count`);
+        }
+      }
+    } else if (hasGeneralResponse && hasRoleSpecificResponse) {
+      // Both exist - count both (this is the normal case)
+      console.log(`📊 Both general-v1 and role-specific responses exist, counting both`);
+    }
+    
+    const totalQuestions = await Question.countDocuments({
+      questionnaireKey: { $in: questionnairesToCount }
     });
 
     if (totalQuestions === 0) {
       return res.json({ progress: 0, answered: 0, total: 0, questionnaires: assignedQuestionnaireKeys, responseCount: 0 });
     }
 
+    // Fetch responses for ALL assigned questionnaires (not just questionnairesToCount)
+    // questionnairesToCount is only for question count, but we need to fetch all responses
     const responses = await Response.find({
       projectId: projectIdObj,
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey answers').lean();
+    
+    console.log(`📊 /api/user-progress: Fetched ${responses.length} response(s) for questionnaires: ${responses.map(r => r.questionnaireKey).join(', ')}`);
 
     const answeredKeys = new Set();
 
@@ -2395,13 +2967,46 @@ app.get('/api/user-progress', async (req, res) => {
       }
     }
 
-    const answeredCount = answeredKeys.size;
-    const progress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+    // Also check custom questions from Evaluation
+    const evaluation = await Evaluation.findOne({
+      projectId: projectIdObj,
+      userId: userIdObj
+    }).select('customQuestions answers').lean();
+    
+    const customQuestions = evaluation?.customQuestions || [];
+    let customQuestionsTotal = 0;
+    let customQuestionsAnswered = 0;
+    
+    for (const customQuestion of customQuestions) {
+      if (customQuestion.required !== false) {
+        customQuestionsTotal++;
+        const customQuestionId = customQuestion.id;
+        if (customQuestionId && evaluation?.answers) {
+          const customAnswer = evaluation.answers[customQuestionId];
+          if (customAnswer !== undefined && customAnswer !== null) {
+            if (typeof customAnswer === 'string' && customAnswer.trim().length > 0) {
+              customQuestionsAnswered++;
+            } else if (typeof customAnswer !== 'string') {
+              customQuestionsAnswered++;
+            }
+          }
+        }
+      }
+    }
+    
+    // Total = regular questions + custom questions
+    const totalWithCustom = totalQuestions + customQuestionsTotal;
+    const answeredWithCustom = answeredKeys.size + customQuestionsAnswered;
+    const progress = totalWithCustom > 0 ? Math.round((answeredWithCustom / totalWithCustom) * 100) : 0;
 
     return res.json({
       progress: Math.max(0, Math.min(100, progress)),
-      answered: answeredCount,
-      total: totalQuestions,
+      answered: answeredWithCustom,
+      total: totalWithCustom,
+      regularAnswered: answeredKeys.size,
+      regularTotal: totalQuestions,
+      customAnswered: customQuestionsAnswered,
+      customTotal: customQuestionsTotal,
       questionnaires: assignedQuestionnaireKeys,
       responseCount: responses.length
     });

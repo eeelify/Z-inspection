@@ -848,12 +848,41 @@ async function calculateProjectProgress(projectId) {
       
       const userResponses = responsesByUser[userIdStr] || {};
       
-      for (const qKey of questionnaires) {
+      // Check which questionnaires actually have responses in the database
+      // userResponses is an object where keys are questionnaire keys and values are response objects
+      const existingQuestionnaireKeys = new Set(Object.keys(userResponses).filter(key => userResponses[key]));
+      
+      let questionnairesToCount = questionnaires.slice();
+      const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
+      const hasRoleSpecificResponse = questionnaires.some(key => 
+        key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+      );
+      
+      // If both general-v1 and role-specific responses exist, count both
+      // If only role-specific exists and has 30+ questions, it likely includes general questions
+      if (!hasGeneralResponse && hasRoleSpecificResponse) {
+        const roleSpecificKey = questionnaires.find(key => 
+          key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
+        );
+        
+        if (roleSpecificKey) {
+          const roleSpecificQuestions = questionsByQuestionnaire[roleSpecificKey] || [];
+          if (roleSpecificQuestions.length >= 30) {
+            questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
+          }
+        }
+      }
+      
+      // Count questions and answers for all questionnaires (use questionnairesToCount for question count)
+      for (const qKey of questionnairesToCount) {
         // Get total questions for this questionnaire
         const questions = questionsByQuestionnaire[qKey] || [];
         totalQuestions += questions.length;
-        
-        // Get answered questions for this questionnaire
+      }
+      
+      // Count answered questions from ALL assigned questionnaires (not just questionnairesToCount)
+      // This ensures we count answers from both general-v1 and role-specific responses
+      for (const qKey of questionnaires) {
         const response = userResponses[qKey];
         if (response && response.answers && Array.isArray(response.answers)) {
           // Count answered questions (those with actual answers)
@@ -869,8 +898,48 @@ async function calculateProjectProgress(projectId) {
         }
       }
       
-      if (totalQuestions > 0) {
-        const userProgress = (answeredQuestions / totalQuestions) * 100;
+      // Also check custom questions from Evaluation
+      // Evaluation model is defined in server.js, we need to get it from mongoose
+      // Try to get it from mongoose models, fallback to require if needed
+      let Evaluation;
+      try {
+        Evaluation = mongoose.model('Evaluation');
+      } catch (e) {
+        // If model not registered, try to require it
+        Evaluation = require('../models/evaluation');
+      }
+      const evaluation = await Evaluation.findOne({
+        projectId: projectIdObj,
+        userId: userId
+      }).select('customQuestions answers').lean();
+      
+      const customQuestions = evaluation?.customQuestions || [];
+      let customQuestionsTotal = 0;
+      let customQuestionsAnswered = 0;
+      
+      for (const customQuestion of customQuestions) {
+        if (customQuestion.required !== false) {
+          customQuestionsTotal++;
+          const customQuestionId = customQuestion.id;
+          if (customQuestionId && evaluation?.answers) {
+            const customAnswer = evaluation.answers[customQuestionId];
+            if (customAnswer !== undefined && customAnswer !== null) {
+              if (typeof customAnswer === 'string' && customAnswer.trim().length > 0) {
+                customQuestionsAnswered++;
+              } else if (typeof customAnswer !== 'string') {
+                customQuestionsAnswered++;
+              }
+            }
+          }
+        }
+      }
+      
+      // Total = regular questions + custom questions
+      const totalWithCustom = totalQuestions + customQuestionsTotal;
+      const answeredWithCustom = answeredQuestions + customQuestionsAnswered;
+      
+      if (totalWithCustom > 0) {
+        const userProgress = (answeredWithCustom / totalWithCustom) * 100;
         totalProgress += userProgress;
         validUserCount++;
       }

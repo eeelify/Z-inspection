@@ -120,6 +120,10 @@ export function UserDashboard({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [projectProgresses, setProjectProgresses] = useState<Record<string, number>>({});
+  const [allExpertsCompleted, setAllExpertsCompleted] = useState<Record<string, boolean | null>>({});
+  const [checkingExperts, setCheckingExperts] = useState<Record<string, boolean>>({});
+  const [tensionsVoted, setTensionsVoted] = useState<Record<string, boolean | null>>({});
+  const [checkingTensions, setCheckingTensions] = useState<Record<string, boolean>>({});
   const [projectReports, setProjectReports] = useState<Record<string, boolean>>({});
   const [assignmentByProjectId, setAssignmentByProjectId] = useState<Record<string, any>>({});
   const [reports, setReports] = useState<any[]>([]);
@@ -1327,17 +1331,126 @@ export function UserDashboard({
                         const progress = projectProgresses[project.id] ?? project.progress ?? 0;
                         const evolutionCompleted = Boolean(assignmentByProjectId[project.id]?.evolutionCompletedAt);
                         const canFinish = progress >= 100 && !evolutionCompleted;
+                        const projectId = project.id || (project as any)._id;
+                        const isChecking = checkingExperts[projectId] || false;
+                        const allCompleted = allExpertsCompleted[projectId];
+                        
                         if (canFinish) {
-                          return (
-                            <button
-                              onClick={() => onFinishEvolution?.(project)}
-                              className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
-                              style={{ backgroundColor: roleColor }}
-                            >
-                              <Target className="h-3 w-3 mr-2" />
-                              Finish Evaluation
-                            </button>
-                          );
+                          // Check all experts progress when canFinish becomes true
+                          if (allCompleted === undefined && !isChecking) {
+                            setCheckingExperts(prev => ({ ...prev, [projectId]: true }));
+                            // Check all experts progress
+                            (async () => {
+                              try {
+                                const assignedUsers = project.assignedUsers || [];
+                                if (assignedUsers.length === 0) {
+                                  setAllExpertsCompleted(prev => ({ ...prev, [projectId]: true }));
+                                  setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
+                                  return;
+                                }
+                                
+                                const progressPromises = assignedUsers.map(async (userId: string) => {
+                                  try {
+                                    const user = users.find(u => (u.id || (u as any)._id) === userId);
+                                    if (!user) return { userId, progress: 0 };
+                                    const userProgress = await fetchUserProgress(project, user);
+                                    return { userId, progress: userProgress };
+                                  } catch (err) {
+                                    console.error(`Error fetching progress for user ${userId}:`, err);
+                                    return { userId, progress: 0 };
+                                  }
+                                });
+                                
+                                const expertProgresses = await Promise.all(progressPromises);
+                                const allCompleted = expertProgresses.every(ep => ep.progress >= 100);
+                                setAllExpertsCompleted(prev => ({ ...prev, [projectId]: allCompleted }));
+                                
+                                // If all experts completed, check tensions
+                                if (allCompleted) {
+                                  // Check tensions voting status
+                                  if (tensionsVoted[projectId] === undefined && !checkingTensions[projectId]) {
+                                    setCheckingTensions(prev => ({ ...prev, [projectId]: true }));
+                                    try {
+                                      const tensionsRes = await fetch(api(`/api/tensions/${projectId}?userId=${currentUser.id || (currentUser as any)._id}`));
+                                      if (tensionsRes.ok) {
+                                        const tensions = await tensionsRes.json();
+                                        if (tensions.length === 0) {
+                                          // No tensions, can finish
+                                          setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
+                                        } else {
+                                          // Check if all assigned experts have voted on all tensions
+                                          const assignedUserIds = assignedUsers.map((id: string) => String(id));
+                                          const allTensionsVoted = tensions.every((tension: any) => {
+                                            const votes = tension.votes || [];
+                                            const votedUserIds = votes.map((v: any) => String(v.userId));
+                                            return assignedUserIds.every((userId: string) => votedUserIds.includes(userId));
+                                          });
+                                          setTensionsVoted(prev => ({ ...prev, [projectId]: allTensionsVoted }));
+                                        }
+                                      } else {
+                                        setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                      }
+                                    } catch (err) {
+                                      console.error('Error checking tensions:', err);
+                                      setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                    } finally {
+                                      setCheckingTensions(prev => ({ ...prev, [projectId]: false }));
+                                    }
+                                  }
+                                }
+                              } catch (err) {
+                                console.error('Error checking all experts progress:', err);
+                                setAllExpertsCompleted(prev => ({ ...prev, [projectId]: null }));
+                              } finally {
+                                setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
+                              }
+                            })();
+                          }
+                          
+                          if (isChecking || checkingTensions[projectId]) {
+                            return (
+                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center">
+                                <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                                Checking experts...
+                              </div>
+                            );
+                          }
+                          
+                          if (allCompleted === false) {
+                            return (
+                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
+                                <Clock className="h-3 w-3 mr-2" />
+                                Waiting for other experts to complete
+                              </div>
+                            );
+                          }
+                          
+                          // Check if tensions are voted (if any)
+                          const tensionsStatus = tensionsVoted[projectId];
+                          if (tensionsStatus === false) {
+                            return (
+                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
+                                <Clock className="h-3 w-3 mr-2" />
+                                Waiting for all experts to vote on tensions
+                              </div>
+                            );
+                          }
+                          
+                          // Show button only if all experts completed AND (no tensions OR all tensions voted)
+                          if (allCompleted === true && (tensionsStatus === true || tensionsStatus === undefined)) {
+                            return (
+                              <button
+                                onClick={() => onFinishEvolution?.(project)}
+                                className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
+                                style={{ backgroundColor: roleColor }}
+                              >
+                                <Target className="h-3 w-3 mr-2" />
+                                Finish Evaluation
+                              </button>
+                            );
+                          }
+                          
+                          return null;
                         }
 
                         if (canStartEvaluation(project) && progress < 100 && !evolutionCompleted) {
