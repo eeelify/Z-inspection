@@ -3552,14 +3552,69 @@ app.post('/api/users/:id/precondition-approval', async (req, res) => {
 
 app.get('/api/projects', async (req, res) => {
   try {
-    const projects = await Project.find()
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error('❌ MongoDB not connected. ReadyState:', mongoose.connection.readyState);
+      return res.status(503).json({ 
+        error: 'Database not connected',
+        readyState: mongoose.connection.readyState 
+      });
+    }
+    
+    const { userId } = req.query;
+    console.log('📥 GET /api/projects - userId:', userId);
+    
+    // Build query
+    const query = {};
+    
+    // Filter out projects hidden for this user (soft delete) if hiddenForUsers field exists
+    // Note: hiddenForUsers field may not exist in all projects, so we check if it exists
+    if (userId && isValidObjectId(userId)) {
+      query.$or = [
+        { hiddenForUsers: { $exists: false } },
+        { hiddenForUsers: { $nin: [new mongoose.Types.ObjectId(userId)] } }
+      ];
+    }
+    
+    console.log('🔍 Query:', JSON.stringify(query));
+    
+    // Check if Project model exists
+    if (!Project) {
+      console.error('❌ Project model is not defined');
+      return res.status(500).json({ error: 'Project model not available' });
+    }
+    
+    const projects = await Project.find(query)
       .select('-fullDescription') // Exclude large description for list view
+      .populate({
+        path: 'assignedUsers',
+        select: 'name email role _id',
+        model: 'User'
+      })
       .lean()
       .maxTimeMS(5000)
       .limit(1000);
+    
+    console.log(`✅ Found ${projects.length} projects`);
     res.json(projects);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Error fetching projects:', err);
+    console.error('❌ Error stack:', err.stack);
+    res.status(500).json({ 
+      error: err.message || 'Failed to fetch projects',
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
+// GET /api/projects/:id/reports/latest - Get latest report for a project
+app.get('/api/projects/:projectId/reports/latest', async (req, res) => {
+  try {
+    const reportController = require('./controllers/reportController');
+    await reportController.getLatestReport(req, res);
+  } catch (err) {
+    console.error('Error in /api/projects/:projectId/reports/latest:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch latest report' });
   }
 });
 
@@ -3847,7 +3902,10 @@ app.get('/api/messages/unread-count', async (req, res) => {
     unreadMessages.forEach(msg => {
       // Skip messages with missing or null populated fields
       if (!msg || !msg.projectId || !msg.fromUserId) {
-        console.warn('Skipping message with missing projectId or fromUserId:', msg?._id);
+        // Only log in development mode to reduce noise
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Skipping message with missing projectId or fromUserId:', msg?._id);
+        }
         return;
       }
       
@@ -3855,7 +3913,10 @@ app.get('/api/messages/unread-count', async (req, res) => {
       const fromUserIdRaw = msg.fromUserId._id || msg.fromUserId;
       
       if (!projectIdRaw || !fromUserIdRaw) {
-        console.warn('Skipping message with invalid projectId or fromUserId:', msg?._id);
+        // Only log in development mode to reduce noise
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Skipping message with invalid projectId or fromUserId:', msg?._id);
+        }
         return;
       }
       
@@ -4065,11 +4126,21 @@ app.get('/api/users/:id/profile-image', async (req, res) => {
   try {
     const userId = req.params.id;
     
-    if (!isValidObjectId(userId)) {
-      return res.status(400).json({ error: 'Invalid user ID' });
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
     
-    const user = await User.findById(userId).select('profileImage');
+    if (!isValidObjectId(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
+    
+    // Check if User model is available
+    if (!User) {
+      console.error('❌ User model is not defined');
+      return res.status(500).json({ error: 'User model not available' });
+    }
+    
+    const user = await User.findById(userId).select('profileImage').lean();
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -4078,7 +4149,11 @@ app.get('/api/users/:id/profile-image', async (req, res) => {
     res.json({ profileImage: user.profileImage || null });
   } catch (err) {
     console.error('❌ Error fetching profile image:', err);
-    res.status(500).json({ error: err.message || 'Failed to fetch profile image' });
+    console.error('❌ Error stack:', err.stack);
+    res.status(500).json({ 
+      error: err.message || 'Failed to fetch profile image',
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 

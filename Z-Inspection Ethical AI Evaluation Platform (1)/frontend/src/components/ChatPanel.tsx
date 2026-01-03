@@ -498,6 +498,7 @@ export function ChatPanel({
               flexDirection: 'column', 
               height: '100%',
               maxHeight: '100%',
+              minHeight: 0,
               overflow: 'hidden',
               position: 'relative'
             }
@@ -653,7 +654,16 @@ export function ChatPanel({
       </div>
 
       {/* Input (fixed at bottom) - Fixed height row */}
-      <div className="border-t border-gray-200 px-4 py-3 bg-white" style={{ flexShrink: 0, flex: '0 0 auto', borderTop: '1px solid #e5e7eb' }}>
+      <div 
+        className="border-t border-gray-200 px-4 py-3 bg-white" 
+        style={{ 
+          flexShrink: 0, 
+          flex: '0 0 auto', 
+          borderTop: '1px solid #e5e7eb',
+          position: 'relative',
+          zIndex: 10
+        }}
+      >
         <div className="flex items-center space-x-2">
           <input
             type="text"
@@ -678,6 +688,7 @@ export function ChatPanel({
                 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
+            style={{ flexShrink: 0 }}
           >
             <Send className={`h-5 w-5 ${newMessage.trim() && !sending ? 'text-white' : 'text-gray-400'}`} />
           </button>

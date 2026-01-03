@@ -55,10 +55,19 @@ router.patch('/:id/sections/:principle/expert-edit', reportController.updateSect
 // POST /api/reports/:id/sections/:principle/comments - Add comment to a section (expert/admin)
 router.post('/:id/sections/:principle/comments', reportController.addSectionComment);
 
+// GET /api/reports/:id/file - Serve report file (PDF) inline (must be before /:id route)
+router.get('/:id/file', reportController.getReportFile);
+
 // GET /api/reports/:id/download-html - Download report as HTML (must be before /:id route)
 router.get('/:id/download-html', reportController.downloadReportHTML);
 
-// GET /api/reports/:id/download - Download report as PDF (must be before /:id route)
+// GET /api/reports/:id/download-pdf - Download report as PDF (always uses latest data)
+router.get('/:id/download-pdf', reportController.downloadReportPDF);
+
+// GET /api/reports/:id/download-docx - Download report as DOCX (always uses latest data)
+router.get('/:id/download-docx', reportController.downloadReportDOCX);
+
+// GET /api/reports/:id/download - Download report as PDF (legacy, redirects to download-pdf)
 router.get('/:id/download', reportController.downloadReportPDF);
 
 // GET /api/reports/:id - Get specific report

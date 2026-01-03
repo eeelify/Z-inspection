@@ -60,14 +60,30 @@ function App() {
 
         if (projectsRes.ok) {
           const data = await projectsRes.json();
-          const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+          console.log('✅ Projects fetched:', data.length);
+          const formattedProjects = data.map((p: any) => {
+            // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
+            const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+              if (typeof user === 'string') return user;
+              if (user && user._id) return user._id.toString();
+              return user;
+            });
+            return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
+          });
           setProjects(formattedProjects);
+        } else {
+          const errorText = await projectsRes.text().catch(() => 'Unknown error');
+          console.error('❌ Failed to fetch projects:', projectsRes.status, projectsRes.statusText, errorText);
         }
 
         if (usersRes.ok) {
           const data = await usersRes.json();
+          console.log('✅ Users fetched:', data.length);
           const formattedUsers = data.map((u: any) => ({ ...u, id: u._id }));
           setUsers(formattedUsers);
+        } else {
+          const errorText = await usersRes.text().catch(() => 'Unknown error');
+          console.error('❌ Failed to fetch users:', usersRes.status, usersRes.statusText, errorText);
         }
 
         if (useCasesRes.ok) {
@@ -76,7 +92,8 @@ function App() {
           const formattedUseCases = data.map((u: any) => ({ ...u, id: u._id }));
           setUseCases(formattedUseCases);
         } else {
-          console.error('❌ Failed to fetch use cases:', useCasesRes.status, useCasesRes.statusText);
+          const errorText = await useCasesRes.text().catch(() => 'Unknown error');
+          console.error('❌ Failed to fetch use cases:', useCasesRes.status, useCasesRes.statusText, errorText);
         }
       } catch (error: any) {
         if (error.name !== 'AbortError') {
@@ -89,7 +106,15 @@ function App() {
     
     // Listen for projects update events (e.g., after assignment)
     const handleProjectsUpdate = (event: CustomEvent) => {
-      setProjects(event.detail);
+      const updatedProjects = event.detail;
+      setProjects(updatedProjects);
+      
+      // Also update selectedProject if it exists and is in the updated list
+      setSelectedProject(prev => {
+        if (!prev) return prev;
+        const updatedProject = updatedProjects.find((p: Project) => (p.id || (p as any)._id) === (prev.id || (prev as any)._id));
+        return updatedProject || prev;
+      });
     };
     
     window.addEventListener('projects-updated', handleProjectsUpdate as EventListener);
@@ -101,8 +126,23 @@ function App() {
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) {
-              const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+              const formattedProjects = data.map((p: any) => {
+                // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
+                const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+                  if (typeof user === 'string') return user;
+                  if (user && user._id) return user._id.toString();
+                  return user;
+                });
+                return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
+              });
               setProjects(formattedProjects);
+              
+              // Also update selectedProject if it exists
+              setSelectedProject(prev => {
+                if (!prev) return prev;
+                const updatedProject = formattedProjects.find((p: Project) => (p.id || (p as any)._id) === (prev.id || (prev as any)._id));
+                return updatedProject || prev;
+              });
             }
           })
           .catch(err => console.error('Error refreshing projects:', err));

@@ -80,7 +80,16 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
         // This is OK as use case owners might need to see all projects
         const res = await fetch(api('/api/projects'), { signal: controller.signal });
         if (!res.ok) return;
-        const allProjects = await res.json();
+        const allProjectsRaw = await res.json();
+        // Normalize assignedUsers in all projects
+        const allProjects = Array.isArray(allProjectsRaw) ? allProjectsRaw.map((p: any) => {
+          const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+            if (typeof user === 'string') return user;
+            if (user && user._id) return user._id.toString();
+            return user;
+          });
+          return { ...p, assignedUsers: normalizedAssignedUsers };
+        }) : [];
         const linked = Array.isArray(allProjects) && allProjects.some((p: any) => {
           const pid = getProjectUseCaseId(p);
           return pid && pid.toString() === useCaseId;
@@ -121,7 +130,16 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
           return;
         }
         
-        const allProjects = await res.json();
+        const allProjectsRaw = await res.json();
+        // Normalize assignedUsers in all projects
+        const allProjects = Array.isArray(allProjectsRaw) ? allProjectsRaw.map((p: any) => {
+          const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+            if (typeof user === 'string') return user;
+            if (user && user._id) return user._id.toString();
+            return user;
+          });
+          return { ...p, assignedUsers: normalizedAssignedUsers };
+        }) : [];
         const linkedProject = Array.isArray(allProjects) 
           ? allProjects.find((p: any) => {
               const pid = getProjectUseCaseId(p);

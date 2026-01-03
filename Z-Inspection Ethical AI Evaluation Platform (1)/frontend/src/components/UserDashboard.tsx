@@ -616,7 +616,13 @@ export function UserDashboard({
         });
         if (response.ok) {
           const newProject = await response.json();
-          commProject = { ...newProject, id: newProject._id || newProject.id };
+          // Normalize assignedUsers
+          const normalizedAssignedUsers = (newProject.assignedUsers || []).map((user: any) => {
+            if (typeof user === 'string') return user;
+            if (user && user._id) return user._id.toString();
+            return user;
+          });
+          commProject = { ...newProject, id: newProject._id || newProject.id, assignedUsers: normalizedAssignedUsers };
           console.log('Created communication project:', commProject);
         } else {
           const error = await response.text();
@@ -692,6 +698,8 @@ export function UserDashboard({
 
   // Handle notification click - expand notification panel or open chat
   const handleNotificationClick = async (conversation: any) => {
+    console.log('handleNotificationClick called with:', conversation);
+    
     // Check if this is a notification-only message (starts with [NOTIFICATION])
     const isNotificationOnly = String(conversation.lastMessage || '').startsWith('[NOTIFICATION]');
     
@@ -717,22 +725,44 @@ export function UserDashboard({
       setShowNotifications(false);
     } else {
       // If it's a regular message, open chat
-      const project = projects.find(p => p.id === conversation.projectId) ||
-        ({
-          id: conversation.projectId,
-          title: conversation.projectTitle || 'Project',
-        } as any);
-      const otherUser = users.find(u => u.id === conversation.fromUserId) ||
-        ({
-          id: conversation.fromUserId,
-          name: conversation.fromUserName || 'User',
-        } as any);
+      // Try multiple ways to find project ID
+      const projectId = conversation.projectId || conversation.project?._id || conversation.project?.id;
+      const fromUserId = conversation.fromUserId || conversation.fromUser?._id || conversation.fromUser?.id;
       
-      if (project && otherUser) {
+      console.log('Looking for project with ID:', projectId);
+      console.log('Available projects:', projects.map(p => ({ id: p.id, _id: (p as any)._id })));
+      
+      const project = projects.find(p => {
+        const pId = p.id || (p as any)._id;
+        return pId?.toString() === projectId?.toString();
+      }) || ({
+        id: projectId,
+        title: conversation.projectTitle || conversation.project?.title || 'Project',
+      } as any);
+      
+      console.log('Looking for user with ID:', fromUserId);
+      console.log('Available users:', users.map(u => ({ id: u.id, _id: (u as any)._id })));
+      
+      const otherUser = users.find(u => {
+        const uId = u.id || (u as any)._id;
+        return uId?.toString() === fromUserId?.toString();
+      }) || ({
+        id: fromUserId,
+        name: conversation.fromUserName || conversation.fromUser?.name || 'User',
+      } as any);
+      
+      console.log('Found project:', project);
+      console.log('Found otherUser:', otherUser);
+      
+      if (project && otherUser && project.id && otherUser.id) {
         setChatProject(project);
         setChatOtherUser(otherUser);
         setChatPanelOpen(true);
         setShowNotifications(false);
+        console.log('Chat panel opened successfully');
+      } else {
+        console.error('Failed to open chat - missing data:', { project, otherUser, projectId, fromUserId });
+        alert('Cannot open chat: Missing project or user information');
       }
     }
   };
@@ -1559,41 +1589,39 @@ export function UserDashboard({
           {/* Center modal */}
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
-              className="w-full max-w-2xl bg-white shadow-2xl border border-gray-200 rounded-xl overflow-hidden flex flex-col min-h-0"
-              style={{ height: '70vh', maxHeight: 650 }}
+              className="w-full max-w-2xl bg-white shadow-2xl border border-gray-200 rounded-xl overflow-hidden flex flex-col"
+              style={{ height: '70vh', maxHeight: 650, minHeight: 400 }}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
             >
-              <div className="flex-1 min-h-0 flex flex-col">
-                <ChatPanel
-                  project={chatProject!}
-                  currentUser={currentUser}
-                  otherUser={chatOtherUser!}
-                  inline={true}
-                  onClose={() => {
-                    setChatPanelOpen(false);
-                    setChatOtherUser(null);
-                    setChatProject(null);
-                    if (showChats) {
-                      fetchConversations();
-                    }
-                  }}
-                  onMessageSent={() => {
-                    window.dispatchEvent(new Event('message-sent'));
-                    if (showChats) {
-                      setTimeout(fetchConversations, 1000);
-                    }
-                  }}
-                  onDeleteConversation={() => {
-                    setChatPanelOpen(false);
-                    setChatOtherUser(null);
-                    setChatProject(null);
-                    if (showChats) {
-                      fetchConversations();
-                    }
-                  }}
-                />
-              </div>
+              <ChatPanel
+                project={chatProject!}
+                currentUser={currentUser}
+                otherUser={chatOtherUser!}
+                inline={true}
+                onClose={() => {
+                  setChatPanelOpen(false);
+                  setChatOtherUser(null);
+                  setChatProject(null);
+                  if (showChats) {
+                    fetchConversations();
+                  }
+                }}
+                onMessageSent={() => {
+                  window.dispatchEvent(new Event('message-sent'));
+                  if (showChats) {
+                    setTimeout(fetchConversations, 1000);
+                  }
+                }}
+                onDeleteConversation={() => {
+                  setChatPanelOpen(false);
+                  setChatOtherUser(null);
+                  setChatProject(null);
+                  if (showChats) {
+                    fetchConversations();
+                  }
+                }}
+              />
             </div>
           </div>
         </>

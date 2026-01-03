@@ -5,6 +5,7 @@ const { buildReportMetrics } = require('../services/reportMetricsService');
 const chartGenerationService = require('../services/chartGenerationService');
 const { getProjectAnalytics } = require('../services/analyticsService');
 const { generateHTMLReport } = require('../services/htmlReportTemplateService');
+const { generateProfessionalDOCX } = require('../services/professionalDocxService');
 
 // Helper function for ObjectId validation (compatible with Mongoose v9+)
 const isValidObjectId = (id) => {
@@ -1074,6 +1075,73 @@ exports.getAllReports = async (req, res) => {
  * GET /api/reports/:id
  * Get specific report by ID
  */
+exports.getLatestReport = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { userId } = req.query;
+    
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    
+    const projectIdObj = toObjectIdOrValue(projectId);
+    if (!projectIdObj) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
+    
+    // Get user info for authorization
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    
+    // Check if user is assigned to project (unless admin)
+    if (roleCategory !== 'admin') {
+      const ok = await isUserAssignedToProject({
+        userIdObj,
+        projectIdObj
+      });
+      if (!ok) {
+        return res.status(403).json({ error: 'Not authorized to view reports for this project' });
+      }
+    }
+    
+    // Find the latest report for this project
+    // Sort by version (descending), then by generatedAt (descending), then by createdAt (descending)
+    const report = await Report.findOne({ projectId: projectIdObj })
+      .sort({ version: -1, generatedAt: -1, createdAt: -1 })
+      .lean();
+    
+    // Filter out reports hidden for this user (soft delete)
+    if (report && roleCategory !== 'admin') {
+      if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
+        const hiddenForUserIds = report.hiddenForUsers.map((id) => id.toString());
+        if (hiddenForUserIds.includes(userIdObj.toString())) {
+          return res.json({ report: null });
+        }
+      }
+    }
+    
+    if (!report) {
+      return res.json({ report: null });
+    }
+    
+    // Build file URL
+    const reportId = report._id.toString();
+    let fileUrl = `/api/reports/${reportId}/file`;
+    if (userId) {
+      fileUrl += `?userId=${encodeURIComponent(userId)}`;
+    }
+    
+    res.json({
+      report: {
+        ...report,
+        fileUrl
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching latest report:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch latest report' });
+  }
+};
+
 exports.getReportById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1213,6 +1281,131 @@ exports.getMyReports = async (req, res) => {
   } catch (err) {
     console.error('Error fetching user reports:', err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * GET /api/reports/:id/file
+ * Serve report file (PDF) - inline view
+ */
+exports.getReportFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+    const userIdObj = userId && isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
+    
+    // Load user if userId provided
+    let roleCategory = 'expert';
+    if (userIdObj) {
+      try {
+        const user = await User.findById(userIdObj).select('role').lean();
+        if (user) {
+          roleCategory = getRoleCategory(user.role);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const report = await Report.findById(id)
+      .populate('projectId', 'title')
+      .lean();
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Authorization: admin can view all. Expert/Viewer can only view reports for assigned projects.
+    if (roleCategory !== 'admin' && userIdObj) {
+      const projectIdObj = report?.projectId?._id || report?.projectId;
+      const ok = await isUserAssignedToProject({
+        userIdObj,
+        projectIdObj: toObjectIdOrValue(projectIdObj)
+      });
+      if (!ok) {
+        return res.status(403).json({ error: 'Not authorized to view this report.' });
+      }
+    }
+
+    // Generate PDF on-the-fly (same logic as downloadReportPDF but with inline disposition)
+    console.log('📄 Generating PDF for report file view:', id);
+    
+    let pdfBuffer;
+    
+    if (report.htmlContent && report.htmlContent.trim().length > 0) {
+      console.log('✅ Using HTML content with embedded charts for PDF generation');
+      
+      const puppeteer = require('puppeteer');
+      let browser = null;
+      
+      try {
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1200, height: 1600 });
+        await page.setContent(report.htmlContent, {
+          waitUntil: ['load', 'domcontentloaded', 'networkidle0']
+        });
+        
+        await page.evaluate(() => {
+          return Promise.all(
+            Array.from(document.images)
+              .filter(img => !img.complete)
+              .map(img => new Promise((resolve) => {
+                img.onload = img.onerror = resolve;
+              }))
+          );
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        pdfBuffer = await page.pdf({
+          format: 'A4',
+          margin: {
+            top: '2cm',
+            right: '1.5cm',
+            bottom: '2cm',
+            left: '1.5cm'
+          },
+          printBackground: true,
+          preferCSSPageSize: true,
+          displayHeaderFooter: false
+        });
+        
+        await browser.close();
+        console.log('✅ PDF generated from HTML content');
+      } catch (htmlPdfError) {
+        console.error('❌ Error generating PDF from HTML:', htmlPdfError);
+        if (browser) await browser.close();
+        throw new Error(`PDF generation failed: ${htmlPdfError.message}`);
+      }
+    } else {
+      // Legacy report fallback
+      const reportAge = new Date() - new Date(report.generatedAt);
+      const isLegacyReport = reportAge > (7 * 24 * 60 * 60 * 1000);
+      
+      if (isLegacyReport) {
+        console.log('⚠️ Legacy report without HTML content. Using markdown PDF generation...');
+        pdfBuffer = await generatePDFFromMarkdown(
+          buildExportMarkdownFromReport(report),
+          report.title
+        );
+      } else {
+        throw new Error('Report has no HTML content and cannot be generated');
+      }
+    }
+
+    // Serve PDF inline (not as download)
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('❌ Error serving report file:', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to serve report file' });
   }
 };
 
@@ -1386,6 +1579,94 @@ exports.downloadReportPDF = async (req, res) => {
   } catch (err) {
     console.error('Error generating PDF:', err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+};
+
+/**
+ * GET /api/reports/:id/download-docx
+ * Download report as DOCX (always uses latest data)
+ */
+exports.downloadReportDOCX = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
+
+    // Get report to find projectId
+    const report = await Report.findById(id)
+      .populate('projectId', 'title')
+      .lean();
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Authorization: admin can export all. Expert/Viewer can export assigned reports.
+    if (roleCategory !== 'admin') {
+      const projectIdObj = report?.projectId?._id || report?.projectId;
+      const ok = await isUserAssignedToProject({
+        userIdObj,
+        projectIdObj: toObjectIdOrValue(projectIdObj)
+      });
+      if (!ok) {
+        return res.status(403).json({ error: 'Not authorized to download this report.' });
+      }
+    }
+
+    const projectId = report?.projectId?._id || report?.projectId;
+    if (!projectId) {
+      return res.status(404).json({ error: 'Project not found for this report' });
+    }
+
+    console.log('📄 Generating DOCX for report:', id, 'project:', projectId);
+
+    // Always fetch fresh data for DOCX generation
+    const reportMetrics = await buildReportMetrics(projectId, 'general-v1');
+    
+    // Get the latest report content (use sections if available, otherwise content)
+    let geminiNarrative = '';
+    if (Array.isArray(report.sections) && report.sections.length > 0) {
+      const section = report.sections[0];
+      geminiNarrative = (section?.expertEdit || '').trim() || section?.aiDraft || '';
+    } else {
+      geminiNarrative = report.content || '';
+    }
+
+    // Get chart images from report's computedMetrics or generate fresh
+    let chartBuffers = null;
+    if (report.computedMetrics && report.computedMetrics.chartImages) {
+      chartBuffers = {};
+      for (const [key, value] of Object.entries(report.computedMetrics.chartImages)) {
+        if (typeof value === 'string') {
+          // Convert base64 string to Buffer
+          const base64Data = value.startsWith('data:') 
+            ? value.split(',')[1] 
+            : value;
+          chartBuffers[key] = Buffer.from(base64Data, 'base64');
+        } else if (Buffer.isBuffer(value)) {
+          chartBuffers[key] = value;
+        }
+      }
+    }
+
+    // Generate DOCX with fresh data
+    const docxBuffer = await generateProfessionalDOCX(
+      reportMetrics,
+      geminiNarrative,
+      report.generatedAt || new Date(),
+      chartBuffers
+    );
+
+    // Set response headers for DOCX download
+    const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', docxBuffer.length);
+
+    res.send(docxBuffer);
+  } catch (err) {
+    console.error('Error generating DOCX:', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to generate DOCX' });
   }
 };
 

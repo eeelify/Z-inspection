@@ -147,6 +147,10 @@ export function AdminDashboardEnhanced({
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [messageUnreadConversations, setMessageUnreadConversations] = useState<any[]>([]);
+  const [showMessageNotifications, setShowMessageNotifications] = useState(false);
+  const messageNotificationRef = useRef<HTMLDivElement>(null);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatOtherUser, setChatOtherUser] = useState<User | null>(null);
   const [chatProject, setChatProject] = useState<Project | null>(null);
@@ -300,13 +304,12 @@ export function AdminDashboardEnhanced({
     return date.toLocaleDateString();
   };
 
-  // Fetch unread message count
+  // Fetch unread message count (for notifications - includes all messages)
   const fetchUnreadCount = async () => {
     try {
       const response = await fetch(api(`/api/messages/unread-count?userId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
-        console.log('Admin unread count fetched:', data);
         const conversations = data.conversations || [];
         // Calculate actual unread count from conversations to ensure consistency
         // Backend uses 'count' field, not 'unreadCount'
@@ -322,6 +325,37 @@ export function AdminDashboardEnhanced({
     }
   };
 
+  // Fetch unread message count for message notifications (excludes notification messages)
+  const fetchMessageUnreadCount = async () => {
+    try {
+      const response = await fetch(api(`/api/messages/unread-count?userId=${encodeURIComponent(currentUser.id)}`));
+      if (response.ok) {
+        const data = await response.json();
+        const conversations = data.conversations || [];
+        
+        // Filter out notification-only messages - chat bubble should only show real user messages
+        const realConversations = conversations.filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
+          return !isNotification;
+        });
+        
+        // Calculate actual unread count from real conversations only
+        const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
+        setMessageUnreadCount(actualUnreadCount);
+        setMessageUnreadConversations(realConversations);
+      } else {
+        console.error('Admin failed to fetch message unread count:', response.status, response.statusText);
+        setMessageUnreadCount(0);
+        setMessageUnreadConversations([]);
+      }
+    } catch (error) {
+      console.error('Error fetching message unread count:', error);
+      setMessageUnreadCount(0);
+      setMessageUnreadConversations([]);
+    }
+  };
+
   // Poll for unread messages every 30 seconds
   useEffect(() => {
     fetchUnreadCount();
@@ -329,7 +363,10 @@ export function AdminDashboardEnhanced({
     
     // Listen for message sent events to refresh immediately
     const handleMessageSent = () => {
-      setTimeout(fetchUnreadCount, 1000);
+      setTimeout(() => {
+        fetchUnreadCount();
+        fetchMessageUnreadCount();
+      }, 1000);
       if (activeTab === 'chats') {
         setTimeout(fetchConversations, 1000);
       }
@@ -358,6 +395,9 @@ export function AdminDashboardEnhanced({
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
         setShowNotifications(false);
       }
+      if (messageNotificationRef.current && !messageNotificationRef.current.contains(event.target as Node)) {
+        setShowMessageNotifications(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -379,27 +419,27 @@ export function AdminDashboardEnhanced({
       } as any);
     
     if (project && otherUser) {
-      // Mark messages as read
-      try {
-        await fetch(api('/api/messages/mark-read'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: conversation.projectId,
-            userId: currentUser.id,
-            otherUserId: conversation.fromUserId,
-          }),
-        });
-        fetchUnreadCount();
-      } catch (error) {
-        console.error('Error marking messages as read:', error);
-      }
+    // Mark messages as read
+    try {
+      await fetch(api('/api/messages/mark-read'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: conversation.projectId,
+          userId: currentUser.id,
+          otherUserId: conversation.fromUserId,
+        }),
+      });
+      fetchUnreadCount();
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
 
       // Open chat panel (also for notification-only messages)
-      setChatProject(project);
-      setChatOtherUser(otherUser);
-      setChatPanelOpen(true);
-      setShowNotifications(false);
+        setChatProject(project);
+        setChatOtherUser(otherUser);
+        setChatPanelOpen(true);
+        setShowNotifications(false);
     }
   };
   const [selectedUseCaseForAssignment, setSelectedUseCaseForAssignment] = useState<UseCase | null>(null);
@@ -523,6 +563,83 @@ export function AdminDashboardEnhanced({
             </h2>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Message Notifications Button */}
+            <div className="relative" ref={messageNotificationRef}>
+              <button 
+                onClick={() => setShowMessageNotifications(!showMessageNotifications)}
+                className="relative p-2 text-gray-600 hover:text-gray-900"
+              >
+                <MessageSquare className="h-5 w-5" />
+                {messageUnreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                    {messageUnreadCount > 9 ? '9+' : messageUnreadCount}
+                  </span>
+                )}
+              </button>
+              
+              {showMessageNotifications && (
+                <div 
+                  className="absolute top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] overflow-hidden flex flex-col"
+                  style={{ 
+                    right: '0',
+                    width: 'min(320px, calc(100vw - 2rem))',
+                    maxHeight: 'min(500px, calc(100vh - 100px))',
+                    maxWidth: 'calc(100vw - 1rem)'
+                  }}
+                >
+                  <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <h3 className="font-semibold text-gray-900">Messages</h3>
+                    <button
+                      onClick={() => setShowMessageNotifications(false)}
+                      className="p-1 hover:bg-gray-100 rounded-full"
+                    >
+                      <X className="h-4 w-4 text-gray-500" />
+                    </button>
+                  </div>
+                  <div className="overflow-y-auto flex-1 min-h-0">
+                    {messageUnreadConversations.length === 0 ? (
+                      <div className="p-6 text-center text-gray-500">
+                        <MessageSquare className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm">No unread messages</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-200">
+                        {messageUnreadConversations.map((conv, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleNotificationClick(conv)}
+                            className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2 mb-1">
+                                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-medium">
+                                    {conv.fromUserName?.charAt(0) || 'U'}
+                                  </div>
+                                  <div className="font-medium text-gray-900 text-sm truncate">
+                                    {conv.fromUserName}
+                                  </div>
+                                </div>
+                                <div className="text-xs text-gray-500 line-clamp-2">
+                                  {conv.lastMessage}
+                                </div>
+                              </div>
+                              {conv.count > 1 && (
+                                <span className="ml-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                                  {conv.count}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Notification Button */}
             <div className="relative" ref={notificationRef}>
               <button 
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -689,7 +806,7 @@ export function AdminDashboardEnhanced({
                 )}
               </div>
             </div>
-            
+
             {/* Chat Panel - Always mounted when project/user exist, shown when chatPanelOpen */}
             {chatProject && chatOtherUser ? (
               <div className={`flex-1 min-h-0 flex flex-col bg-white ${chatPanelOpen ? '' : 'hidden'}`}>
@@ -789,7 +906,15 @@ export function AdminDashboardEnhanced({
                    const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
                    if (projectsRes.ok) {
                      const data = await projectsRes.json();
-                     const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+                     const formattedProjects = data.map((p: any) => {
+                       // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
+                       const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+                         if (typeof user === 'string') return user;
+                         if (user && user._id) return user._id.toString();
+                         return user;
+                       });
+                       return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
+                     });
                      // Update projects in parent component via window event
                      window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
                    }
@@ -1086,22 +1211,22 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status]?.text || 'text-gray-800'}`}>
                           {useCase.status.replace('-', ' ').toUpperCase()}
-                        </span>
+                          </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex -space-x-2">
-                          {assignedExperts.length === 0 ? (
-                            <span className="text-xs text-gray-400 italic">None</span>
-                          ) : (
-                            assignedExperts.map((expert: User) => (
-                              <div
-                                key={expert.id}
-                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                title={`${expert.name} (${expert.role})`}
-                              >
+                          <div className="flex -space-x-2">
+                            {assignedExperts.length === 0 ? (
+                              <span className="text-xs text-gray-400 italic">None</span>
+                            ) : (
+                              assignedExperts.map((expert: User) => (
+                                <div
+                                  key={expert.id}
+                                  className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                  title={`${expert.name} (${expert.role})`}
+                                >
                                 {expert.name.charAt(0)}
-                              </div>
-                            ))
+                                </div>
+                              ))
                           )}
                         </div>
                       </td>
@@ -1515,8 +1640,18 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     if (e) {
       e.stopPropagation(); // Prevent card click event
     }
+    
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
     try {
-      const response = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      // Use /download-pdf endpoint which always uses latest data
+      const response = await fetch(api(`/api/reports/${reportId}/download-pdf?userId=${userId}`));
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -1535,34 +1670,13 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
-    }
-  };
-
-  // Download report as HTML
-  const handleDownloadHTML = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation(); // Prevent card click event
-    }
-    try {
-      const response = await fetch(api(`/api/reports/${reportId}/download-html?userId=${currentUser.id}`));
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.html`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } else {
-        const error = await response.json();
-        alert('HTML indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
+    } finally {
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
       }
-    } catch (error: any) {
-      console.error('Error downloading HTML:', error);
-      alert('HTML indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
     }
   };
 
@@ -1752,14 +1866,6 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           PDF
                         </button>
                         <button
-                          onClick={(e) => handleDownloadHTML(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download HTML"
-                        >
-                          <Download className="h-4 w-4" />
-                          HTML
-                        </button>
-                        <button
                           onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
                           className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
                           title="Download Word"
@@ -1775,14 +1881,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           <Trash2 className="h-4 w-4" />
                           Delete
                         </button>
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
-                          report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
-                        </span>
+                        {report.status === 'final' || report.status === 'archived' ? (
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${
+                            report.status === 'final' ? 'bg-green-100 text-green-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {report.status === 'final' ? 'Final' : 'Archived'}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1827,10 +1933,10 @@ function CreatedReportsTab({ projects, currentUser }: any) {
             <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
                     if (selectedReport) {
                       const reportId = selectedReport._id || selectedReport.id;
-                      handleDownloadPDF(reportId, selectedReport.title);
+                      handleDownloadPDF(reportId, selectedReport.title, e);
                     }
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -1839,10 +1945,10 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                   Download PDF
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
                     if (selectedReport) {
                       const reportId = selectedReport._id || selectedReport.id;
-                      handleDownloadDOCX(reportId, selectedReport.title);
+                      handleDownloadDOCX(reportId, selectedReport.title, e);
                     }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -1959,8 +2065,18 @@ function ReportsTab({ projects, currentUser, users }: any) {
     if (e) {
       e.stopPropagation(); // Prevent card click event
     }
+    
+    const button = e?.currentTarget as HTMLButtonElement;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Downloading...';
+    }
+    
     try {
-      const response = await fetch(api(`/api/reports/${reportId}/download?userId=${currentUser.id}`));
+      const userId = currentUser?.id || (currentUser as any)?._id;
+      // Use /download-pdf endpoint which always uses latest data
+      const response = await fetch(api(`/api/reports/${reportId}/download-pdf?userId=${userId}`));
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -1979,36 +2095,16 @@ function ReportsTab({ projects, currentUser, users }: any) {
     } catch (error: any) {
       console.error('Error downloading PDF:', error);
       alert('PDF indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
+    } finally {
+      if (button) {
+        button.disabled = false;
+        if (originalText) {
+          button.textContent = originalText;
+        }
+      }
     }
   };
 
-  // Download report as HTML
-  const handleDownloadHTML = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation(); // Prevent card click event
-    }
-    try {
-      const response = await fetch(api(`/api/reports/${reportId}/download-html?userId=${currentUser.id}`));
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${reportTitle.replace(/[^a-z0-9]/gi, '_')}_${reportId}.html`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } else {
-        const error = await response.json();
-        alert('HTML indirilemedi: ' + (error.error || 'Bilinmeyen hata'));
-      }
-    } catch (error: any) {
-      console.error('Error downloading HTML:', error);
-      alert('HTML indirilemedi: ' + (error.message || 'Bilinmeyen hata'));
-    }
-  };
 
   // Download report as Word (DOCX)
   const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
@@ -2327,14 +2423,6 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           PDF
                         </button>
                         <button
-                          onClick={(e) => handleDownloadHTML(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download HTML"
-                        >
-                          <Download className="h-4 w-4" />
-                          HTML
-                        </button>
-                        <button
                           onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
                           className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
                           title="Download Word"
@@ -2350,14 +2438,14 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           <Trash2 className="h-4 w-4" />
                           Delete
                         </button>
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          report.status === 'final' ? 'bg-green-100 text-green-800' :
-                          report.status === 'archived' ? 'bg-gray-100 text-gray-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {report.status === 'final' ? 'Final' :
-                           report.status === 'archived' ? 'Archived' : 'Draft'}
-                        </span>
+                        {report.status === 'final' || report.status === 'archived' ? (
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${
+                            report.status === 'final' ? 'bg-green-100 text-green-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {report.status === 'final' ? 'Final' : 'Archived'}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -2402,10 +2490,10 @@ function ReportsTab({ projects, currentUser, users }: any) {
             <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
                     if (selectedReport) {
                       const reportId = selectedReport._id || selectedReport.id;
-                      handleDownloadPDF(reportId, selectedReport.title);
+                      handleDownloadPDF(reportId, selectedReport.title, e);
                     }
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -2414,10 +2502,10 @@ function ReportsTab({ projects, currentUser, users }: any) {
                   Download PDF
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
                     if (selectedReport) {
                       const reportId = selectedReport._id || selectedReport.id;
-                      handleDownloadDOCX(reportId, selectedReport.title);
+                      handleDownloadDOCX(reportId, selectedReport.title, e);
                     }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"

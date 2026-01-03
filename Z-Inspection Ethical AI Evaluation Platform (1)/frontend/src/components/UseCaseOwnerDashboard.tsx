@@ -297,7 +297,13 @@ export function UseCaseOwnerDashboard({
         });
         if (response.ok) {
           const newProject = await response.json();
-          adminProject = { ...newProject, id: newProject._id || newProject.id };
+          // Normalize assignedUsers
+          const normalizedAssignedUsers = (newProject.assignedUsers || []).map((user: any) => {
+            if (typeof user === 'string') return user;
+            if (user && user._id) return user._id.toString();
+            return user;
+          });
+          adminProject = { ...newProject, id: newProject._id || newProject.id, assignedUsers: normalizedAssignedUsers };
         }
       } catch (error) {
         console.error('Error creating admin project:', error);

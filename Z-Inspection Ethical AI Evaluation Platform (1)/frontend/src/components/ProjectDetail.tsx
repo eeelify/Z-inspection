@@ -123,7 +123,13 @@ export function ProjectDetail({
         });
         if (response.ok) {
           const newProject = await response.json();
-          commProject = { ...newProject, id: newProject._id || newProject.id };
+          // Normalize assignedUsers
+          const normalizedAssignedUsers = (newProject.assignedUsers || []).map((user: any) => {
+            if (typeof user === 'string') return user;
+            if (user && user._id) return user._id.toString();
+            return user;
+          });
+          commProject = { ...newProject, id: newProject._id || newProject.id, assignedUsers: normalizedAssignedUsers };
           console.log('Created communication project:', commProject);
         } else {
           const error = await response.text();
@@ -701,48 +707,53 @@ export function ProjectDetail({
                 </button>
               );
             })()}
-            {latestReport && (
-              <button
-                onClick={async () => {
-                  try {
-                    // Always fetch the latest report before opening to ensure we have the most recent one
-                    const projectId = project.id || (project as any)._id;
-                    const userId = currentUser?.id || (currentUser as any)?._id;
-                    
-                    // Fetch latest report to ensure we have the most recent one
-                    const response = await fetch(api(`/api/projects/${projectId}/reports/latest?userId=${userId}`));
-                    if (response.ok) {
-                      const reportResponse = await response.json();
-                      if (reportResponse.report) {
-                        // Use the latest report ID
-                        const reportId = reportResponse.report._id || reportResponse.report.id;
-                        let reportUrl = reportResponse.report.fileUrl || `/api/reports/${reportId}/file`;
-                        
-                        // Ensure URL is absolute
-                        if (!reportUrl.startsWith('http')) {
-                          reportUrl = api(reportUrl);
-                        }
-                        
-                        // Add userId as query parameter if not already present
-                        if (userId && !reportUrl.includes('userId=')) {
-                          const separator = reportUrl.includes('?') ? '&' : '?';
-                          reportUrl = `${reportUrl}${separator}userId=${userId}`;
-                        }
-                        
-                        // Update latestReport state
-                        setLatestReport({
-                          id: reportId,
-                          fileUrl: reportUrl,
-                          title: reportResponse.report.title || 'Analysis Report'
-                        });
-                        
-                        // Open report in new tab
-                        window.open(reportUrl, '_blank', 'noopener,noreferrer');
-                      } else {
-                        alert('No report found for this project.');
+            <button
+              onClick={async () => {
+                if (!latestReport) {
+                  // If no report exists, button is disabled
+                  return;
+                }
+                
+                try {
+                  // Always fetch the latest report before opening to ensure we have the most recent one
+                  const projectId = project.id || (project as any)._id;
+                  const userId = currentUser?.id || (currentUser as any)?._id;
+                  
+                  // Fetch latest report to ensure we have the most recent one
+                  const response = await fetch(api(`/api/projects/${projectId}/reports/latest?userId=${userId}`));
+                  if (response.ok) {
+                    const reportResponse = await response.json();
+                    if (reportResponse.report) {
+                      // Use the latest report ID
+                      const reportId = reportResponse.report._id || reportResponse.report.id;
+                      let reportUrl = reportResponse.report.fileUrl || `/api/reports/${reportId}/file`;
+                      
+                      // Ensure URL is absolute
+                      if (!reportUrl.startsWith('http')) {
+                        reportUrl = api(reportUrl);
                       }
+                      
+                      // Add userId as query parameter if not already present
+                      if (userId && !reportUrl.includes('userId=')) {
+                        const separator = reportUrl.includes('?') ? '&' : '?';
+                        reportUrl = `${reportUrl}${separator}userId=${userId}`;
+                      }
+                      
+                      // Update latestReport state
+                      setLatestReport({
+                        id: reportId,
+                        fileUrl: reportUrl,
+                        title: reportResponse.report.title || 'Analysis Report'
+                      });
+                      
+                      // Open report in new tab
+                      window.open(reportUrl, '_blank', 'noopener,noreferrer');
                     } else {
-                      // Fallback to existing latestReport if fetch fails
+                      alert('No report found for this project.');
+                    }
+                  } else {
+                    // Fallback to existing latestReport if fetch fails
+                    if (latestReport) {
                       let reportUrl = latestReport.fileUrl.startsWith('http') 
                         ? latestReport.fileUrl 
                         : api(latestReport.fileUrl);
@@ -755,9 +766,11 @@ export function ProjectDetail({
                       
                       window.open(reportUrl, '_blank', 'noopener,noreferrer');
                     }
-                  } catch (err) {
-                    console.error('Error fetching latest report:', err);
-                    // Fallback to existing latestReport
+                  }
+                } catch (err) {
+                  console.error('Error fetching latest report:', err);
+                  // Fallback to existing latestReport
+                  if (latestReport) {
                     let reportUrl = latestReport.fileUrl.startsWith('http') 
                       ? latestReport.fileUrl 
                       : api(latestReport.fileUrl);
@@ -770,13 +783,18 @@ export function ProjectDetail({
                     
                     window.open(reportUrl, '_blank', 'noopener,noreferrer');
                   }
-                }}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors ml-2"
-                title={`View latest report: ${latestReport.title || 'Analysis Report'}`}
-              >
-                Show Report
-              </button>
-            )}
+                }
+              }}
+              disabled={!latestReport}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ml-2 ${
+                latestReport
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+              title={latestReport ? `View latest report: ${latestReport.title || 'Analysis Report'}` : 'No report available yet'}
+            >
+              Show Report
+            </button>
             {isAssigned && progressDisplay === 0 && (
               <button onClick={onStartEvaluation} className="px-4 py-2 text-white rounded-lg hover:opacity-90" style={{ backgroundColor: roleColor }}>
                 Start Evaluation
