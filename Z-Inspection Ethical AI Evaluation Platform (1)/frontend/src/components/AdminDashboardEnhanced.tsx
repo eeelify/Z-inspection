@@ -783,30 +783,44 @@ export function AdminDashboardEnhanced({
                });
 
                if (response.ok) {
-                 alert("Experts assigned successfully!");
-                 
-                 // Refresh projects to reflect the updated assignedUsers
+                 // Reload projects to reflect updated assignments and progress
                  try {
-                   const projectsRes = await fetch(api('/api/projects'));
+                   const userId = currentUser?.id || (currentUser as any)?._id;
+                   const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
                    if (projectsRes.ok) {
-                     const projectsData = await projectsRes.json();
-                     const formattedProjects = projectsData.map((p: any) => ({ ...p, id: p._id }));
-                     
-                     // Trigger projects-updated event to update App.tsx
-                     window.dispatchEvent(new CustomEvent('projects-updated', { 
-                       detail: formattedProjects 
-                     }));
+                     const data = await projectsRes.json();
+                     const formattedProjects = data.map((p: any) => ({ ...p, id: p._id }));
+                     // Update projects in parent component via window event
+                     window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
                    }
-                 } catch (refreshError) {
-                   console.error("Error refreshing projects:", refreshError);
+                 } catch (reloadError) {
+                   console.error("Error reloading projects:", reloadError);
                  }
+                 
+                 // Reload use cases to reflect updated assignments
+                 try {
+                   const useCasesRes = await fetch(api('/api/use-cases'));
+                   if (useCasesRes.ok) {
+                     const useCasesData = await useCasesRes.json();
+                     const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
+                     // Update use cases in parent component via window event
+                     window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
+                   }
+                 } catch (reloadError) {
+                   console.error("Error reloading use cases:", reloadError);
+                 }
+                 
+                 alert("Experts assigned successfully!");
+                 setShowAssignExpertsModal(false);
+                 setSelectedUseCaseForAssignment(null);
+               } else {
+                 const errorData = await response.json().catch(() => ({}));
+                 alert(`Failed to assign experts: ${errorData.error || 'Unknown error'}`);
                }
              } catch (error) {
                console.error("Assignment error:", error);
                alert("Failed to assign experts.");
              }
-             setShowAssignExpertsModal(false);
-             setSelectedUseCaseForAssignment(null);
            }}
         />
       )}

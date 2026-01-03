@@ -542,63 +542,130 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
     const { assignedExperts = [], adminNotes = '' } = req.body;
     const useCaseId = req.params.id;
     
+    // Validate and filter assigned experts
+    let validAssignedExperts = [];
+    if (assignedExperts && Array.isArray(assignedExperts) && assignedExperts.length > 0) {
+      validAssignedExperts = assignedExperts
+        .map(id => {
+          if (!id) return null;
+          const idStr = id.toString();
+          return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : null;
+        })
+        .filter(Boolean);
+      
+      // Verify these are actual expert users (not admins)
+      if (validAssignedExperts.length > 0) {
+        const experts = await User.find({
+          _id: { $in: validAssignedExperts },
+          role: { $ne: 'admin' }
+        }).select('_id').lean();
+        validAssignedExperts = experts.map(e => e._id);
+      }
+    }
+    
+    // Set status based on assignment count
+    const newStatus = validAssignedExperts.length > 0 ? 'ASSIGNED' : 'UNASSIGNED';
+    
     // Update the use case
     const updated = await UseCase.findByIdAndUpdate(
       useCaseId,
-      { assignedExperts, adminNotes },
+      { assignedExperts: validAssignedExperts, adminNotes, status: newStatus },
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: 'Not found' });
     
-    // Find all projects linked to this use case
-    const linkedProjects = await Project.find({ useCase: useCaseId }).lean();
-    
-    // Prepare the list of users to assign: use case owner + assigned experts
-    const usersToAssign = new Set();
-    
-    // Add use case owner if exists
-    if (updated.ownerId) {
-      usersToAssign.add(updated.ownerId.toString());
-    }
-    
-    // Add all assigned experts
-    if (Array.isArray(assignedExperts)) {
-      assignedExperts.forEach(expertId => {
-        if (expertId) {
-          usersToAssign.add(expertId.toString());
-        }
-      });
-    }
-    
-    // Update all linked projects' assignedUsers
-    // Sync project assignedUsers with use case owner + assignedExperts
-    if (linkedProjects.length > 0) {
-      const usersToAssignArray = Array.from(usersToAssign);
+    // Update all projects linked to this use case: sync assigned experts with project.assignedUsers
+    // Also create/remove ProjectAssignment records so experts can see/hide the projects
+    try {
+      const ProjectAssignment = require('./models/projectAssignment');
+      const { calculateProjectProgress } = require('./services/evaluationService');
+      const linkedProjects = await Project.find({ useCase: useCaseId });
       
-      await Promise.all(
-        linkedProjects.map(async (project) => {
-          const currentAssignedUsers = (project.assignedUsers || []).map(id => id.toString());
-          
-          // Get the previous use case assignedExperts to know what to remove
-          // We need to find users that were in the old list but not in the new list
-          // For now, we'll sync: keep only use case owner + new assignedExperts
-          // (This ensures removed experts are also removed from projects)
-          
-          // Create new list: use case owner + assignedExperts only
-          // Remove any users that are not in the new use case assignment
-          const newAssignedUsers = new Set(usersToAssignArray);
-          
-          // Also keep any users that were manually added to the project (not from use case)
-          // But for now, let's keep it simple: only use case owner + assignedExperts
-          // If you need to preserve manually added users, we'd need to track that separately
-          
-          await Project.findByIdAndUpdate(
-            project._id,
-            { assignedUsers: Array.from(newAssignedUsers) },
-            { new: true }
-          );
-        })
-      );
+      // Prepare the list of users to assign: use case owner + assigned experts
+      const usersToAssign = new Set();
+      
+      // Add use case owner if exists
+      if (updated.ownerId) {
+        usersToAssign.add(updated.ownerId.toString());
+      }
+      
+      // Add all assigned experts
+      validAssignedExperts.forEach(expertId => {
+        usersToAssign.add(expertId.toString());
+      });
+      
+      const usersToAssignArray = Array.from(usersToAssign).map(id => new mongoose.Types.ObjectId(id));
+      
+      for (const project of linkedProjects) {
+        if (!project.assignedUsers) {
+          project.assignedUsers = [];
+        }
+        
+        // Get current assigned user IDs as strings for comparison
+        const currentAssigned = project.assignedUsers.map((id) => id.toString());
+        const newUserIds = usersToAssignArray.map((id) => id.toString());
+        
+        // Find users to add and remove
+        const usersToAdd = newUserIds.filter(id => !currentAssigned.includes(id));
+        const usersToRemove = currentAssigned.filter(id => !newUserIds.includes(id));
+        
+        // Update project.assignedUsers to match the new assignment list exactly (owner + experts)
+        project.assignedUsers = usersToAssignArray;
+        await project.save();
+        
+        // Create or update ProjectAssignment records for newly added experts (not owner)
+        for (const expertId of validAssignedExperts) {
+          try {
+            // Get user to determine role
+            const expertUser = await User.findById(expertId).select('role').lean();
+            if (!expertUser || expertUser.role === 'admin') continue;
+            
+            // Create or update ProjectAssignment
+            await ProjectAssignment.findOneAndUpdate(
+              { projectId: project._id, userId: expertId },
+              {
+                projectId: project._id,
+                userId: expertId,
+                role: expertUser.role, // e.g., "medical-expert", "technical-expert"
+                questionnaires: [], // Will be populated when questionnaires are assigned
+                status: 'assigned',
+                assignedAt: new Date()
+              },
+              { new: true, upsert: true }
+            );
+          } catch (assignmentError) {
+            console.error(`Error creating ProjectAssignment for expert ${expertId} on project ${project._id}:`, assignmentError);
+            // Continue with other experts even if one fails
+          }
+        }
+        
+        // Remove ProjectAssignment records for experts that were removed
+        for (const userIdStr of usersToRemove) {
+          try {
+            // Only remove if it's an expert (not the owner)
+            const isOwner = updated.ownerId && updated.ownerId.toString() === userIdStr;
+            if (isOwner) continue; // Don't remove owner's assignment
+            
+            if (!isValidObjectId(userIdStr)) continue;
+            const userIdObj = new mongoose.Types.ObjectId(userIdStr);
+            await ProjectAssignment.deleteOne({ projectId: project._id, userId: userIdObj });
+          } catch (removalError) {
+            console.error(`Error removing ProjectAssignment for user ${userIdStr} on project ${project._id}:`, removalError);
+            // Continue with other removals even if one fails
+          }
+        }
+        
+        // Recalculate project progress after assignment changes
+        try {
+          await calculateProjectProgress(project._id);
+        } catch (progressError) {
+          console.error(`Error recalculating progress for project ${project._id}:`, progressError);
+          // Don't fail the assignment if progress calculation fails
+        }
+      }
+    } catch (projectUpdateError) {
+      console.error('Error updating linked projects:', projectUpdateError);
+      // Don't fail the assignment if project update fails, but log it
     }
     
     res.json(updated);
