@@ -2810,22 +2810,173 @@ app.get('/api/general-questions', async (req, res) => {
       ? new mongoose.Types.ObjectId(userId) 
       : userId;
     
+    // Get user role to determine which questionnaires to fetch
+    const user = await User.findById(userIdObj).select('role').lean();
+    const role = user?.role || 'any';
+    
+    // Determine role-specific questionnaire key
+    let roleQuestionnaireKey = 'general-v1';
+    if (role === 'ethical-expert') roleQuestionnaireKey = 'ethical-expert-v1';
+    else if (role === 'medical-expert') roleQuestionnaireKey = 'medical-expert-v1';
+    else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
+    else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
+    else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
+    
+    // Get questionnaires to fetch (general-v1 + role-specific if applicable)
+    const questionnairesToFetch = role !== 'any' && roleQuestionnaireKey !== 'general-v1' 
+      ? ['general-v1', roleQuestionnaireKey]
+      : ['general-v1'];
+    
+    // Fetch from old GeneralQuestionsAnswers collection (for backward compatibility)
     const generalAnswers = await GeneralQuestionsAnswers.findOne({ 
       projectId: projectIdObj, 
       userId: userIdObj 
     });
     
-    // Return the result with principles structure
-    const result = generalAnswers ? {
-      _id: generalAnswers._id,
-      projectId: generalAnswers.projectId,
-      userId: generalAnswers.userId,
-      userRole: generalAnswers.userRole,
-      principles: generalAnswers.principles || {},
-      answers: generalAnswers.answers || {}, // Keep for backward compatibility
-      risks: generalAnswers.risks || {},     // Keep for backward compatibility
-      updatedAt: generalAnswers.updatedAt
-    } : { principles: {}, answers: {}, risks: {} };
+    // Fetch from new Response collection for all relevant questionnaires
+    const Response = require('./models/response');
+    const Question = require('./models/question');
+    
+    const responses = await Response.find({
+      projectId: projectIdObj,
+      userId: userIdObj,
+      questionnaireKey: { $in: questionnairesToFetch }
+    })
+      .populate('answers.questionId', 'code order')
+      .lean();
+    
+    // Merge answers from Response collection
+    const mergedAnswers = {};
+    const mergedRisks = {};
+    const mergedPrinciples = {};
+    
+    // First, add answers from old collection (for backward compatibility)
+    if (generalAnswers) {
+      if (generalAnswers.principles) {
+        Object.assign(mergedPrinciples, generalAnswers.principles);
+      }
+      if (generalAnswers.answers) {
+        Object.assign(mergedAnswers, generalAnswers.answers);
+      }
+      if (generalAnswers.risks) {
+        Object.assign(mergedRisks, generalAnswers.risks);
+      }
+    }
+    
+    // Collect all question IDs to fetch in one query
+    const questionIds = [];
+    const questionIdToResponseMap = new Map();
+    
+    for (const response of responses) {
+      if (!response.answers || !Array.isArray(response.answers)) continue;
+      
+      for (const answerEntry of response.answers) {
+        if (!answerEntry.questionId) continue;
+        
+        const questionId = answerEntry.questionId._id?.toString() || answerEntry.questionId.toString();
+        if (!questionIds.includes(questionId)) {
+          questionIds.push(questionId);
+        }
+        questionIdToResponseMap.set(questionId, { answerEntry, response });
+      }
+    }
+    
+    // Fetch all questions at once for better performance
+    const questionsMap = new Map();
+    if (questionIds.length > 0) {
+      const questions = await Question.find({
+        _id: { $in: questionIds.map(id => isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id) },
+        questionnaireKey: { $in: questionnairesToFetch }
+      })
+        .select('_id code principle order')
+        .lean();
+      
+      for (const question of questions) {
+        const qId = question._id.toString();
+        questionsMap.set(qId, question);
+      }
+    }
+    
+    // Then, add/override with answers from Response collection (new architecture)
+    for (const [questionId, { answerEntry, response }] of questionIdToResponseMap) {
+      const question = questionsMap.get(questionId);
+      // Prioritize answerEntry.questionCode (already saved in Response) over populated questionId.code
+      // This is more reliable because questionCode is directly stored in the Response document
+      const questionCode = answerEntry.questionCode || question?.code || answerEntry.questionId?.code;
+      
+      if (!questionCode) {
+        console.warn(`⚠️ [GET /api/general-questions] No questionCode found for questionId: ${questionId}`, {
+          answerEntryQuestionCode: answerEntry.questionCode,
+          questionCodeFromMap: question?.code,
+          populatedQuestionIdCode: answerEntry.questionId?.code,
+          questionnaireKey: response.questionnaireKey
+        });
+        continue;
+      }
+      
+      console.log(`📥 [GET /api/general-questions] Loading answer for questionCode: ${questionCode}, questionId: ${questionId}, questionnaire: ${response.questionnaireKey}`);
+      
+      // Extract answer value
+      let answerValue = null;
+      if (answerEntry.answer) {
+        if (answerEntry.answer.text) {
+          answerValue = answerEntry.answer.text;
+        } else if (answerEntry.answer.choiceKey) {
+          answerValue = answerEntry.answer.choiceKey;
+        } else if (answerEntry.answer.multiChoiceKeys) {
+          answerValue = Array.isArray(answerEntry.answer.multiChoiceKeys) 
+            ? answerEntry.answer.multiChoiceKeys.join(', ')
+            : answerEntry.answer.multiChoiceKeys;
+        }
+      }
+      
+      // Store answer by code (preferred) and by questionId
+      if (answerValue) {
+        mergedAnswers[questionCode] = answerValue;
+        mergedAnswers[questionId] = answerValue;
+        console.log(`✅ [GET /api/general-questions] Loaded answer for ${questionCode}: ${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
+      } else {
+        console.warn(`⚠️ [GET /api/general-questions] No answer value found for questionCode: ${questionCode}`);
+      }
+      
+      // Extract risk score
+      if (answerEntry.score !== undefined && answerEntry.score !== null) {
+        const riskScore = typeof answerEntry.score === 'number' ? answerEntry.score : parseInt(answerEntry.score);
+        if (riskScore >= 0 && riskScore <= 4) {
+          mergedRisks[questionCode] = riskScore;
+          mergedRisks[questionId] = riskScore;
+          console.log(`✅ [GET /api/general-questions] Loaded risk score for ${questionCode}: ${riskScore}`);
+        }
+      }
+      
+      // Organize by principle if we have question data
+      if (question && question.principle) {
+        if (!mergedPrinciples[question.principle]) {
+          mergedPrinciples[question.principle] = { answers: {}, risks: {} };
+        }
+        if (answerValue) {
+          mergedPrinciples[question.principle].answers[questionCode] = answerValue;
+        }
+        if (answerEntry.score !== undefined && answerEntry.score !== null) {
+          const riskScore = typeof answerEntry.score === 'number' ? answerEntry.score : parseInt(answerEntry.score);
+          if (riskScore >= 0 && riskScore <= 4) {
+            mergedPrinciples[question.principle].risks[questionCode] = riskScore;
+          }
+        }
+      }
+    }
+    
+    // Return the merged result
+    const result = {
+      _id: generalAnswers?._id || null,
+      projectId: projectIdObj,
+      userId: userIdObj,
+      userRole: generalAnswers?.userRole || role,
+      principles: mergedPrinciples,
+      answers: mergedAnswers, // Keep for backward compatibility
+      risks: mergedRisks,     // Keep for backward compatibility
+      updatedAt: generalAnswers?.updatedAt || new Date()
+    };
     
     res.json(result);
   } catch (err) {
@@ -2868,12 +3019,14 @@ app.get('/api/user-progress', async (req, res) => {
 
     // Prefer assigned questionnaires from assignment; keep it cheap (no DB probing).
     let assignedQuestionnaireKeys = Array.isArray(assignment.questionnaires) ? assignment.questionnaires.slice() : [];
+    console.log(`📊 [user-progress] Assignment questionnaires: ${JSON.stringify(assignedQuestionnaireKeys)}, role: ${assignment.role}`);
+    
     if (!assignedQuestionnaireKeys.includes('general-v1')) {
       assignedQuestionnaireKeys.unshift('general-v1');
     }
 
     // If questionnaires are empty, derive from role (best-effort).
-    if (assignedQuestionnaireKeys.length === 0) {
+    if (assignedQuestionnaireKeys.length === 0 || (assignedQuestionnaireKeys.length === 1 && assignedQuestionnaireKeys[0] === 'general-v1')) {
       const role = String(assignment.role || '').toLowerCase();
       const roleMap = {
         'ethical-expert': 'ethical-expert-v1',
@@ -2883,8 +3036,13 @@ app.get('/api/user-progress', async (req, res) => {
         'education-expert': 'education-expert-v1',
       };
       const roleKey = roleMap[role] || null;
-      assignedQuestionnaireKeys = roleKey ? ['general-v1', roleKey] : ['general-v1'];
+      if (roleKey && !assignedQuestionnaireKeys.includes(roleKey)) {
+        assignedQuestionnaireKeys.push(roleKey);
+        console.log(`📊 [user-progress] Added role-specific questionnaire ${roleKey} for role ${role}`);
+      }
     }
+    
+    console.log(`📊 [user-progress] Final assignedQuestionnaireKeys: ${JSON.stringify(assignedQuestionnaireKeys)}`);
 
     // Check which questionnaires actually have responses in the database
     // If both general-v1 and role-specific responses exist, count both
@@ -2894,6 +3052,9 @@ app.get('/api/user-progress', async (req, res) => {
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey').lean();
+    
+    console.log(`📊 [user-progress] Searching for responses with questionnaireKeys: ${JSON.stringify(assignedQuestionnaireKeys)}`);
+    console.log(`📊 [user-progress] Found ${existingResponses.length} existing responses: ${existingResponses.map(r => r.questionnaireKey).join(', ')}`);
     
     const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
     
