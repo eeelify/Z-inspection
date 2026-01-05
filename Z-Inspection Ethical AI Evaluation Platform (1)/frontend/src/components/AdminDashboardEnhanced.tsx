@@ -490,7 +490,7 @@ export function AdminDashboardEnhanced({
               activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <Folder className="h-5 w-5 mr-3" />
+            <Folder className={`h-5 w-5 mr-3 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-blue-500'}`} />
             Dashboard
           </button>
           <button
@@ -499,7 +499,7 @@ export function AdminDashboardEnhanced({
               activeTab === 'use-case-assignments' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <UserPlus className="h-5 w-5 mr-3" />
+            <UserPlus className={`h-5 w-5 mr-3 ${activeTab === 'use-case-assignments' ? 'text-orange-600' : 'text-orange-500'}`} />
             Assignments
           </button>
           <button
@@ -508,7 +508,7 @@ export function AdminDashboardEnhanced({
               activeTab === 'project-creation' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <Plus className="h-5 w-5 mr-3" />
+            <Plus className={`h-5 w-5 mr-3 ${activeTab === 'project-creation' ? 'text-green-600' : 'text-green-500'}`} />
             Create Project
           </button>
           <button
@@ -517,14 +517,14 @@ export function AdminDashboardEnhanced({
               activeTab === 'created-reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            <FileText className="h-5 w-5 mr-3" />
+            <FileText className={`h-5 w-5 mr-3 ${activeTab === 'created-reports' ? 'text-purple-600' : 'text-purple-500'}`} />
             Created Reports
           </button>
           <button
             onClick={() => onNavigate('other-members')}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <Users className="h-5 w-5 mr-3" />
+            <Users className="h-5 w-5 mr-3 text-teal-500" />
             Members
           </button>
           <button
@@ -533,7 +533,7 @@ export function AdminDashboardEnhanced({
             }}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <MessageSquare className="h-5 w-5 mr-3" />
+            <MessageSquare className="h-5 w-5 mr-3 text-indigo-500" />
             Shared Area
           </button>
         </nav>

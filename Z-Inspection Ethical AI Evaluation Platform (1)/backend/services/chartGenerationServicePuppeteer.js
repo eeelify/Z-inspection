@@ -573,6 +573,250 @@ async function generateTeamCompletionDonut(coverage) {
   return generateChartImagePuppeteer(chartConfig, 1000, 700);
 }
 
+/**
+ * Generate all charts for a report using the chart contract
+ * Guarantees that all required charts exist, even as placeholders
+ * @param {Object} reportData - Report data containing scoring, evaluators, tensions, etc.
+ * @returns {Promise<Object>} Charts object with all required charts
+ */
+async function generateAllCharts(reportData) {
+  const {
+    createChartResult,
+    createPlaceholderChartResult,
+    createErrorChartResult,
+    initializeRequiredCharts,
+    CHART_STATUS,
+    CHART_TYPES
+  } = require('./chartContract');
+
+  const { projectId, questionnaireKey, scoring, evaluators, tensions, coverage } = reportData;
+
+  // Step 1: Initialize with placeholders for all required charts
+  console.log('📊 Initializing required charts with placeholders (Puppeteer)...');
+  const charts = await initializeRequiredCharts(projectId, questionnaireKey);
+
+  const chartErrors = [];
+
+  // Step 2: Attempt to generate principleBarChart
+  try {
+    if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
+      console.log('📊 Generating principleBarChart (Puppeteer)...');
+      const pngBuffer = await generatePrincipleBarChart(scoring.byPrincipleOverall);
+      
+      if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
+        charts.principleBarChart = createChartResult({
+          chartId: 'principleBarChart',
+          type: CHART_TYPES.BAR,
+          status: CHART_STATUS.READY,
+          title: 'Ethical Principles Risk Overview',
+          subtitle: 'ERC scores by principle (0-4 scale)',
+          pngBuffer,
+          meta: {
+            source: {
+              collections: ['scores'],
+              projectId,
+              questionnaireKey
+            },
+            scale: { min: 0, max: 4, meaning: 'Higher = higher risk (ERC)' }
+          },
+          data: scoring.byPrincipleOverall
+        });
+        console.log('✅ principleBarChart generated successfully (Puppeteer)');
+      } else {
+        throw new Error('Generated buffer is empty or invalid');
+      }
+    } else {
+      console.log('ℹ️ No principle data available, keeping placeholder for principleBarChart');
+    }
+  } catch (error) {
+    console.error('❌ principleBarChart generation failed (Puppeteer):', error.message);
+    chartErrors.push({ chart: 'principleBarChart', error: error.message });
+    charts.principleBarChart = createErrorChartResult({
+      chartId: 'principleBarChart',
+      title: 'Ethical Principles Risk Overview',
+      error
+    });
+    // Generate placeholder PNG for error case
+    try {
+      const { createPlaceholderChartPng } = require('./chartContract');
+      const placeholderPng = await createPlaceholderChartPng({
+        chartId: 'principleBarChart',
+        title: 'Ethical Principles Risk Overview',
+        reason: `Chart generation failed: ${error.message}`
+      });
+      charts.principleBarChart.pngBase64 = placeholderPng.toString('base64');
+    } catch (placeholderError) {
+      console.error('❌ Failed to generate placeholder for principleBarChart:', placeholderError);
+    }
+  }
+
+  // Step 3: Attempt to generate principleEvaluatorHeatmap
+  try {
+    if (scoring?.byPrincipleTable && 
+        Object.keys(scoring.byPrincipleTable).length > 0 &&
+        evaluators?.withScores && 
+        evaluators.withScores.length > 0) {
+      console.log('📊 Generating principleEvaluatorHeatmap (Puppeteer)...');
+      const pngBuffer = await generatePrincipleEvaluatorHeatmap(
+        scoring.byPrincipleTable,
+        evaluators.withScores
+      );
+      
+      if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
+        charts.principleEvaluatorHeatmap = createChartResult({
+          chartId: 'principleEvaluatorHeatmap',
+          type: CHART_TYPES.HEATMAP,
+          status: CHART_STATUS.READY,
+          title: 'Risk Distribution by Role and Principle',
+          subtitle: `${evaluators.withScores.length} evaluator(s)`,
+          pngBuffer,
+          meta: {
+            source: {
+              collections: ['scores', 'responses'],
+              projectId,
+              questionnaireKey
+            },
+            evaluatorCount: evaluators.withScores.length,
+            scale: { min: 0, max: 4, meaning: 'Higher = higher risk (ERC)' }
+          },
+          data: {
+            byPrincipleTable: scoring.byPrincipleTable,
+            evaluators: evaluators.withScores.map(e => ({ role: e.role, userId: e.userId }))
+          }
+        });
+        console.log('✅ principleEvaluatorHeatmap generated successfully (Puppeteer)');
+      } else {
+        throw new Error('Generated buffer is empty or invalid');
+      }
+    } else {
+      console.log('ℹ️ No evaluator/principle data available, keeping placeholder for principleEvaluatorHeatmap');
+    }
+  } catch (error) {
+    console.error('❌ principleEvaluatorHeatmap generation failed (Puppeteer):', error.message);
+    chartErrors.push({ chart: 'principleEvaluatorHeatmap', error: error.message });
+    charts.principleEvaluatorHeatmap = createErrorChartResult({
+      chartId: 'principleEvaluatorHeatmap',
+      title: 'Risk Distribution by Role and Principle',
+      error
+    });
+    // Generate placeholder PNG for error case
+    try {
+      const { createPlaceholderChartPng } = require('./chartContract');
+      const placeholderPng = await createPlaceholderChartPng({
+        chartId: 'principleEvaluatorHeatmap',
+        title: 'Risk Distribution by Role and Principle',
+        reason: `Chart generation failed: ${error.message}`
+      });
+      charts.principleEvaluatorHeatmap.pngBase64 = placeholderPng.toString('base64');
+    } catch (placeholderError) {
+      console.error('❌ Failed to generate placeholder for principleEvaluatorHeatmap:', placeholderError);
+    }
+  }
+
+  // Step 4: Generate optional charts (evidence, tensions)
+  try {
+    if (coverage?.evidenceMetrics) {
+      console.log('📊 Generating evidenceCoverageChart (Puppeteer)...');
+      const pngBuffer = await generateEvidenceCoverageChart(coverage.evidenceMetrics);
+      if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        charts.evidenceCoverageDonut = createChartResult({
+          chartId: 'evidenceCoverageDonut',
+          type: CHART_TYPES.DONUT,
+          status: CHART_STATUS.READY,
+          title: 'Evidence Coverage',
+          pngBuffer,
+          meta: { source: { collections: ['tensions'], projectId } }
+        });
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ evidenceCoverageChart generation failed (optional, Puppeteer):', error.message);
+    chartErrors.push({ chart: 'evidenceCoverageDonut', error: error.message });
+  }
+
+  try {
+    if (tensions?.summary?.evidenceTypeDistribution) {
+      console.log('📊 Generating evidenceTypeChart (Puppeteer)...');
+      const pngBuffer = await generateEvidenceTypeChart(tensions.summary.evidenceTypeDistribution);
+      if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        charts.evidenceTypeDonut = createChartResult({
+          chartId: 'evidenceTypeDonut',
+          type: CHART_TYPES.DONUT,
+          status: CHART_STATUS.READY,
+          title: 'Evidence Type Distribution',
+          pngBuffer,
+          meta: { source: { collections: ['tensions'], projectId } }
+        });
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ evidenceTypeChart generation failed (optional, Puppeteer):', error.message);
+    chartErrors.push({ chart: 'evidenceTypeDonut', error: error.message });
+  }
+
+  try {
+    if (tensions?.list && tensions.list.length > 0) {
+      console.log('📊 Generating tensionSeverityChart (Puppeteer)...');
+      const severityDist = { low: 0, medium: 0, high: 0, critical: 0 };
+      tensions.list.forEach(t => {
+        const severity = String(t.severityLevel || t.severity || 'medium').toLowerCase();
+        if (severityDist.hasOwnProperty(severity)) severityDist[severity]++;
+        else severityDist.medium++;
+      });
+      const pngBuffer = await generateTensionSeverityChart(severityDist);
+      if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        charts.tensionSeverityChart = createChartResult({
+          chartId: 'tensionSeverityChart',
+          type: CHART_TYPES.BAR,
+          status: CHART_STATUS.READY,
+          title: 'Tension Severity Distribution',
+          pngBuffer,
+          meta: { source: { collections: ['tensions'], projectId } }
+        });
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ tensionSeverityChart generation failed (optional, Puppeteer):', error.message);
+    chartErrors.push({ chart: 'tensionSeverityChart', error: error.message });
+  }
+
+  try {
+    if (tensions?.summary) {
+      console.log('📊 Generating tensionReviewStateChart (Puppeteer)...');
+      const pngBuffer = await generateTensionReviewStateChart(tensions.summary);
+      if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        charts.tensionReviewStateChart = createChartResult({
+          chartId: 'tensionReviewStateChart',
+          type: CHART_TYPES.DONUT,
+          status: CHART_STATUS.READY,
+          title: 'Tension Review Status',
+          pngBuffer,
+          meta: { source: { collections: ['tensions'], projectId } }
+        });
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ tensionReviewStateChart generation failed (optional, Puppeteer):', error.message);
+    chartErrors.push({ chart: 'tensionReviewStateChart', error: error.message });
+  }
+
+  // Step 5: Validate contract compliance
+  const { validateChartContract } = require('./chartContract');
+  const validation = validateChartContract(charts);
+  
+  if (!validation.valid) {
+    console.error('❌ Chart contract validation failed (Puppeteer):', validation);
+    throw new Error(`Chart contract violation: ${validation.missing.concat(validation.errors).join(', ')}`);
+  }
+
+  console.log(`✅ Chart generation complete (Puppeteer): ${Object.keys(charts).length} charts, ${chartErrors.length} errors`);
+
+  return {
+    charts,
+    chartErrors: chartErrors.length > 0 ? chartErrors : null
+  };
+}
+
 module.exports = {
   generatePrincipleBarChart,
   generatePrincipleEvaluatorHeatmap,
@@ -581,6 +825,7 @@ module.exports = {
   generateTensionSeverityChart,
   generateTensionReviewStateChart,
   generateTeamCompletionDonut,
-  generateChartImage: generateChartImagePuppeteer
+  generateChartImage: generateChartImagePuppeteer,
+  generateAllCharts // Add the new orchestration function
 };
 

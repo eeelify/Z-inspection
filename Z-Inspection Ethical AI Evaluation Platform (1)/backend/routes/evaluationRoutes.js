@@ -225,7 +225,9 @@ router.post('/questions/clear-cache', (req, res) => {
 router.post('/scores/compute', async (req, res) => {
   try {
     const { projectId, userId, questionnaireKey } = req.body;
-    const scores = await computeScores(projectId, userId, questionnaireKey);
+    // Use new ethical scoring system
+    const { computeEthicalScores } = require('../services/ethicalScoringService');
+    const scores = await computeEthicalScores(projectId, userId, questionnaireKey);
     res.json(scores);
   } catch (error) {
     res.status(500).json({ error: error.message });

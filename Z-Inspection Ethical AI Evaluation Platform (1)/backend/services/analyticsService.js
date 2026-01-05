@@ -28,7 +28,7 @@ function computeReviewState(votes, createdBy) {
   
   const totalVotes = validVotes.length;
   if (totalVotes < 2) {
-    return totalVotes === 0 ? 'Proposed' : 'Single review';
+    return totalVotes === 0 ? 'Proposed' : 'SingleReview'; // F) Normalized enum
   }
   
   const agreeCount = validVotes.filter(v => v.voteType === 'agree').length;
@@ -36,7 +36,7 @@ function computeReviewState(votes, createdBy) {
   
   if (agreePct >= 0.67) return 'Accepted';
   if (agreePct <= 0.33) return 'Disputed';
-  return 'Under review';
+  return 'UnderReview'; // F) Normalized enum
 }
 
 /**
@@ -56,26 +56,35 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
 
   // CRITICAL: Get evaluators ONLY from scores collection (no hardcoded Expert 1/2)
   // This ensures we only show evaluators who actually submitted and have scores
+  // Include ALL questionnaires if questionnaireKey is null (for report generation)
   const scores = await Score.find({
     projectId: projectIdObj,
-    questionnaireKey: questionnaireKey || { $exists: true }
+    ...(questionnaireKey ? { questionnaireKey } : {}) // Only filter if questionnaireKey is provided
   }).lean();
   
   // Get unique evaluators from scores (canonical source)
-  const evaluatorUserIds = [...new Set(scores.map(s => s.userId.toString()))];
+  // Filter out project-aggregate scores (userId=null) before mapping
+  const evaluatorUserIds = [...new Set(
+    scores
+      .filter(s => s.userId !== null && s.userId !== undefined)
+      .map(s => s.userId.toString ? s.userId.toString() : String(s.userId))
+  )];
   const evaluatorUsers = await User.find({ _id: { $in: evaluatorUserIds } })
     .select('_id name email role')
     .lean();
   
   const userMap = new Map(evaluatorUsers.map(u => [u._id.toString(), u]));
   
-  // Build evaluator list from scores (only submitted evaluators)
-  const evaluatorsFromScores = scores.map(score => {
-    const user = userMap.get(score.userId.toString());
-    return {
-      userId: score.userId.toString(),
-      name: user?.name || 'Unknown',
-      email: user?.email || '',
+  // Build evaluator list from scores (only submitted evaluators, exclude project-aggregate)
+  const evaluatorsFromScores = scores
+    .filter(score => score.userId !== null && score.userId !== undefined)
+    .map(score => {
+      const userIdStr = score.userId.toString ? score.userId.toString() : String(score.userId);
+      const user = userMap.get(userIdStr);
+      return {
+        userId: userIdStr,
+        name: user?.name || 'Unknown',
+        email: user?.email || '',
       role: score.role || user?.role || 'unknown'
     };
   });
@@ -95,10 +104,10 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   const { getProjectEvaluators } = require('./reportMetricsService');
   const evaluators = await getProjectEvaluators(projectId);
 
-  // Get responses for answer snippets
+  // Get responses for answer snippets - include ALL questionnaires if questionnaireKey is null
   const responses = await Response.find({
     projectId: projectIdObj,
-    questionnaireKey: questionnaireKey || { $exists: true },
+    ...(questionnaireKey ? { questionnaireKey } : {}), // Only filter if questionnaireKey is provided
     status: 'submitted'
   }).lean();
 

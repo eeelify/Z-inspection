@@ -20,7 +20,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
   const topRiskDrivers = reportMetrics.topRiskDrivers || {};
   const evaluators = reportMetrics.evaluators || {};
 
-  // Helper to encode base64 images
+  // Helper to encode base64 images (supports Chart Contract objects)
   const getChartImage = (key) => {
     if (!chartImages[key]) {
       return '';
@@ -28,34 +28,73 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     
     const img = chartImages[key];
     
-    // Already a data URI string
+    // Chart Contract object (has .pngBase64 and .meta properties)
+    if (typeof img === 'object' && img.pngBase64) {
+      // pngBase64 might already have data: prefix
+      if (img.pngBase64.startsWith('data:image/')) {
+        return img.pngBase64;
+      }
+      // Add data: prefix if missing
+      if (img.pngBase64.length > 0) {
+        return `data:image/png;base64,${img.pngBase64}`;
+      }
+      // Empty base64 (placeholder failed) - return empty
+      return '';
+    }
+    
+    // Already a data URI string (legacy format)
     if (typeof img === 'string' && img.startsWith('data:image/')) {
       return img;
     }
     
-    // Buffer - convert to data URI
+    // Buffer - convert to data URI (legacy format)
     if (Buffer.isBuffer(img)) {
       return `data:image/png;base64,${img.toString('base64')}`;
     }
     
-    // Uint8Array - convert to Buffer then data URI
+    // Uint8Array - convert to Buffer then data URI (legacy format)
     if (img instanceof Uint8Array) {
       return `data:image/png;base64,${Buffer.from(img).toString('base64')}`;
     }
     
-    // Object with buffer property
+    // Object with buffer property (legacy format)
     if (typeof img === 'object' && img.buffer) {
       const buffer = Buffer.isBuffer(img.buffer) ? img.buffer : Buffer.from(img.buffer);
       return `data:image/png;base64,${buffer.toString('base64')}`;
     }
     
-    // Plain base64 string (without data: prefix)
+    // Plain base64 string (without data: prefix) (legacy format)
     if (typeof img === 'string' && img.length > 0) {
       return `data:image/png;base64,${img}`;
     }
     
-    // Fallback: return as string if possible
-    return String(img || '');
+    // Fallback: return empty if we can't convert
+    return '';
+  };
+  
+  // Helper to get chart status/reason for displaying notes
+  const getChartStatus = (key) => {
+    if (!chartImages[key]) {
+      return null;
+    }
+    
+    const img = chartImages[key];
+    
+    // Chart Contract object
+    if (typeof img === 'object' && img.meta) {
+      return {
+        status: img.meta.status || 'unknown',
+        reason: img.meta.reason || '',
+        title: img.title || key
+      };
+    }
+    
+    // Legacy format - assume ready
+    return {
+      status: 'ready',
+      reason: '',
+      title: key
+    };
   };
 
   // Helper to format date
@@ -323,7 +362,6 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         <span><strong>Project:</strong> ${project.title || 'Untitled Project'}</span>
         <span><strong>Category:</strong> ${project.category || 'N/A'}</span>
         <span><strong>Generated:</strong> ${formatDate(options.generatedAt || new Date())}</span>
-        <span><strong>Questionnaire:</strong> ${project.questionnaireKey || 'general-v1'}</span>
       </div>
     </div>
 
@@ -379,12 +417,26 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     </div>
 
     <!-- Principle Bar Chart -->
-    ${getChartImage('principleBarChart') ? `
     <div class="chart-container">
       <h3>Ethical Principles Score Overview</h3>
-      <img src="${getChartImage('principleBarChart')}" alt="Principle Scores Chart" class="chart-image" />
+      ${getChartImage('principleBarChart') ? `
+        <img src="${getChartImage('principleBarChart')}" alt="Principle Scores Chart" class="chart-image" />
+        ${(() => {
+          const status = getChartStatus('principleBarChart');
+          if (status && (status.status === 'placeholder' || status.status === 'error')) {
+            return `<p style="margin-top: 0.5cm; padding: 0.5cm; background-color: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e;">
+              <strong>⚠️ Chart Not Available:</strong> ${status.reason || 'No data available'}
+            </p>`;
+          }
+          return '';
+        })()}
+      ` : `
+        <p style="margin-top: 0.5cm; padding: 0.5cm; background-color: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e;">
+          <strong>⚠️ Chart Not Available:</strong> No principle score data available for visualization.
+        </p>
+      `}
       <div class="chart-legend">
-        <h4>Scale 0–4 (CORRECT Risk Interpretation)</h4>
+        <h4>Scale 0–4 (ERC Risk Interpretation)</h4>
         <ul>
           <li><strong>0.0:</strong> MINIMAL/NO RISK (well-managed, no concerns)</li>
           <li><strong>1.0:</strong> LOW RISK (acceptable with minor concerns)</li>
@@ -396,27 +448,39 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
           CRITICAL: Higher numeric score = Higher ethical risk. Lower numeric score = Lower ethical risk.
         </p>
         <p style="margin-top: 0.3cm; font-style: italic; color: #6b7280;">
-          <strong>Note:</strong> Scores are canonical from scores collection; Gemini does not compute scores.
+          <strong>Note:</strong> ERC (Ethical Risk Contribution) = Question Importance × Answer Severity. Scores are canonical from scores collection; Gemini does not compute scores.
         </p>
       </div>
     </div>
-    ` : ''}
 
     <!-- Principle-Evaluator Heatmap -->
-    ${getChartImage('principleEvaluatorHeatmap') ? `
     <div class="chart-container">
       <h3>Principle × Evaluator Score Matrix</h3>
-      <img src="${getChartImage('principleEvaluatorHeatmap')}" alt="Principle-Evaluator Heatmap" class="chart-image" />
+      ${getChartImage('principleEvaluatorHeatmap') ? `
+        <img src="${getChartImage('principleEvaluatorHeatmap')}" alt="Principle-Evaluator Heatmap" class="chart-image" />
+        ${(() => {
+          const status = getChartStatus('principleEvaluatorHeatmap');
+          if (status && (status.status === 'placeholder' || status.status === 'error')) {
+            return `<p style="margin-top: 0.5cm; padding: 0.5cm; background-color: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e;">
+              <strong>⚠️ Chart Not Available:</strong> ${status.reason || 'No evaluator data available'}
+            </p>`;
+          }
+          return '';
+        })()}
+      ` : `
+        <p style="margin-top: 0.5cm; padding: 0.5cm; background-color: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e;">
+          <strong>⚠️ Chart Not Available:</strong> No evaluator submission data available for visualization.
+        </p>
+      `}
       <div class="chart-legend">
         <h4>Heatmap Legend</h4>
-        <p>Cells show evaluator's average risk score per principle (0-4 scale, 0 = MINIMAL risk, 4 = CRITICAL risk).</p>
+        <p>Cells show evaluator's average ERC (Ethical Risk Contribution) score per principle (0-4 scale).</p>
         <p><strong>CRITICAL:</strong> Higher score = Higher risk. Score 0 = MINIMAL RISK, Score 4 = CRITICAL RISK.</p>
         <p><strong>N/A</strong> = evaluator did not submit responses for this principle.</p>
         <p>Only evaluators with submitted responses (status="submitted") are shown.</p>
-        <p><strong>Note:</strong> Evaluators are derived from scores collection - no hardcoded "Expert 1/2" labels.</p>
+        <p><strong>Note:</strong> Evaluators reflect ACTUAL PROJECT ASSIGNMENTS from the team/assignments collection, not hardcoded values.</p>
       </div>
     </div>
-    ` : ''}
     
     <!-- TASK 7: Evidence charts removed (invalid/misleading per Z-Inspection methodology) -->
 

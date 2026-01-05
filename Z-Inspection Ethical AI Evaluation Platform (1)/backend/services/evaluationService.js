@@ -257,8 +257,18 @@ async function submitResponse(projectId, userId, questionnaireKey) {
       }
     }
 
-    // Compute and save scores
-    await computeScores(projectId, userId, questionnaireKey);
+    // Compute and save scores using new ethical scoring system
+    const { computeEthicalScores } = require('./ethicalScoringService');
+    await computeEthicalScores(projectId, userId, questionnaireKey);
+    
+    // Also compute project-level scores if this is the last questionnaire for this user
+    // (This is a simple trigger - in production you might want a more sophisticated approach)
+    try {
+      const { computeProjectEthicalScores } = require('./ethicalScoringService');
+      await computeProjectEthicalScores(projectId);
+    } catch (err) {
+      console.warn('Failed to compute project-level scores:', err.message);
+    }
 
     // Notify admins that evaluation is completed (non-blocking)
     try {

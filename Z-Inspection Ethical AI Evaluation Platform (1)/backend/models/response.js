@@ -22,7 +22,16 @@ const AnswerSchema = new mongoose.Schema({
     max: 4,
     required: false, // Allow null for unanswered questions
     default: null
-  }, // Normalized 0-4 score (null for unanswered questions)
+  }, // Normalized 0-4 score (null for unanswered questions) - legacy field
+  // ERC Model: answerSeverity (0-1) for free-text questions
+  // Expert-provided severity: 0 = safe, 0.5 = partial, 1 = risky
+  answerSeverity: {
+    type: Number,
+    min: 0,
+    max: 1,
+    required: false,
+    default: null
+  },
   scoreSuggested: Number, // Optional: AI-suggested score for open_text
   scoreFinal: Number,     // Final score after review (for open_text)
   reviewerId: { 

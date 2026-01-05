@@ -50,11 +50,17 @@ function classifyRisk(score) {
   }
   
   // CORRECT SCALE: Higher score = Higher risk
-  if (clamped >= 4) return "CRITICAL_RISK";
-  if (clamped >= 3) return "HIGH_RISK";
-  if (clamped >= 2) return "MEDIUM_RISK";
-  if (clamped >= 1) return "LOW_RISK";
-  return "MINIMAL_RISK"; // clamped < 1 (typically 0)
+  // Canonical thresholds:
+  // 0.0–0.9: Minimal
+  // 1.0–1.9: Low
+  // 2.0–2.9: Medium
+  // 3.0–3.6: High
+  // 3.7–4.0: Critical
+  if (clamped >= 3.7) return "CRITICAL_RISK";
+  if (clamped >= 3.0) return "HIGH_RISK";
+  if (clamped >= 2.0) return "MEDIUM_RISK";
+  if (clamped >= 1.0) return "LOW_RISK";
+  return "MINIMAL_RISK"; // clamped < 1.0 (0.0–0.9)
 }
 
 /**
@@ -91,6 +97,41 @@ function riskLabelEN(score) {
     "N/A": "Not Evaluated"
   };
   return labels[classification] || "Unknown";
+}
+
+/**
+ * Get risk label in specified format (unified function for consistency)
+ * @param {number|null|undefined} score - Risk score (0-4)
+ * @param {string} format - Format: 'label' (default), 'short', 'classification'
+ * @param {string} language - Language: 'en' (default) or 'tr'
+ * @returns {string} Risk label
+ */
+function getRiskLabel(score, format = 'label', language = 'en') {
+  const classification = classifyRisk(score);
+  
+  // Short format (e.g., "MINIMAL", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+  if (format === 'short') {
+    const shortLabels = {
+      "MINIMAL_RISK": "MINIMAL",
+      "LOW_RISK": "LOW",
+      "MEDIUM_RISK": "MEDIUM",
+      "HIGH_RISK": "HIGH",
+      "CRITICAL_RISK": "CRITICAL",
+      "N/A": "N/A"
+    };
+    return shortLabels[classification] || "UNKNOWN";
+  }
+  
+  // Classification format (e.g., "MINIMAL_RISK", "LOW_RISK", etc.)
+  if (format === 'classification') {
+    return classification;
+  }
+  
+  // Label format (default) - full descriptive label
+  if (language === 'tr') {
+    return riskLabelTR(score);
+  }
+  return riskLabelEN(score);
 }
 
 /**
@@ -141,11 +182,12 @@ function colorForScore(score) {
   }
   
   // CORRECT SCALE: 0 = green (safe), 4 = red (critical)
-  if (clamped < 0.5) return "#10b981";   // Green - MINIMAL RISK (0)
-  if (clamped < 1.5) return "#84cc16";   // Light green - LOW RISK (1)
-  if (clamped < 2.5) return "#fbbf24";   // Yellow/Amber - MEDIUM RISK (2)
-  if (clamped < 3.5) return "#f97316";   // Orange - HIGH RISK (3)
-  return "#ef4444";                      // Red - CRITICAL RISK (4)
+  // Use canonical thresholds for consistent colors
+  if (clamped < 1.0) return "#10b981";   // Green - MINIMAL RISK (0.0–0.9)
+  if (clamped < 2.0) return "#84cc16";   // Light green - LOW RISK (1.0–1.9)
+  if (clamped < 3.0) return "#fbbf24";    // Yellow/Amber - MEDIUM RISK (2.0–2.9)
+  if (clamped < 3.7) return "#f97316";    // Orange - HIGH RISK (3.0–3.6)
+  return "#ef4444";                       // Red - CRITICAL RISK (3.7–4.0)
 }
 
 module.exports = {
@@ -153,6 +195,7 @@ module.exports = {
   classifyRisk,
   riskLabelTR,
   riskLabelEN,
+  getRiskLabel, // New unified function
   validateRiskScaleNotInverted,
   colorForScore
 };

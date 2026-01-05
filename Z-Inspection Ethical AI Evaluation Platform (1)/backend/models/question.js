@@ -54,8 +54,37 @@ const QuestionSchema = new mongoose.Schema({
       type: Number, 
       min: 0, 
       max: 4 
-    } // Direct mapping score for this option
+    }, // Direct mapping score for this option (risk score, 0-4)
+    answerQuality: {
+      type: Number,
+      min: 0,
+      max: 1
+    } // Answer quality score (AQ) for this option, 0-1 scale
   }],
+  // Option scores mapping for select-based questions (alternative to answerQuality in options)
+  // Stored as plain object: { optionKey: AQ_score_0_to_1 }
+  optionScores: {
+    type: mongoose.Schema.Types.Mixed
+  },
+  // A) RPN Model: optionRiskMap for select questions (legacy, kept for backward compatibility)
+  // Maps option key to answerRisk (0-4): { optionKey: 0|1|2|3|4 }
+  optionRiskMap: {
+    type: mongoose.Schema.Types.Mixed
+  },
+  // ERC Model: optionSeverityMap for select questions
+  // Maps option key to answerSeverity (0-1): { optionKey: 0|0.5|1 }
+  // 0 = safe/no risk, 0.5 = partial/somewhat, 1 = risky/critical
+  optionSeverityMap: {
+    type: mongoose.Schema.Types.Mixed
+  },
+  // ERC Model: riskScore (Question Risk Importance, 0-4)
+  // Represents how critical this ethical question is (NOT the system's current risk)
+  riskScore: {
+    type: Number,
+    min: 0,
+    max: 4,
+    default: 2 // Default to medium importance
+  },
   scoring: {
     scale: { 
       type: String, 
