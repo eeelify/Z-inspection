@@ -4145,6 +4145,8 @@ app.post('/api/auth/request-code', async (req, res) => {
   try {
     const { email } = req.body;
 
+    console.log("[REQUEST CODE] incoming for", email);
+
     if (!email) {
       return res.status(400).json({ message: 'Email address is required.' });
     }
@@ -4175,57 +4177,13 @@ app.post('/api/auth/request-code', async (req, res) => {
     await emailVerification.save();
 
     // Send email to user
-    // Check if email credentials are configured
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn('⚠️  Email credentials not configured.');
-      console.log(`🔑 Verification code for ${email}: ${code} (Check server console)`);
-      
-      // Return success message but don't show code in response
-      return res.json({ 
-        message: 'Verification code has been sent to your email address.' 
-      });
-    }
+    const { sendVerificationEmail } = require('./config/mailer');
+    await sendVerificationEmail(email, code);
 
-    try {
-      const transporter = require('./config/mailer');
-      
-      // Debug: Log email configuration (without showing password)
-      console.log(`📧 Attempting to send email to: ${email}`);
-      console.log(`📧 From: ${process.env.EMAIL_USER}`);
-      console.log(`📧 Email credentials configured: ${!!process.env.EMAIL_USER && !!process.env.EMAIL_PASS}`);
-      
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Email Verification Code',
-        html: `
-          <p>Hello,</p>
-          <p>Your verification code for Z-Inspection platform registration:</p>
-          <h2>${code}</h2>
-          <p>This code is valid for 10 minutes.</p>
-        `
-      };
-
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Email sent successfully to: ${email}`);
-      res.json({ message: 'Verification code has been sent to your email address.' });
-    } catch (emailError) {
-      console.error('❌ Email sending error:', emailError.message);
-      console.error('❌ Error code:', emailError.code);
-      if (emailError.response) {
-        console.error('❌ SMTP response:', emailError.response);
-      }
-      console.log(`🔑 Verification code for ${email}: ${code} (Check server console)`);
-      
-      // Return detailed error message for debugging
-      const errorMessage = emailError.message || 'Failed to send verification email';
-      return res.status(500).json({ 
-        message: `Failed to send verification email: ${errorMessage}` 
-      });
-    }
+    res.status(200).json({ message: "Verification code sent." });
   } catch (err) {
-    console.error('request-code error:', err);
-    return res.status(500).json({ message: 'Server error.' });
+    console.error("[REQUEST CODE] error while sending code:", err);
+    return res.status(500).json({ message: "Failed to send verification code." });
   }
 });
 

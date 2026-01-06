@@ -1,21 +1,29 @@
 const nodemailer = require('nodemailer');
 
-// Check if email credentials are configured
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
-
-if (!EMAIL_USER || !EMAIL_PASS) {
-  console.warn('⚠️  EMAIL_USER or EMAIL_PASS not configured. Email functionality will not work.');
-  console.warn('⚠️  Please set EMAIL_USER and EMAIL_PASS in your .env file.');
-}
-
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
+async function sendVerificationEmail(to, code) {
+  console.log("[MAIL] sending to", to);
+
+  await transporter.sendMail({
+    from: `"Z-Inspection Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: "Your verification code",
+    text: `Your verification code is: ${code}`,
+    html: `<p>Your verification code is: <b>${code}</b></p>`,
+  });
+
+  console.log("[MAIL] sent to", to);
+}
+
 module.exports = transporter;
+module.exports.sendVerificationEmail = sendVerificationEmail;
 
