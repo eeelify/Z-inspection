@@ -171,13 +171,13 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // Risk mapping explanation
   children.push(createParagraph(''));
   children.push(createParagraph('Risk Score Mapping:', { bold: true }));
-  children.push(createParagraph('• Score 0 = Worst (Critical/Highest risk)'));
-  children.push(createParagraph('• Score 1 = High risk'));
-  children.push(createParagraph('• Score 2 = Moderate risk'));
-  children.push(createParagraph('• Score 3 = Low risk'));
-  children.push(createParagraph('• Score 4 = Best (Lowest risk)'));
+  children.push(createParagraph('• Score 0 = Minimal/No Risk (best case)'));
+  children.push(createParagraph('• Score 1 = Low Risk'));
+  children.push(createParagraph('• Score 2 = Medium Risk'));
+  children.push(createParagraph('• Score 3 = High Risk'));
+  children.push(createParagraph('• Score 4 = Critical/Max Risk (worst case)'));
   children.push(createParagraph(''));
-  children.push(createParagraph('Risk Percentage Formula: Percentage of responses with score < 3.0 (indicating risk)'));
+  children.push(createParagraph('Risk Percentage Formula: Percentage of evaluator scores with score > 2.5 (scores ≤ 2.5 are treated as safe)'));
   children.push(createParagraph(''));
   
   // Data Integrity Checks
@@ -208,12 +208,20 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   children.push(createParagraph(''));
 
   // ============================================================
-  // 3) EVALUATION COVERAGE (Team Progress)
+  // 3) EVALUATION COVERAGE (Submitted Evaluators Only)
   // ============================================================
   children.push(createHeading('Evaluation Coverage', 1));
-  children.push(createParagraph(`Assigned Experts: ${reportMetrics.coverage.assignedExpertsCount}`));
-  children.push(createParagraph(`Experts Started: ${reportMetrics.coverage.expertsStartedCount}`));
-  children.push(createParagraph(`Experts Submitted: ${reportMetrics.coverage.expertsSubmittedCount}`));
+  children.push(createParagraph(`Submitted Evaluators: ${reportMetrics.coverage.expertsSubmittedCount}`));
+  
+  // Deterministic role breakdown (submitted-only)
+  if (reportMetrics.coverage && reportMetrics.coverage.roles) {
+    const roleCounts = Object.entries(reportMetrics.coverage.roles)
+      .map(([role, stats]) => ({ role, submitted: stats?.submitted || 0 }))
+      .filter(r => r.submitted > 0);
+    if (roleCounts.length > 0) {
+      children.push(createParagraph(`Evaluators by Role: ${roleCounts.map(r => `${r.submitted} ${r.role}`).join(', ')}`));
+    }
+  }
   
   // CRITICAL: Show evaluators who actually submitted (no duplicates)
   if (reportMetrics.evaluators && reportMetrics.evaluators.submitted.length > 0) {
@@ -235,17 +243,9 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   
   children.push(createParagraph(''));
 
-  // Add team completion donut chart
-  if (chartBuffers && chartBuffers.teamCompletionDonut) {
-    await addChartImage(
-      chartBuffers.teamCompletionDonut,
-      'Team Completion Status',
-      500,
-      500
-    );
-  }
+  // Team completion chart intentionally omitted: reports are based on submitted evaluators only.
 
-  // Role breakdown table
+  // Role breakdown table (submitted-only)
   if (Object.keys(reportMetrics.coverage.roles).length > 0) {
     children.push(createParagraph('Role Breakdown:', { bold: true }));
     
@@ -253,21 +253,19 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       new TableRow({
         children: [
           new TableCell({ children: [createParagraph('Role', { bold: true })] }),
-          new TableCell({ children: [createParagraph('Assigned', { bold: true })] }),
-          new TableCell({ children: [createParagraph('Started', { bold: true })] }),
           new TableCell({ children: [createParagraph('Submitted', { bold: true })] })
         ]
       })
     ];
 
     Object.entries(reportMetrics.coverage.roles).forEach(([role, stats]) => {
+      const submitted = stats?.submitted || 0;
+      if (submitted <= 0) return;
       roleTableRows.push(
         new TableRow({
           children: [
             new TableCell({ children: [createParagraph(role)] }),
-            new TableCell({ children: [createParagraph(String(stats.assigned || 0))] }),
-            new TableCell({ children: [createParagraph(String(stats.started || 0))] }),
-            new TableCell({ children: [createParagraph(String(stats.submitted || 0))] })
+            new TableCell({ children: [createParagraph(String(submitted))] })
           ]
         })
       );
@@ -282,9 +280,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     children.push(createParagraph(''));
   }
 
-  children.push(createParagraph(`Core 12 Questions Started: ${reportMetrics.coverage.core12Completion.startedPct.toFixed(1)}%`));
-  children.push(createParagraph(`Core 12 Questions Submitted: ${reportMetrics.coverage.core12Completion.submittedPct.toFixed(1)}%`));
-  children.push(createParagraph(''));
+  // Core-12 completion omitted (team baseline varies). Metrics remain available in reportMetrics.coverage.core12Completion.
 
   // ============================================================
   // 4) EXECUTIVE SUMMARY
@@ -298,10 +294,10 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   } else {
     // Fallback: generate from metrics
     const overallAvg = reportMetrics.scoring.totalsOverall?.avg || 0;
-    // Use riskLabel function for consistent mapping (0 = worst/critical, 4 = best/low)
+    // Use riskLabel function for consistent mapping (0 = minimal risk, 4 = critical risk)
     const riskLevel = riskLabel(overallAvg);
     children.push(createParagraph(`• Overall ethical risk level: ${riskLevel} (Average score: ${overallAvg.toFixed(2)}/4.0)`));
-    children.push(createParagraph(`• ${reportMetrics.coverage.expertsSubmittedCount} of ${reportMetrics.coverage.assignedExpertsCount} assigned experts completed evaluations`));
+    children.push(createParagraph(`• ${reportMetrics.coverage.expertsSubmittedCount} evaluator(s) submitted evaluations`));
     children.push(createParagraph(`• ${reportMetrics.tensions.summary.total} ethical tensions identified`));
   }
 
@@ -383,10 +379,11 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     children.push(createParagraph('Legend & Thresholds:', { bold: true }));
     children.push(createParagraph('Scale 0–4 (0 = lowest risk, 4 = highest risk)'));
     children.push(createParagraph('Thresholds:'));
-    children.push(createParagraph('• 0.0–1.0 = Critical'));
-    children.push(createParagraph('• 1.0–2.0 = High'));
-    children.push(createParagraph('• 2.0–3.0 = Moderate'));
-    children.push(createParagraph('• 3.0–4.0 = Low'));
+    children.push(createParagraph('• 0.0–0.5 = Minimal'));
+    children.push(createParagraph('• 0.5–1.5 = Low'));
+    children.push(createParagraph('• 1.5–2.5 = Medium'));
+    children.push(createParagraph('• 2.5–3.5 = High'));
+    children.push(createParagraph('• 3.5–4.0 = Critical'));
     
     // Calculate and show evaluator counts and N/A excluded
     const principles = Object.keys(reportMetrics.scoring.byPrincipleOverall);
@@ -892,14 +889,11 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   const dataQuality = reportMetrics.dataQuality || {};
   const limitations = [];
   
-  // 1. Submitted count check
+  // 1. Submitted count check (reports are based on submitted evaluators only)
   const submittedCount = reportMetrics.team?.submittedCount || reportMetrics.coverage?.expertsSubmittedCount || 0;
-  const assignedCount = reportMetrics.team?.assignedCount || reportMetrics.coverage?.assignedExpertsCount || 0;
   
   if (submittedCount === 0) {
     limitations.push('No evaluators have submitted their responses. This report is based on incomplete data.');
-  } else if (submittedCount < assignedCount) {
-    limitations.push(`Not all assigned experts have submitted evaluations (${submittedCount}/${assignedCount} submitted).`);
   }
   
   // 2. Missing scores
@@ -955,8 +949,8 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
 
   children.push(createParagraph('Glossary:', { bold: true }));
   children.push(createParagraph('• Risk Score: 0-4 scale where 0 = lowest risk (no/negligible risk), 4 = highest risk (high risk requiring immediate mitigation)'));
-  children.push(createParagraph('• Risk %: Percentage of responses with score < 3.0'));
-  children.push(createParagraph('• Safe %: Percentage of responses with score >= 3.0'));
+  children.push(createParagraph('• Risk %: Percentage of evaluator scores with score > 2.5'));
+  children.push(createParagraph('• Safe %: Percentage of evaluator scores with score ≤ 2.5'));
   children.push(createParagraph('• Severity Levels: Critical, High, Medium, Low (based on avgRiskScore)'));
   children.push(createParagraph(''));
 

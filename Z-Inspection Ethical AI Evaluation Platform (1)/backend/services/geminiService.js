@@ -224,8 +224,8 @@ CRITICAL: Base ALL statements on provided ERC values. Do NOT label as "high risk
 - Interpretation: [explain what this score means in context]
 
 **Evaluation Coverage**
-- Total Evaluators: [exact count from actual assignments]
-- Evaluators by Role: [list actual roles with counts - DO NOT duplicate]
+- Total Evaluators: [exact count of SUBMITTED evaluators (unique userId)]
+- Evaluators by Role: [list actual SUBMITTED evaluator roles with counts - DO NOT duplicate]
 - Questions Answered: [provided count]
 - Completion Rate: [provided percentage]
 
@@ -870,19 +870,23 @@ function buildUserPrompt(data) {
   prompt += `**Status:** ${project.status || "N/A"}\n`;
   prompt += `**Progress:** ${project.progress || 0}%\n\n`;
   
-  /* EVALUATOR REPRESENTATION - MUST MATCH ACTUAL PROJECT ASSIGNMENTS */
+  /* EVALUATOR REPRESENTATION - MUST MATCH SUBMITTED EVALUATIONS (NO TEAM/ASSIGNMENT REQUIREMENT) */
   prompt += `## EVALUATOR REPRESENTATION\n`;
-  prompt += `**CRITICAL: Number of evaluators per role MUST match actual project assignments. Do not duplicate roles.**\n`;
-  if (reportMetrics.participation) {
-    const participation = reportMetrics.participation;
-    prompt += `**Assigned Evaluators:** ${participation.assignedCount || 0}\n`;
-    prompt += `**Submitted Evaluators:** ${participation.submittedCount || 0}\n`;
-    prompt += `**Started Evaluators:** ${participation.startedCount || 0}\n`;
-    if (reportMetrics.roleStats) {
-      prompt += `**By Role:**\n`;
-      Object.entries(reportMetrics.roleStats).forEach(([role, stats]) => {
-        prompt += `  - ${role}: ${stats.assigned || 0} assigned, ${stats.submitted || 0} submitted\n`;
+  prompt += `**CRITICAL: Evaluator counts/roles MUST match SUBMITTED evaluations (unique userId). Do not duplicate roles. Do NOT invent a "project" evaluator role.**\n`;
+  if (reportMetrics.coverage) {
+    const coverage = reportMetrics.coverage;
+    prompt += `**Submitted Evaluators:** ${coverage.expertsSubmittedCount || 0}\n`;
+    if (coverage.roles && Object.keys(coverage.roles).length > 0) {
+      prompt += `**By Role (submitted-only):**\n`;
+      Object.entries(coverage.roles).forEach(([role, stats]) => {
+        const submitted = stats?.submitted || 0;
+        if (submitted > 0) {
+          prompt += `  - ${role}: ${submitted} submitted\n`;
+        }
       });
+    }
+    if (coverage.core12Completion) {
+      prompt += `**Core-12 Completion (submitted baseline):** ${Number(coverage.core12Completion.submittedPct || 0).toFixed(1)}%\n`;
     }
   }
   prompt += `\n`;

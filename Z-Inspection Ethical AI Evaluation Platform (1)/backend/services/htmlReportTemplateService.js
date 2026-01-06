@@ -855,7 +855,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       </ul>
       <p style="margin-top: 0.3cm; font-size: 0.9em; color: #6b7280;"><em>Higher numeric score = Higher ethical risk. Lower numeric score = Lower ethical risk.</em></p>
       
-      <p style="margin-top: 0.4cm;"><strong>Risk Percentage Formula:</strong> Percentage of responses with score &gt;= 2.0 (indicating medium or higher risk)</p>
+      <p style="margin-top: 0.4cm;"><strong>Risk Percentage Formula:</strong> Percentage of evaluator scores with score &gt; 2.5 (risky). Scores &le; 2.5 are treated as safe.</p>
       
       <!-- Data Integrity Checks -->
       ${(() => {
@@ -940,11 +940,8 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         </tbody>
       </table>
       
-      ${(options.analytics?.participation?.assignedCount || evaluators.assigned?.length || 0) > (options.analytics?.evaluators?.length || evaluators.withScores?.length || 0) ? `
-      <p style="margin-top: 0.5cm; color: #6b7280; font-size: 9pt;">
-        <strong>Note:</strong> ${(options.analytics?.participation?.assignedCount || evaluators.assigned?.length || 0) - (options.analytics?.evaluators?.length || evaluators.withScores?.length || 0)} assigned evaluator(s) did not submit responses.
-      </p>
-      ` : ''}
+      <!-- Note about assigned-but-not-submitted evaluators intentionally omitted:
+           reports should be based on submitted evaluators only (no "team" requirement). -->
       
       <h3 style="margin-top: 0.8cm;">Limitations</h3>
       ${(() => {
@@ -952,14 +949,11 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         const dataQuality = options.reportMetrics?.dataQuality || {};
         const limitations = [];
         
-        // 1. Submitted count check
+        // 1. Submitted count check (reports are based on submitted evaluators only)
         const submittedCount = options.reportMetrics?.team?.submittedCount || options.analytics?.evaluators?.length || 0;
-        const assignedCount = options.reportMetrics?.team?.assignedCount || options.analytics?.participation?.assignedCount || 0;
         
         if (submittedCount === 0) {
           limitations.push('No evaluators have submitted their responses. This report is based on incomplete data.');
-        } else if (submittedCount < assignedCount) {
-          limitations.push(`Not all assigned experts have submitted evaluations (${submittedCount}/${assignedCount} submitted).`);
         }
         
         // 2. Missing scores
@@ -1008,8 +1002,8 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       <h3 style="margin-top: 0.8cm;">Glossary</h3>
       <ul style="margin-left: 1.5cm; margin-top: 0.4cm; font-size: 9pt;">
         <li><strong>Risk Score:</strong> 0-4 scale where 0 = MINIMAL risk, 4 = CRITICAL risk (Higher score = Higher risk)</li>
-        <li><strong>Risk %:</strong> Percentage of responses with score &lt; 3.0</li>
-        <li><strong>Safe %:</strong> Percentage of responses with score &gt;= 3.0</li>
+        <li><strong>Risk %:</strong> Percentage of evaluator scores with score &gt; 2.5</li>
+        <li><strong>Safe %:</strong> Percentage of evaluator scores with score &le; 2.5</li>
         <li><strong>Severity Levels:</strong> Critical, High, Medium, Low (based on avgRiskScore)</li>
         <li><strong>Evidence:</strong> Policy documents, test results, user feedback, logs, incidents, or other supporting materials</li>
         <li><strong>Review State:</strong> Proposed, Under Review, Accepted, Disputed, or Resolved</li>

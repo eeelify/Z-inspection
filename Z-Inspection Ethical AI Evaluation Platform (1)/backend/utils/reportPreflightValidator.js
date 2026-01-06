@@ -75,7 +75,7 @@ function validateReportPreflight(reportData) {
         // Validate riskPct calculation
         if (data.riskPct !== undefined && data.count !== undefined) {
           // riskPct should be (highRiskCount / totalCount) * 100
-          // where highRiskCount = count of scores >= 3.0
+          // where highRiskCount = count of scores > 2.5 (report safe/risky split)
           // We can't fully validate without raw scores, but we can check bounds
           if (data.riskPct < 0 || data.riskPct > 100) {
             errors.push(

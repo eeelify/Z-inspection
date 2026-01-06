@@ -339,8 +339,8 @@ async function collectAnalysisData(projectId) {
       console.log('✅ Scores already computed with new ethical scoring system');
     }
 
-    // Get all scores (now including newly computed ones with new format)
-    const scores = await Score.find({ projectId: projectIdObj }).lean();
+    // Get evaluator-level scores (exclude project-level aggregated score docs to prevent double counting / "project" role leakage)
+    const scores = await Score.find({ projectId: projectIdObj, role: { $ne: 'project' } }).lean();
 
     // Get unified answers from both collections
     const unifiedAnswers = await aggregateUnifiedAnswers(projectIdObj);
@@ -444,11 +444,25 @@ exports.generateReport = async (req, res) => {
       // Build metrics using reportMetricsService - include ALL questionnaires (general + role-specific)
       // Pass null to include all questionnaires, not just 'general-v1'
       reportMetrics = await buildReportMetrics(projectId, null);
+      console.log('🧾 [REPORT PIPELINE SUMMARY] reportMetrics.coverage:', {
+        expertsSubmittedCount: reportMetrics?.coverage?.expertsSubmittedCount,
+        roles: reportMetrics?.coverage?.roles ? Object.fromEntries(Object.entries(reportMetrics.coverage.roles).map(([k, v]) => [k, v?.submitted || 0])) : null
+      });
+      console.log('🧾 [REPORT PIPELINE SUMMARY] reportMetrics.scoring.totalsOverall:', {
+        avg: reportMetrics?.scoring?.totalsOverall?.avg,
+        riskLabel: reportMetrics?.scoring?.totalsOverall?.riskLabel,
+        uniqueEvaluatorCount: reportMetrics?.scoring?.totalsOverall?.uniqueEvaluatorCount,
+        count: reportMetrics?.scoring?.totalsOverall?.count
+      });
       
       // Get analytics for chart data - include ALL questionnaires
       const analytics = await getProjectAnalytics(projectId, null);
       const { getProjectEvaluators } = require('../services/reportMetricsService');
       const evaluatorsData = await getProjectEvaluators(projectId);
+      console.log('🧾 [REPORT PIPELINE SUMMARY] evaluatorsData:', {
+        assigned: evaluatorsData?.assigned?.length || 0,
+        submitted: evaluatorsData?.submitted?.length || 0
+      });
       
       // ============================================================
       // STEP 2: Generate ALL charts using Chart Contract
