@@ -133,56 +133,17 @@ router.get('/responses', async (req, res) => {
 router.get('/questions', async (req, res) => {
   try {
     const { questionnaireKey, role } = req.query;
-    const cacheKey = `${questionnaireKey}-${role || 'any'}`;
-    
-    // Check cache first
-    const now = Date.now();
-    const cached = questionsCache.get(cacheKey);
-    if (cached && (now - cached.time) < CACHE_DURATION) {
-      return res.json(cached.data);
-    }
-    
     const query = { questionnaireKey };
-    
-    // Filter by role if specified
-    // appliesToRoles is an array, so we need to check if it contains 'any' or the specific role
-    if (role && role !== 'any') {
-      // For role-specific questionnaires, only get questions for that role
-      // For general-v1, only get questions that apply to 'any' role
-      if (questionnaireKey === 'general-v1') {
-        // General questions should only have 'any' in appliesToRoles
-        query.appliesToRoles = 'any';
-      } else {
-        // Role-specific questionnaires: get questions for that specific role
-        query.appliesToRoles = role;
-      }
-    } else {
-      // If role is 'any', only get questions that apply to 'any' role
-      query.appliesToRoles = 'any';
-    }
-    
-    // Use lean() for better performance (returns plain objects, not Mongoose documents)
-    // Select only needed fields to reduce data transfer
+
+    // Return ALL questions for the questionnaire (no role filtering, no cache to avoid stale data)
     const questions = await Question.find(query)
       .select('code principle text answerType options scoring required order')
       .sort({ order: 1 })
       .lean()
       .maxTimeMS(5000); // 5 second timeout for query
-    
-    // Cache the result
-    questionsCache.set(cacheKey, { data: questions, time: now });
-    
-    // Clean old cache entries (keep cache size manageable)
-    if (questionsCache.size > 50) {
-      const entriesToDelete = [];
-      for (const [key, value] of questionsCache.entries()) {
-        if ((now - value.time) > CACHE_DURATION) {
-          entriesToDelete.push(key);
-        }
-      }
-      entriesToDelete.forEach(key => questionsCache.delete(key));
-    }
-    
+
+    console.log(`📡 Returning ${questions.length} questions for ${questionnaireKey}. Codes: ${questions.map(q => q.code).join(', ')}`);
+
     res.json(questions);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -1331,15 +1331,15 @@ export function UserDashboard({
                         const progress = projectProgresses[project.id] ?? project.progress ?? 0;
                         const evolutionCompleted = Boolean(assignmentByProjectId[project.id]?.evolutionCompletedAt);
                         const canFinish = progress >= 100 && !evolutionCompleted;
-                        const projectId = project.id || (project as any)._id;
-                        const isChecking = checkingExperts[projectId] || false;
-                        const allCompleted = allExpertsCompleted[projectId];
                         
                         if (canFinish) {
+                          const projectId = project.id || (project as any)._id;
+                          const isChecking = checkingExperts[projectId] || false;
+                          const allCompleted = allExpertsCompleted[projectId];
+                          
                           // Check all experts progress when canFinish becomes true
                           if (allCompleted === undefined && !isChecking) {
                             setCheckingExperts(prev => ({ ...prev, [projectId]: true }));
-                            // Check all experts progress
                             (async () => {
                               try {
                                 const assignedUsers = project.assignedUsers || [];
@@ -1365,9 +1365,7 @@ export function UserDashboard({
                                 const allCompleted = expertProgresses.every(ep => ep.progress >= 100);
                                 setAllExpertsCompleted(prev => ({ ...prev, [projectId]: allCompleted }));
                                 
-                                // If all experts completed, check tensions
                                 if (allCompleted) {
-                                  // Check tensions voting status
                                   if (tensionsVoted[projectId] === undefined && !checkingTensions[projectId]) {
                                     setCheckingTensions(prev => ({ ...prev, [projectId]: true }));
                                     try {
@@ -1375,10 +1373,8 @@ export function UserDashboard({
                                       if (tensionsRes.ok) {
                                         const tensions = await tensionsRes.json();
                                         if (tensions.length === 0) {
-                                          // No tensions, can finish
                                           setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
                                         } else {
-                                          // Check if all assigned experts have voted on all tensions
                                           const assignedUserIds = assignedUsers.map((id: string) => String(id));
                                           const allTensionsVoted = tensions.every((tension: any) => {
                                             const votes = tension.votes || [];
@@ -1425,7 +1421,6 @@ export function UserDashboard({
                             );
                           }
                           
-                          // Check if tensions are voted (if any)
                           const tensionsStatus = tensionsVoted[projectId];
                           if (tensionsStatus === false) {
                             return (
@@ -1436,7 +1431,6 @@ export function UserDashboard({
                             );
                           }
                           
-                          // Show button only if all experts completed AND (no tensions OR all tensions voted)
                           if (allCompleted === true && (tensionsStatus === true || tensionsStatus === undefined)) {
                             return (
                               <button

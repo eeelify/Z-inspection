@@ -1591,9 +1591,13 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
       for (const tension of projectTensions) {
         const tensionVotes = tension.votes || [];
         const votedUserIds = tensionVotes.map(v => String(v.userId));
+        const tensionCreatorId = String(tension.createdBy);
         
         // Check if all assigned experts have voted on this tension
-        const missingVotes = assignedExpertIdsStr.filter(expertId => !votedUserIds.includes(expertId));
+        // CRITICAL FIX: Skip the creator of the tension (they cannot/should not vote on their own)
+        const missingVotes = assignedExpertIdsStr.filter(expertId => 
+          expertId !== tensionCreatorId && !votedUserIds.includes(expertId)
+        );
         
         if (missingVotes.length > 0) {
           const expertUsers = await User.find({ _id: { $in: missingVotes.map(id => new mongoose.Types.ObjectId(id)) } }).select('name email').lean();
@@ -5328,5 +5332,101 @@ if (emailConfigured) {
     console.log(`⚠️  Please check backend/.env file exists and contains EMAIL_USER and EMAIL_PASS`);
   }
 }
+
+// FIX: 24 unique questions: General stays T1/T2, Technical uses T1_TECH/T2_TECH
+// This MUST run AFTER MongoDB connection is established
+mongoose.connection.once('open', async () => {
+  try {
+    const Question = require('./models/question');
+    
+    // STEP 1: Ensure General T1, T2 exist and are correct
+    // If G1/G2 exist, rename to T1/T2
+    await Question.updateMany({ questionnaireKey: 'general-v1', code: 'G1' }, { $set: { code: 'T1', appliesToRoles: ['any'] } });
+    await Question.updateMany({ questionnaireKey: 'general-v1', code: 'G2' }, { $set: { code: 'T2', appliesToRoles: ['any'] } });
+    
+    // Check if T1 exists, if not create it
+    let genT1Exists = await Question.findOne({ questionnaireKey: 'general-v1', code: 'T1' });
+    if (!genT1Exists) {
+      await Question.create({
+        questionnaireKey: 'general-v1',
+        code: 'T1',
+        principle: 'TRANSPARENCY',
+        appliesToRoles: ['any'],
+        text: { 
+          en: 'Is it clear to you what the AI system can and cannot do?',
+          tr: 'AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?'
+        },
+        answerType: 'single_choice',
+        options: [
+          { key: 'very_clear', label: { en: 'Very clear', tr: 'Çok net' }, score: 4 },
+          { key: 'mostly_clear', label: { en: 'Mostly clear', tr: 'Büyük ölçüde net' }, score: 3 },
+          { key: 'somewhat_unclear', label: { en: 'Somewhat unclear', tr: 'Kısmen belirsiz' }, score: 2 },
+          { key: 'completely_unclear', label: { en: 'Completely unclear', tr: 'Tamamen belirsiz' }, score: 0 }
+        ],
+        required: true,
+        order: 1,
+        scoring: { scale: '0-4', method: 'mapped' }
+      });
+      console.log('✅ Created missing T1 question for general-v1');
+    }
+    
+    // Check if T2 exists, if not create it
+    let genT2Exists = await Question.findOne({ questionnaireKey: 'general-v1', code: 'T2' });
+    if (!genT2Exists) {
+      await Question.create({
+        questionnaireKey: 'general-v1',
+        code: 'T2',
+        principle: 'TRANSPARENCY',
+        appliesToRoles: ['any'],
+        text: { 
+          en: 'Do you understand that the system may sometimes be wrong or uncertain?',
+          tr: 'Sistemin bazen hatalı veya belirsiz olabileceğini anlıyor musunuz?'
+        },
+        answerType: 'single_choice',
+        options: [
+          { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, score: 4 },
+          { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, score: 2 },
+          { key: 'no', label: { en: 'No', tr: 'Hayır' }, score: 0 }
+        ],
+        required: true,
+        order: 2,
+        scoring: { scale: '0-4', method: 'mapped' }
+      });
+      console.log('✅ Created missing T2 question for general-v1');
+    }
+    
+    // Ensure T1, T2 have correct appliesToRoles (fix if they exist but have wrong roles)
+    const genT1Result = await Question.updateMany(
+      { questionnaireKey: 'general-v1', code: 'T1' },
+      { $set: { appliesToRoles: ['any'] } }
+    );
+    const genT2Result = await Question.updateMany(
+      { questionnaireKey: 'general-v1', code: 'T2' },
+      { $set: { appliesToRoles: ['any'] } }
+    );
+    
+    // STEP 2: Technical must be unique: T1_TECH, T2_TECH (CRITICAL: This prevents frontend duplicate detection)
+    const techT1Result = await Question.updateMany(
+      { questionnaireKey: 'technical-expert-v1', code: 'T1' },
+      { $set: { code: 'T1_TECH', appliesToRoles: ['technical-expert'] } }
+    );
+    const techT2Result = await Question.updateMany(
+      { questionnaireKey: 'technical-expert-v1', code: 'T2' },
+      { $set: { code: 'T2_TECH', appliesToRoles: ['technical-expert'] } }
+    );
+    
+    // Verify counts
+    const generalCount = await Question.countDocuments({ questionnaireKey: 'general-v1' });
+    const technicalCount = await Question.countDocuments({ questionnaireKey: 'technical-expert-v1' });
+    
+    console.log(`✅ 24 QUESTION MODE:`);
+    console.log(`   General: Fixed T1 (${genT1Result.modifiedCount}), T2 (${genT2Result.modifiedCount}). Total: ${generalCount} questions.`);
+    console.log(`   Technical: T1->T1_TECH (${techT1Result.modifiedCount}), T2->T2_TECH (${techT2Result.modifiedCount}). Total: ${technicalCount} questions.`);
+    console.log(`   Expected: 12 General + 12 Technical = 24 questions.`);
+    
+  } catch (error) {
+    console.error('⚠️ Could not update question codes on startup:', error.message);
+  }
+});
 
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

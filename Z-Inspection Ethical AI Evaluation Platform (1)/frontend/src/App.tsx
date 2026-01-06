@@ -343,9 +343,16 @@ function App() {
           const unansweredCount = (err as any)?.unansweredCount || 0;
           const totalQuestions = (err as any)?.totalQuestions || 0;
           const answeredQuestions = (err as any)?.answeredQuestions || 0;
+          const unansweredList = Array.isArray((err as any)?.unansweredQuestions)
+            ? (err as any).unansweredQuestions
+            : [];
+          const unansweredText = unansweredList.length > 0
+            ? `\nUnanswered (sample): ${unansweredList.slice(0, 10).join(", ")}\n`
+            : "\n";
           alert(
             `Cannot finish evolution: ${unansweredCount} question(s) are not answered.\n\n` +
             `Progress: ${answeredQuestions}/${totalQuestions} questions answered.\n\n` +
+            unansweredText +
             `Please answer all questions before finishing evolution.`
           );
           return;
