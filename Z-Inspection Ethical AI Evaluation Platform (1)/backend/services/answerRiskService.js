@@ -1,10 +1,17 @@
 /**
- * Answer Severity Service (ERC Model)
+ * Answer Quality/Severity Service
  * 
- * Computes answerSeverity (0-1) deterministically based on answer content.
- * answerSeverity = risk severity indicated by the answer (system state), NOT question importance.
+ * NEW SYSTEM (Importance-based):
+ * - answerQuality (0-1): Higher = Better answer
+ * - Score = Importance (0-4) × Answer Quality (0-1)
+ * - Stored in: question.optionScores or option.answerQuality
  * 
- * ERC (Ethical Risk Contribution) = QuestionRiskImportance (0-4) × AnswerRiskSeverity (0-1)
+ * LEGACY SYSTEM (Risk-based):
+ * - answerSeverity (0-1): Higher = More risk
+ * - ERC = QuestionRiskImportance (0-4) × AnswerRiskSeverity (0-1)
+ * - Stored in: question.optionSeverityMap or option.answerSeverity
+ * 
+ * Priority: answerQuality > answerSeverity (NEW system preferred)
  */
 
 /**
@@ -69,6 +76,7 @@ function mapOptionToSeverity(choiceKey, option) {
 
 /**
  * Calculate answerSeverity for select-based questions
+ * NOW SUPPORTS ANSWER QUALITY (0-1, higher = better)
  * @param {Object} question - Question document
  * @param {Object} answerEntry - Answer entry from Response
  * @returns {Object} { answerSeverity: number (0-1), mappingMissing: boolean, source: string }
@@ -80,10 +88,59 @@ function calculateAnswerSeveritySelect(question, answerEntry) {
   
   if (!choiceKey) {
     // No answer selected => high severity (missing info is risky)
+    // For Answer Quality: missing answer = 0 quality
     return { answerSeverity: 1.0, mappingMissing: false, source: 'no_answer' };
   }
 
-  // Check optionSeverityMap first (explicit mapping in question schema)
+  // NEW: Check optionScores first (Answer Quality 0-1, higher = better)
+  // This is our NEW importance-based system
+  if (question.optionScores) {
+    let answerQuality;
+    if (question.optionScores instanceof Map) {
+      answerQuality = question.optionScores.get(choiceKey);
+    } else if (typeof question.optionScores === 'object') {
+      answerQuality = question.optionScores[choiceKey];
+    }
+    
+    if (answerQuality !== undefined && answerQuality !== null) {
+      // Convert Answer Quality (higher = better) to Answer Severity (higher = worse)
+      // answerSeverity = 1 - answerQuality
+      // BUT: For the new scoring system, we'll return quality directly
+      // and let the scoring service handle it properly
+      return { 
+        answerSeverity: clampAnswerSeverity(answerQuality), 
+        mappingMissing: false,
+        source: 'optionScores_answerQuality',
+        isQuality: true // Flag to indicate this is quality, not severity
+      };
+    }
+  }
+
+  // NEW: Check options array for explicit answerQuality field
+  if (question.options && Array.isArray(question.options)) {
+    const option = question.options.find(opt => opt.key === choiceKey);
+    
+    // Check for answerQuality first (NEW system)
+    if (option && option.answerQuality !== undefined && option.answerQuality !== null) {
+      return { 
+        answerSeverity: clampAnswerSeverity(option.answerQuality), 
+        mappingMissing: false,
+        source: 'option_answerQuality',
+        isQuality: true // Flag to indicate this is quality, not severity
+      };
+    }
+    
+    // OLD: Check for answerSeverity (legacy)
+    if (option && option.answerSeverity !== undefined && option.answerSeverity !== null) {
+      return { 
+        answerSeverity: clampAnswerSeverity(option.answerSeverity), 
+        mappingMissing: false,
+        source: 'option_answerSeverity'
+      };
+    }
+  }
+
+  // Check optionSeverityMap (legacy risk-based system)
   if (question.optionSeverityMap) {
     let severity;
     if (question.optionSeverityMap instanceof Map) {
@@ -101,18 +158,9 @@ function calculateAnswerSeveritySelect(question, answerEntry) {
     }
   }
 
-  // Fallback: Check options array for explicit answerSeverity field
+  // Fallback: Use label-based inference
   if (question.options && Array.isArray(question.options)) {
     const option = question.options.find(opt => opt.key === choiceKey);
-    if (option && option.answerSeverity !== undefined && option.answerSeverity !== null) {
-      return { 
-        answerSeverity: clampAnswerSeverity(option.answerSeverity), 
-        mappingMissing: false,
-        source: 'option_answerSeverity'
-      };
-    }
-    
-    // If no explicit mapping, use label-based inference
     if (option) {
       const inferredSeverity = mapOptionToSeverity(choiceKey, option);
       return {

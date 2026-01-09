@@ -37,30 +37,40 @@ function riskLevelFromScore(score) {
 /**
  * Get color for a score (for charts and visualizations)
  * @param {number} score - Score from 0 to 4
+ * @param {boolean} isPerformance - If true, high score = good (green), if false, high score = bad (red)
  * @returns {string} Hex color code
- * CORRECT: 0 = green (minimal risk), 4 = red (critical risk)
  */
-function colorForScore(score) {
+function colorForScore(score, isPerformance = false) {
   if (score === null || score === undefined || isNaN(score)) {
     return "#9ca3af"; // Gray for N/A or unknown
   }
   
-  // CORRECT SCALE: 0 = green (safe), 4 = red (critical)
-  if (score < 0.5) return "#10b981";   // Green - MINIMAL RISK (0)
-  if (score < 1.5) return "#84cc16";   // Light green - LOW RISK (1)
-  if (score < 2.5) return "#fbbf24";   // Yellow/Amber - MEDIUM RISK (2)
-  if (score < 3.5) return "#f97316";   // Orange - HIGH RISK (3)
-  return "#ef4444";                    // Red - CRITICAL RISK (4)
+  if (isPerformance) {
+    // PERFORMANCE MODE: High score = good (green), Low score = bad (red)
+    if (score >= 3.5) return "#10b981";   // Green - EXCELLENT (3.5-4.0)
+    if (score >= 2.5) return "#84cc16";   // Light green - GOOD (2.5-3.4)
+    if (score >= 1.5) return "#fbbf24";   // Yellow - FAIR (1.5-2.4)
+    if (score >= 0.5) return "#f97316";   // Orange - POOR (0.5-1.4)
+    return "#ef4444";                     // Red - CRITICAL (0-0.4)
+  } else {
+    // RISK MODE: High score = bad (red), Low score = good (green)
+    if (score < 0.5) return "#10b981";   // Green - MINIMAL RISK (0)
+    if (score < 1.5) return "#84cc16";   // Light green - LOW RISK (1)
+    if (score < 2.5) return "#fbbf24";   // Yellow/Amber - MEDIUM RISK (2)
+    if (score < 3.5) return "#f97316";   // Orange - HIGH RISK (3)
+    return "#ef4444";                    // Red - CRITICAL RISK (4)
+  }
 }
 
 /**
- * Get risk tier object (for compatibility with existing code)
+ * Get risk/performance tier object (for compatibility with existing code)
  * @param {number} score - Score from 0 to 4
+ * @param {boolean} isPerformance - If true, interprets as performance score
  * @returns {Object} { label: string, color: string }
  */
-function getRiskTier(score) {
+function getRiskTier(score, isPerformance = false) {
   const label = riskLevelFromScore(score);
-  const color = colorForScore(score);
+  const color = colorForScore(score, isPerformance);
   
   return { label, color };
 }

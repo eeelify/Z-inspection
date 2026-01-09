@@ -5,10 +5,13 @@ const PrincipleScoreSchema = new mongoose.Schema({
   n: { type: Number, required: true }, // Number of questions answered
   min: Number,
   max: Number,
-  // New fields for ethical scoring
-  risk: { type: Number }, // Principle risk (0-4 or 0-100 scale)
-  maturity: { type: Number }, // Principle maturity (0-1 or 0-100 scale)
-  rwSum: { type: Number }, // Sum of risk weights for this principle
+  // NEW: Performance Model fields
+  performance: { type: Number }, // Performance score (0-4, higher = better)
+  score: { type: Number }, // Alias for performance
+  // LEGACY: Risk Model fields
+  risk: { type: Number }, // Principle risk (0-4 or 0-100 scale) - LEGACY
+  maturity: { type: Number }, // Principle maturity (0-1 or 0-100 scale) - LEGACY
+  rwSum: { type: Number }, // Sum of risk weights for this principle - LEGACY
   answeredCount: { type: Number }, // Number of answered questions
   missingCount: { type: Number }, // Number of missing questions
   topDrivers: [{
@@ -71,8 +74,11 @@ const ScoreSchema = new mongoose.Schema({
     min: Number,
     max: Number,
     n: Number, // Total questions answered
-    // RPN Model fields
-    overallRisk: { type: Number }, // Overall ethical risk (0-4) = average(principleRisk)
+    // NEW: Performance Model fields
+    overallPerformance: { type: Number }, // Overall performance score (0-4, higher = better)
+    performancePercentage: { type: Number }, // Performance as percentage (0-100%)
+    // LEGACY: RPN/Risk Model fields
+    overallRisk: { type: Number }, // Overall ethical risk (0-4) = average(principleRisk) - LEGACY
     answeredCount: { type: Number }, // Number of answered questions
     missingCount: { type: Number } // Number of missing questions
   },

@@ -1262,22 +1262,42 @@ export function UserDashboard({
 
                       {/* Status + Stage */}
                       <div className="flex items-center space-x-3 mt-3">
-                        <span
-                          className={`px-2 py-1 text-xs rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}
-                        >
-                          {project.status.toUpperCase()}
-                        </span>
-
                         {(() => {
                           const progress = projectProgresses[project.id] ?? project.progress ?? 0;
                           const progressDisplay = Math.max(0, Math.min(100, progress));
                           const hasReport = projectReports[project.id] ?? false;
-                          const currentStage = getStageFromProgress(progressDisplay, hasReport);
-                          return (
-                            <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full">
-                              {stageLabels[currentStage]}
-                            </span>
-                          );
+                          const isComplete = progressDisplay >= 100;
+                          
+                          if (isComplete && hasReport) {
+                            // Report generated → show RESOLVED
+                            return (
+                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                RESOLVED
+                              </span>
+                            );
+                          } else if (isComplete && !hasReport) {
+                            // Progress 100% but no report → show "Report Available"
+                            return (
+                              <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                                ONGOING - Report Available
+                              </span>
+                            );
+                          } else {
+                            // Still in progress → show current status and stage
+                            const currentStage = getStageFromProgress(progressDisplay, hasReport);
+                            return (
+                              <>
+                                <span
+                                  className={`px-2 py-1 text-xs rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}
+                                >
+                                  {project.status.toUpperCase()}
+                                </span>
+                                <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full">
+                                  {stageLabels[currentStage]}
+                                </span>
+                              </>
+                            );
+                          }
                         })()}
                       </div>
                     </div>

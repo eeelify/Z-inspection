@@ -704,13 +704,35 @@ exports.generateReport = async (req, res) => {
     };
     
     // Call Gemini for NARRATIVE ONLY (no chart references)
-    const geminiNarrative = await generateReport(analysisDataWithCharts);
-    
-    // DEFENSIVE VALIDATION: Validate narrative quality
-    if (!geminiNarrative || geminiNarrative.trim().length === 0) {
-      const error = new Error('Report generation failed: Empty narrative generated');
-      error.statusCode = 500;
-      throw error;
+    let geminiNarrative;
+    try {
+      geminiNarrative = await generateReport(analysisDataWithCharts);
+      
+      // DEFENSIVE VALIDATION: Validate narrative quality
+      if (!geminiNarrative || geminiNarrative.trim().length === 0) {
+        throw new Error('Empty narrative generated');
+      }
+    } catch (geminiError) {
+      console.warn(`⚠️  Gemini narrative generation failed: ${geminiError.message}`);
+      console.warn('   Generating fallback narrative with metrics only...');
+      
+      // FALLBACK: Generate simple narrative from metrics
+      const overallPerf = reportMetrics?.scoring?.totalsOverall?.overallPerformance || reportMetrics?.scoring?.totalsOverall?.avg || 0;
+      const perfPct = Math.round((overallPerf / 4) * 100);
+      geminiNarrative = `# Ethical AI Evaluation Report\n\n` +
+        `## Executive Summary\n\n` +
+        `This report presents the ethical evaluation results for **${project.title}**.\n\n` +
+        `**Overall Performance:** ${overallPerf.toFixed(2)}/4.0 (${perfPct}%)\n\n` +
+        `Based on ${reportMetrics?.scoring?.totalsOverall?.uniqueEvaluatorCount || 0} evaluator submissions, ` +
+        `the system demonstrates ${perfPct < 50 ? 'significant areas requiring improvement' : 'acceptable performance with room for enhancement'}.\n\n` +
+        `### Key Findings\n\n` +
+        `- **Evaluators:** ${reportMetrics?.scoring?.totalsOverall?.uniqueEvaluatorCount || 0} experts participated\n` +
+        `- **Questions Answered:** ${reportMetrics?.scoring?.totalsOverall?.answeredCount || 0}\n` +
+        `- **Ethical Tensions:** ${tensions.length} identified\n\n` +
+        `*Note: Detailed AI-generated narrative is temporarily unavailable. Please refer to the metrics and charts below.*\n\n` +
+        `## Methodology\n\n` +
+        `Performance Score = Question Importance (0-4) × Answer Quality (0-1)\n` +
+        `Higher scores indicate better ethical performance.\n`;
     }
     
     // Check if narrative has minimum content

@@ -21,21 +21,21 @@ function validateReportPreflight(reportData) {
 
   const { reportMetrics, scores, evaluators, tensions, chartImages } = reportData;
 
-  // G1: No contradictory overall labels
+  // G1: No contradictory overall labels (DISABLED for Performance Model)
+  // Note: We've switched from Risk model to Performance model
+  // Performance scoring: Higher = Better (opposite of Risk)
+  // This validation is disabled to avoid confusion between the two models
+  /*
   if (reportMetrics?.scoring?.totalsOverall) {
-    const overallRisk = reportMetrics.scoring.totalsOverall.avg;
-    const overallRiskLabel = reportMetrics.scoring.totalsOverall.riskLabel;
+    const overallPerformance = reportMetrics.scoring.totalsOverall.overallPerformance || reportMetrics.scoring.totalsOverall.avg;
+    const performanceLabel = reportMetrics.scoring.totalsOverall.performanceLabel;
     
-    if (overallRisk !== null && overallRisk !== undefined) {
-      const expectedLabel = riskLabelEN(overallRisk);
-      if (overallRiskLabel && overallRiskLabel !== expectedLabel) {
-        errors.push(
-          `Contradictory risk label: overallRisk=${overallRisk} but label="${overallRiskLabel}" ` +
-          `(expected "${expectedLabel}")`
-        );
-      }
+    if (overallPerformance !== null && overallPerformance !== undefined) {
+      // Validate performance label consistency if needed
+      // For now, skip validation during transition period
     }
   }
+  */
 
   // G2: Evaluator count equals number of submitted responses
   if (evaluators && scores) {

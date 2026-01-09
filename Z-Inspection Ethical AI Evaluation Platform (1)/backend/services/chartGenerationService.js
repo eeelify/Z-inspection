@@ -106,10 +106,9 @@ if (usePuppeteer) {
             if (s < 0 || s > 4) {
               throw new Error(`INVALID SCORE FOR CHART: Score ${s} is outside valid range [0-4]`);
             }
-            // CORRECT SCALE: 0 = MINIMAL RISK (green), 4 = CRITICAL RISK (red)
-            // Higher score = Higher risk
+            // PERFORMANCE MODE: High score = good (green), Low score = bad (red)
             const { colorForScore } = require('../utils/riskUtils');
-            return colorForScore(s);
+            return colorForScore(s, true); // true = performance mode
           }),
           borderColor: '#ffffff',
           borderWidth: 2
@@ -120,7 +119,7 @@ if (usePuppeteer) {
         plugins: {
           title: {
             display: true,
-            text: '7 Ethical Principles ERC Overview (0-4 Scale)',
+            text: '7 Ethical Principles Performance Overview (0-4 Scale)',
             font: { size: 16, weight: 'bold' }
           },
           legend: {
@@ -705,7 +704,7 @@ if (usePuppeteer) {
             type: CHART_TYPES.BAR,
             status: CHART_STATUS.READY,
             title: 'Ethical Principles Risk Overview',
-            subtitle: 'ERC scores by principle (0-4 scale)',
+            subtitle: 'Performance scores by principle (0-4 scale)',
             pngBuffer,
             meta: {
               source: {
@@ -713,7 +712,7 @@ if (usePuppeteer) {
                 projectId,
                 questionnaireKey
               },
-              scale: { min: 0, max: 4, meaning: 'Higher = higher risk (ERC)' }
+              scale: { min: 0, max: 4, meaning: 'Higher = better performance' }
             },
             data: scoring.byPrincipleOverall
           });
@@ -776,7 +775,7 @@ if (usePuppeteer) {
                 questionnaireKey
               },
               evaluatorCount: evaluators.withScores.length,
-              scale: { min: 0, max: 4, meaning: 'Higher = higher risk (ERC)' }
+              scale: { min: 0, max: 4, meaning: 'Higher = better performance' }
             },
             data: {
               byPrincipleTable: scoring.byPrincipleTable,

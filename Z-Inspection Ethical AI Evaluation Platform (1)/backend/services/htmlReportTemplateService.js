@@ -105,12 +105,12 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
   };
 
   // Risk tier mapping using shared function
-  // CORRECT SCALE (FIXED): 0 = MINIMAL RISK, 1 = LOW, 2 = MEDIUM, 3 = HIGH, 4 = CRITICAL
-  // Higher score = Higher risk, Lower score = Lower risk
+  // PERFORMANCE MODEL: Higher score = Better performance
   const { getRiskTier } = require('../utils/riskUtils');
 
-  const overallAvg = scoring.totalsOverall?.avg || 0;
-  const overallRisk = getRiskTier(overallAvg);
+  // Use overallPerformance (new) or avg (legacy fallback)
+  const overallPerformance = scoring.totalsOverall?.overallPerformance || scoring.totalsOverall?.avg || 0;
+  const performanceTier = getRiskTier(overallPerformance, true); // true = performance mode (high = good)
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -382,12 +382,12 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     <!-- Executive Dashboard -->
     <div class="dashboard-grid">
       <div class="dashboard-card">
-        <h3>Overall Risk Summary</h3>
-        <div class="stat-value" style="color: ${overallRisk.color}">
-          ${overallAvg.toFixed(2)}/4.0
+        <h3>Overall Performance Summary</h3>
+        <div class="stat-value" style="color: ${performanceTier.color}">
+          ${overallPerformance.toFixed(2)}/4.0
         </div>
         <div class="stat-label">
-          <span class="risk-badge risk-${overallRisk.label.toLowerCase()}">${overallRisk.label} Risk</span>
+          <span class="risk-badge risk-${performanceTier.label.toLowerCase()}">${performanceTier.label} Performance</span>
         </div>
         <div style="margin-top: 0.3cm; font-size: 9pt; color: #6b7280;">
           Based on ${coverage.expertsSubmittedCount || 0} evaluator submission(s)
@@ -436,19 +436,19 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         </p>
       `}
       <div class="chart-legend">
-        <h4>Scale 0–4 (ERC Risk Interpretation)</h4>
+        <h4>Scale 0–4 (Performance Score Interpretation)</h4>
         <ul>
-          <li><strong>0.0:</strong> MINIMAL/NO RISK (well-managed, no concerns)</li>
-          <li><strong>1.0:</strong> LOW RISK (acceptable with minor concerns)</li>
-          <li><strong>2.0:</strong> MEDIUM RISK (requires monitoring)</li>
-          <li><strong>3.0:</strong> HIGH RISK (requires immediate attention)</li>
-          <li><strong>4.0:</strong> MAX/CRITICAL RISK (requires urgent intervention)</li>
+          <li><strong>3.5-4.0:</strong> 🟢 EXCELLENT PERFORMANCE (well-managed, exemplary practices)</li>
+          <li><strong>2.5-3.4:</strong> 🟡 GOOD PERFORMANCE (acceptable, minor improvements possible)</li>
+          <li><strong>1.5-2.4:</strong> 🟠 FAIR PERFORMANCE (requires attention and improvements)</li>
+          <li><strong>0.5-1.4:</strong> 🔴 POOR PERFORMANCE (significant issues, immediate action needed)</li>
+          <li><strong>0.0-0.4:</strong> ⛔ CRITICAL ISSUES (urgent intervention required)</li>
         </ul>
-        <p style="margin-top: 0.3cm; font-weight: bold; color: #dc2626;">
-          CRITICAL: Higher numeric score = Higher ethical risk. Lower numeric score = Lower ethical risk.
+        <p style="margin-top: 0.3cm; font-weight: bold; color: #16a34a;">
+          KEY: Higher score = Better ethical performance. Lower score = More ethical concerns.
         </p>
         <p style="margin-top: 0.3cm; font-style: italic; color: #6b7280;">
-          <strong>Note:</strong> ERC (Ethical Risk Contribution) = Question Importance × Answer Severity. Scores are canonical from scores collection; Gemini does not compute scores.
+          <strong>Methodology:</strong> Performance Score = Question Importance (0-4) × Answer Quality (0-1). Question Importance indicates how critical the ethical question is; Answer Quality measures how well the answer addresses ethical concerns (0=poor, 1=excellent). Scores are pre-computed from the scores collection.
         </p>
       </div>
     </div>
@@ -474,8 +474,8 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       `}
       <div class="chart-legend">
         <h4>Heatmap Legend</h4>
-        <p>Cells show evaluator's average ERC (Ethical Risk Contribution) score per principle (0-4 scale).</p>
-        <p><strong>CRITICAL:</strong> Higher score = Higher risk. Score 0 = MINIMAL RISK, Score 4 = CRITICAL RISK.</p>
+        <p>Cells show evaluator's average Performance Score per principle (0-4 scale).</p>
+        <p><strong>KEY:</strong> Higher score = Better performance. Score 0 = CRITICAL ISSUES, Score 4 = EXCELLENT PERFORMANCE.</p>
         <p><strong>N/A</strong> = evaluator did not submit responses for this principle.</p>
         <p>Only evaluators with submitted responses (status="submitted") are shown.</p>
         <p><strong>Note:</strong> Evaluators reflect ACTUAL PROJECT ASSIGNMENTS from the team/assignments collection, not hardcoded values.</p>

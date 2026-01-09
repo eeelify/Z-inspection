@@ -148,11 +148,11 @@ You MUST include a clear explanatory section stating:
 - Based on evaluator answers and evidence
 - 0 = safe/well-managed, 0.5 = partial, 1 = risky
 
-**Actual System Risk (ERC = Ethical Risk Contribution)**
-- ERC = Question Importance × Observed System Risk
-- Range: 0-4 scale
-- Uses Risk Priority Number (RPN) logic
-- THIS IS THE METRIC for assessing actual system risk
+**Actual System Performance (Score = Performance Score)**
+- Score = Question Importance × Answer Quality
+- Range: 0-4 scale (HIGHER = BETTER)
+- Uses weighted scoring logic
+- THIS IS THE METRIC for assessing actual system performance
 
 CRITICAL DISTINCTION:
 - A question can be HIGHLY IMPORTANT (Risk Score = 4) but system shows LOW ACTUAL RISK (ERC = 0.8) if well-managed

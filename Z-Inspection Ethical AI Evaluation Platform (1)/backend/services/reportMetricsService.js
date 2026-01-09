@@ -556,20 +556,20 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   // CRITICAL: Recompute scores before building metrics to ensure we have the latest data
   // This ensures that even if old Score documents exist, we use the most up-to-date Response data
   try {
-    const { computeScores } = require('./evaluationService');
+    const { computeEthicalScores } = require('./ethicalScoringService'); // ✅ NEW: Use performance model
     const Response = require('../models/response');
     
     // CRITICAL: Recompute scores for ALL questionnaires, not just the specified one
     // This is because legal questions might be in a different questionnaireKey
     // but we want them to be included in the report
     const allQuestionnaireKeys = await Response.distinct('questionnaireKey', { projectId });
-    console.log(`🔄 [DEBUG buildReportMetrics] Recomputing scores for project ${projectId}`);
+    console.log(`🔄 [DEBUG buildReportMetrics] Recomputing scores for project ${projectId} (NEW PERFORMANCE MODEL)`);
     console.log(`   Found ${allQuestionnaireKeys.length} questionnaire keys: [${allQuestionnaireKeys.join(', ')}]`);
     
     // Recompute scores for each questionnaire key (userId = null means all users)
     for (const qKey of allQuestionnaireKeys) {
       console.log(`   Recomputing scores for questionnaireKey: ${qKey}`);
-      await computeScores(projectId, null, qKey);
+      await computeEthicalScores(projectId, null, qKey); // ✅ NEW function
     }
     
     console.log(`✅ [DEBUG buildReportMetrics] Scores recomputed successfully for all questionnaires`);
@@ -752,27 +752,42 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     
     if (hasNewFormat) {
       // Use new ethical scoring format
-      const overallRisks = evaluatorScores.map(s => s.totals?.overallRisk).filter(v => v !== null && v !== undefined && !isNaN(v));
+      // Try new fields first, fall back to legacy fields
+      const overallPerformances = evaluatorScores.map(s => s.totals?.overallPerformance || s.totals?.avg).filter(v => v !== null && v !== undefined && !isNaN(v));
       const overallMaturities = evaluatorScores.map(s => s.totals?.overallMaturity).filter(v => v !== null && v !== undefined && !isNaN(v));
       
-      if (overallRisks.length > 0) {
-        const avgRisk = overallRisks.reduce((a, b) => a + b, 0) / overallRisks.length;
+      if (overallPerformances.length > 0) {
+        const avgPerformance = overallPerformances.reduce((a, b) => a + b, 0) / overallPerformances.length;
         const avgMaturity = overallMaturities.length > 0 
           ? overallMaturities.reduce((a, b) => a + b, 0) / overallMaturities.length 
           : 0;
         
+        // Helper function to convert performance to label
+        const performanceLabelEN = (score) => {
+          if (score >= 3.5) return 'Excellent Performance';
+          if (score >= 2.5) return 'Good Performance';
+          if (score >= 1.5) return 'Fair Performance';
+          if (score >= 0.5) return 'Poor Performance';
+          return 'Critical Issues';
+        };
+        
         scoring.totalsOverall = {
-          avg: avgRisk, // For backward compatibility (risk score 0-4)
-          overallRisk: avgRisk,
+          overallPerformance: avgPerformance, // NEW: Performance score (0-4, higher = better)
+          performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage
+          avg: avgPerformance, // For backward compatibility
           overallMaturity: avgMaturity,
-          min: Math.min(...overallRisks),
-          max: Math.max(...overallRisks),
-          count: overallRisks.length,
+          min: Math.min(...overallPerformances),
+          max: Math.max(...overallPerformances),
+          count: overallPerformances.length,
           uniqueEvaluatorCount: submittedCount,
-          riskLabel: riskLabelEN(avgRisk),
-          // F) ERC Methodology label
-          methodology: 'ERC (Ethical Risk Contribution)',
-          methodologyDescription: 'Computed as QuestionRiskImportance × AnswerRiskSeverity (ERC). QuestionRiskImportance (0-4) = how critical the ethical question is; AnswerRiskSeverity (0-1) = risk severity indicated by the answer content.'
+          performanceLabel: performanceLabelEN(avgPerformance), // NEW label
+          // F) Performance Methodology label
+          methodology: 'Performance Score (Importance × Quality)',
+          methodologyDescription: 'Computed as Question Importance (0-4) × Answer Quality (0-1). Question Importance = how critical the ethical question is; Answer Quality = how well the answer addresses ethical concerns (0=poor, 1=excellent). Higher score = Better performance.',
+          // LEGACY fields for backward compatibility
+          overallRisk: 4 - avgPerformance, // Convert performance to risk
+          overallERC: 4 - avgPerformance, // Alias
+          riskLabel: riskLabelEN(4 - avgPerformance) // Convert to risk label
         };
       }
     } else {
@@ -821,44 +836,63 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       console.log(`  📊 ${principle}: Found ${principleScores.length} score document(s) with data`);
       
       if (principleScores.length > 0) {
-        // Extract risk values (ERC model uses .risk field, old model uses .avg)
-        const riskValues = principleScores
-          .map(p => p.risk !== undefined ? p.risk : p.avg)
+        // Extract performance values (NEW: .performance or .score field, LEGACY: .risk or .avg)
+        const performanceValues = principleScores
+          .map(p => p.performance !== undefined ? p.performance : (p.score !== undefined ? p.score : p.avg))
           .filter(v => v !== null && v !== undefined && !isNaN(v));
         
-        console.log(`    Risk values: [${riskValues.join(', ')}]`);
+        console.log(`    Performance values: [${performanceValues.join(', ')}]`);
         
-        if (riskValues.length > 0) {
-          const avgRisk = riskValues.reduce((a, b) => a + b, 0) / riskValues.length;
-          const minRisk = Math.min(...riskValues);
-          const maxRisk = Math.max(...riskValues);
+        if (performanceValues.length > 0) {
+          const avgPerformance = performanceValues.reduce((a, b) => a + b, 0) / performanceValues.length;
+          const minPerformance = Math.min(...performanceValues);
+          const maxPerformance = Math.max(...performanceValues);
           
-          // Safe vs risky split: score > 2.5 is risky, score <= 2.5 is safe
-          const highRiskCount = riskValues.filter(isRiskyScore).length;
-          const totalCount = riskValues.length;
+          // Good vs poor split: score > 2.5 is good performance, score <= 2.5 is poor
+          const goodPerformanceCount = performanceValues.filter(v => v > 2.5).length;
+          const poorPerformanceCount = performanceValues.length - goodPerformanceCount;
+          const totalCount = performanceValues.length;
           
           // Get top drivers from first score doc that has them
           const scoreWithDrivers = principleScores.find(p => p.topDrivers && p.topDrivers.length > 0);
           const topDrivers = scoreWithDrivers?.topDrivers || [];
           
-          scoring.byPrincipleOverall[principle] = {
-            avgScore: Math.round(avgRisk * 100) / 100,
-            avg: Math.round(avgRisk * 100) / 100,
-            risk: Math.round(avgRisk * 100) / 100, // ERC score (0-4)
-            erc: Math.round(avgRisk * 100) / 100,  // Alias for charts
-            min: Math.round(minRisk * 100) / 100,
-            max: Math.round(maxRisk * 100) / 100,
-            count: totalCount,
-            answeredCount: principleScores[0]?.answeredCount || totalCount,
-            riskLabel: riskLabelEN(avgRisk),
-            riskPct: totalCount > 0 ? Math.round((highRiskCount / totalCount) * 100) : 0,
-            safePct: totalCount > 0 ? Math.round(((totalCount - highRiskCount) / totalCount) * 100) : 0,
-            safeCount: totalCount - highRiskCount,
-            notSafeCount: highRiskCount,
-            topDrivers: topDrivers
+          // Helper function to convert performance to label
+          const performanceLabelEN = (score) => {
+            if (score >= 3.5) return 'Excellent Performance';
+            if (score >= 2.5) return 'Good Performance';
+            if (score >= 1.5) return 'Fair Performance';
+            if (score >= 0.5) return 'Poor Performance';
+            return 'Critical Issues';
           };
           
-          console.log(`    ✅ Populated: avgRisk=${avgRisk.toFixed(2)}, count=${totalCount}, topDrivers=${topDrivers.length}`);
+          scoring.byPrincipleOverall[principle] = {
+            performance: Math.round(avgPerformance * 100) / 100, // NEW: Performance score (0-4, higher = better)
+            performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage (0-100%)
+            avgScore: Math.round(avgPerformance * 100) / 100,
+            avg: Math.round(avgPerformance * 100) / 100,
+            score: Math.round(avgPerformance * 100) / 100, // Performance score (0-4, higher = better)
+            min: Math.round(minPerformance * 100) / 100,
+            max: Math.round(maxPerformance * 100) / 100,
+            count: totalCount,
+            answeredCount: principleScores[0]?.answeredCount || totalCount,
+            performanceLabel: performanceLabelEN(avgPerformance), // NEW label
+            goodPerformancePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
+            poorPerformancePct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
+            goodCount: goodPerformanceCount,
+            poorCount: poorPerformanceCount,
+            topDrivers: topDrivers,
+            // LEGACY fields for backward compatibility (converted from performance)
+            risk: Math.round((4 - avgPerformance) * 100) / 100, // Convert performance to risk
+            erc: Math.round((4 - avgPerformance) * 100) / 100,  // Alias for old charts
+            riskLabel: riskLabelEN(4 - avgPerformance), // Convert performance to risk label
+            riskPct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
+            safePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
+            safeCount: goodPerformanceCount,
+            notSafeCount: poorPerformanceCount
+          };
+          
+          console.log(`    ✅ Populated: avgPerformance=${avgPerformance.toFixed(2)}, count=${totalCount}, topDrivers=${topDrivers.length}`);
         } else {
           console.log(`    ❌ No valid risk values found`);
           scoring.byPrincipleOverall[principle] = null;
@@ -1333,41 +1367,56 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       );
     }
 
-    // Generate principle-evaluator heatmap
-    if (scoring.byPrincipleTable && Object.keys(scoring.byPrincipleTable).length > 0 && evaluatorsWithScores.length > 0) {
-      charts.principleEvaluatorHeatmap = await chartGenerationService.generatePrincipleEvaluatorHeatmap(
-        scoring.byPrincipleTable,
-        evaluatorsWithScores
-      );
+    // Generate principle-evaluator heatmap (optional)
+    if (scoring.byPrincipleTable && Object.keys(scoring.byPrincipleTable).length > 0 && evaluatorsWithScores && evaluatorsWithScores.length > 0) {
+      try {
+        charts.principleEvaluatorHeatmap = await chartGenerationService.generatePrincipleEvaluatorHeatmap(
+          scoring.byPrincipleTable,
+          evaluatorsWithScores
+        );
+      } catch (heatmapError) {
+        console.warn(`⚠️  Heatmap generation failed (skipped): ${heatmapError.message}`);
+        charts.principleEvaluatorHeatmap = null;
+      }
+    } else {
+      console.warn('⚠️  Skipping heatmap: insufficient data (evaluatorsWithScores empty)');
     }
 
     // Generate team completion donut
     charts.teamCompletionDonut = await chartGenerationService.generateTeamCompletionDonut(coverage);
 
-    // Generate tension charts
+    // Generate tension charts (optional)
     if (tensionsSummary.total > 0) {
-      charts.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart(tensionsSummary);
+      try {
+        charts.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart(tensionsSummary);
+      } catch (reviewStateError) {
+        console.warn(`⚠️  Tension review state chart failed (skipped): ${reviewStateError.message}`);
+      }
       
       // TASK 7: Evidence coverage and evidence type charts REMOVED (invalid/misleading per Z-Inspection methodology)
       // These charts are not aligned with Z-Inspection methodology and are weak/misleading
       
       if (tensionsList.length > 0) {
-        // Convert tension list to severity distribution
-        const severityDistribution = {
-          low: 0,
-          medium: 0,
-          high: 0,
-          critical: 0
-        };
-        tensionsList.forEach(t => {
-          const severity = String(t.severityLevel || t.severity || 'medium').toLowerCase();
-          if (severityDistribution.hasOwnProperty(severity)) {
-            severityDistribution[severity]++;
-          } else {
-            severityDistribution.medium++; // Default to medium if unknown
-          }
-        });
-        charts.severityChart = await chartGenerationService.generateTensionSeverityChart(severityDistribution);
+        try {
+          // Convert tension list to severity distribution
+          const severityDistribution = {
+            low: 0,
+            medium: 0,
+            high: 0,
+            critical: 0
+          };
+          tensionsList.forEach(t => {
+            const severity = String(t.severityLevel || t.severity || 'medium').toLowerCase();
+            if (severityDistribution.hasOwnProperty(severity)) {
+              severityDistribution[severity]++;
+            } else {
+              severityDistribution.medium++; // Default to medium if unknown
+            }
+          });
+          charts.severityChart = await chartGenerationService.generateTensionSeverityChart(severityDistribution);
+        } catch (severityError) {
+          console.warn(`⚠️  Tension severity chart failed (skipped): ${severityError.message}`);
+        }
       }
     }
   } catch (chartError) {
@@ -1748,7 +1797,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
 
   const topRiskyQuestions = [];
   Object.entries(questionScores).forEach(([questionId, scoreArray]) => {
-    const avgRisk = scoreArray.reduce((sum, s) => sum + s, 0) / scoreArray.length;
+    const avgPerformance = scoreArray.reduce((sum, s) => sum + s, 0) / scoreArray.length;
     const question = questionMap.get(questionId);
     
     if (question) {
@@ -1762,7 +1811,8 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
         questionId,
         questionCode: question.code || questionId,
         principle: question.principle || 'Unknown',
-        avgRisk: parseFloat(avgRisk.toFixed(2)),
+        avgPerformance: parseFloat(avgPerformance.toFixed(2)),
+        avgRisk: parseFloat((4 - avgPerformance).toFixed(2)), // Legacy: convert performance to risk
         role,
         userId,
         answerSnippet,
@@ -1771,8 +1821,8 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     }
   });
 
-  // Sort by avgRisk (ascending = highest risk first) and limit to top 20
-  topRiskyQuestions.sort((a, b) => a.avgRisk - b.avgRisk);
+  // Sort by avgPerformance (ascending = lowest performance = highest risk first) and limit to top 20
+  topRiskyQuestions.sort((a, b) => a.avgPerformance - b.avgPerformance);
   topRiskyQuestions.splice(20);
 
   // ============================================================

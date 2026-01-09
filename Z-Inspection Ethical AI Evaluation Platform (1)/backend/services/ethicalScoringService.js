@@ -6,7 +6,14 @@ const { calculateAnswerSeverity } = require('./answerRiskService');
 
 /**
  * Compute ethical scores for a project/user/questionnaire
- * Implements: ERC (Ethical Risk Contribution) = QuestionRiskImportance × AnswerRiskSeverity
+ * 
+ * NEW SYSTEM (Importance-based):
+ * Score = Importance (0-4) × Answer Quality (0-1) - Higher = Better performance
+ * 
+ * LEGACY SYSTEM (Risk-based):
+ * ERC = QuestionRiskImportance (0-4) × AnswerRiskSeverity (0-1) - Higher = More Risk
+ * 
+ * The system automatically detects which scoring model to use based on question data.
  * 
  * @param {string|ObjectId} projectId - Project ID
  * @param {string|ObjectId} userId - User ID (optional, if null computes for all users)
@@ -117,17 +124,19 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
       const group = grouped[key];
       const principleData = {}; // principle -> { questions: [], ercSum, answeredCount }
 
-      // Initialize principle data (ERC model)
+      // Initialize principle data (Performance model)
       for (const principle of CANONICAL_PRINCIPLES) {
         principleData[principle] = {
           questions: [],
-          ercSum: 0, // Sum of ERC values
+          scoreSum: 0, // Sum of performance scores (Importance × Quality)
           answeredCount: 0,
-          missingCount: 0
+          missingCount: 0,
+          // Legacy fields for backward compatibility
+          ercSum: 0
         };
       }
 
-      let totalErcSum = 0;
+      let totalScoreSum = 0;
       let totalAnsweredCount = 0;
       let totalMissingCount = 0;
       const questionBreakdown = []; // Store per-question breakdown
@@ -165,98 +174,129 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
           continue;
         }
 
-        // ERC Model: Get QuestionRiskImportance (0-4) from question.riskScore or answer.score
+        // SCORING MODEL: Get Question Importance (0-4) from question.riskScore or answer.score
         // Priority: question.riskScore (expert-provided importance) > answer.score (legacy)
-        let questionRiskImportance = 2; // Default to medium importance
+        let questionImportance = 2; // Default to medium importance
         if (question.riskScore !== undefined && question.riskScore !== null) {
-          questionRiskImportance = Math.max(0, Math.min(4, question.riskScore));
+          questionImportance = Math.max(0, Math.min(4, question.riskScore));
         } else if (answer.score !== undefined && answer.score !== null) {
           // Fallback to answer.score for backward compatibility
-          questionRiskImportance = Math.max(0, Math.min(4, answer.score));
+          questionImportance = Math.max(0, Math.min(4, answer.score));
         }
 
-        // ERC Model: Calculate AnswerRiskSeverity (0-1) from answer content
+        // SCORING MODEL: Calculate Answer Quality/Severity (0-1) from answer content
+        // NEW: If answerQuality exists (higher = better), use it directly
+        // OLD: If answerSeverity exists (higher = worse), use it for backward compatibility
         const answerSeverityResult = calculateAnswerSeverity(question, answer);
-        const answerRiskSeverity = answerSeverityResult.answerSeverity;
+        const answerValue = answerSeverityResult.answerSeverity; // This is actually answerQuality if isQuality=true
+        const isQualityBased = answerSeverityResult.isQuality || false;
 
-        // ERC Model: Compute Ethical Risk Contribution
-        // ERC = QuestionRiskImportance × AnswerRiskSeverity (0-4 × 0-1 = 0-4)
-        const erc = questionRiskImportance * answerRiskSeverity;
+        // Legacy fields (for backward compatibility with old reports)
+        const questionRiskImportance = questionImportance; // Same as questionImportance
+        const answerRiskSeverity = answerValue; // Raw value from service
+
+        // SCORING FORMULA:
+        // CURRENT: Score = Importance (0-4) × Answer Quality (0-1) → Higher = Better Performance
+        // LEGACY: ERC = QuestionRiskImportance × AnswerRiskSeverity (0-4 × 0-1) → Higher = More Risk
+        // 
+        // If answerQuality is used (isQualityBased=true), high score = good performance
+        // If answerSeverity is used (isQualityBased=false), high score = high risk (legacy)
+        const score = questionImportance * answerValue;
+        const performanceScore = isQualityBased ? score : (questionImportance - score); // Convert risk to performance if needed
 
         // Add to principle data
         principleData[principle].questions.push({
           questionId: question._id,
           questionCode: question.code || answer.questionCode,
+          importance: questionImportance,
+          answerQuality: isQualityBased ? answerValue : (1 - answerValue),
+          score: performanceScore,
+          // Legacy fields for backward compatibility
           riskImportance: questionRiskImportance,
           answerSeverity: answerRiskSeverity,
-          erc: erc
+          erc: score
         });
 
         // Store per-question breakdown
         questionBreakdown.push({
           questionId: question._id,
           principle: principle,
+          importance: questionImportance,
+          answerQuality: isQualityBased ? answerValue : (1 - answerValue),
+          performanceScore: performanceScore,
+          isQualityBased: isQualityBased,
+          // Legacy fields for backward compatibility
           riskImportance: questionRiskImportance,
           answerSeverity: answerRiskSeverity,
-          computedERC: erc,
+          computedERC: score,
           answerType: question.answerType,
           mappingMissing: answerSeverityResult.metadata?.mappingMissing || false,
           source: answerSeverityResult.metadata?.source || 'unknown'
         });
 
-        principleData[principle].ercSum += erc;
+        principleData[principle].scoreSum += performanceScore;
         principleData[principle].answeredCount++;
 
-        totalErcSum += erc;
+        totalScoreSum += performanceScore;
         totalAnsweredCount++;
       }
 
-      // ERC Model: Calculate principle-level metrics
-      // Principle Risk = Average ERC of questions belonging to that principle
+      // Performance Model: Calculate principle-level metrics
+      // Principle Performance = Average score of questions belonging to that principle
       const byPrinciple = {};
-      const principleRisks = [];
+      const principleScores = [];
       
       for (const principle of CANONICAL_PRINCIPLES) {
         const data = principleData[principle];
         
-        // Principle Risk = average(ERC for questions in principle)
-        const principleRisk = data.answeredCount > 0
-          ? data.ercSum / data.answeredCount // 0-4 scale
+        // Principle Performance = average(Score for questions in principle)
+        const principleScore = data.answeredCount > 0
+          ? data.scoreSum / data.answeredCount // 0-4 scale (higher = better)
           : 0;
 
-        // Sort top drivers by ERC (descending)
+        // Sort top drivers by score (descending for performance, or ascending for issues)
+        // For "top drivers" we want to show BEST performing questions
         const topDrivers = data.questions
-          .sort((a, b) => b.erc - a.erc)
+          .sort((a, b) => b.score - a.score)
           .slice(0, 5); // Top 5
 
         byPrinciple[principle] = {
-          avg: principleRisk, // For backward compatibility
+          performance: Math.round(principleScore * 100) / 100, // NEW: Performance score (0-4, higher = better)
+          avg: principleScore, // For backward compatibility
           n: data.answeredCount,
-          min: data.questions.length > 0 ? Math.min(...data.questions.map(q => q.riskImportance)) : undefined,
-          max: data.questions.length > 0 ? Math.max(...data.questions.map(q => q.riskImportance)) : undefined,
-          risk: Math.round(principleRisk * 100) / 100, // Principle risk (0-4)
+          min: data.questions.length > 0 ? Math.min(...data.questions.map(q => q.importance || q.riskImportance)) : undefined,
+          max: data.questions.length > 0 ? Math.max(...data.questions.map(q => q.importance || q.riskImportance)) : undefined,
+          score: Math.round(principleScore * 100) / 100, // Performance score (0-4, higher = better)
           answeredCount: data.answeredCount,
           missingCount: data.missingCount,
           topDrivers: topDrivers.map(driver => ({
             questionId: driver.questionId,
             questionCode: driver.questionCode,
+            importance: Math.round((driver.importance || driver.riskImportance) * 100) / 100,
+            answerQuality: Math.round((driver.answerQuality || (1 - driver.answerSeverity)) * 100) / 100,
+            performanceScore: Math.round(driver.score * 100) / 100,
+            // Legacy fields
             riskImportance: Math.round(driver.riskImportance * 100) / 100,
             answerSeverity: Math.round(driver.answerSeverity * 100) / 100,
             computedERC: Math.round(driver.erc * 100) / 100
-          }))
+          })),
+          // Legacy field for backward compatibility
+          risk: Math.round((4 - principleScore) * 100) / 100 // Convert performance to risk for old reports
         };
         
         if (data.answeredCount > 0) {
-          principleRisks.push(principleRisk);
+          principleScores.push(principleScore);
         }
       }
 
-      // ERC Model: Calculate overall metrics
-      // Overall Risk = Average of all ERC values across experts
-      // For now, we average principle risks (which are already averages of ERC)
-      const overallRisk = principleRisks.length > 0
-        ? principleRisks.reduce((a, b) => a + b, 0) / principleRisks.length // 0-4 scale
+      // Performance Model: Calculate overall metrics
+      // Overall Performance = Average of all principle scores
+      const overallPerformance = principleScores.length > 0
+        ? principleScores.reduce((a, b) => a + b, 0) / principleScores.length // 0-4 scale (higher = better)
         : 0;
+      
+      // Legacy: Convert performance to risk for backward compatibility
+      const overallRisk = 4 - overallPerformance;
 
       // Calculate average risk importance for backward compatibility
       const allRiskImportances = [];
@@ -275,15 +315,18 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         role: group.role,
         questionnaireKey: group.questionnaireKey,
         computedAt: new Date(),
-        scoringModelVersion: 'erc_v1', // ERC model version
+        scoringModelVersion: 'performance_v1', // NEW: Performance model (Importance × Quality)
         totals: {
-          avg: Math.round(avgRiskImportance * 100) / 100, // Backward compatibility (average risk importance)
+          overallPerformance: Math.round(overallPerformance * 100) / 100, // NEW: Performance score (0-4, higher = better)
+          performancePercentage: Math.round((overallPerformance / 4) * 100), // NEW: As percentage
+          avg: Math.round(overallPerformance * 100) / 100, // For backward compatibility
           min: allRiskImportances.length > 0 ? Math.min(...allRiskImportances) : undefined,
           max: allRiskImportances.length > 0 ? Math.max(...allRiskImportances) : undefined,
           n: totalAnsweredCount,
-          overallRisk: Math.round(overallRisk * 100) / 100, // Overall risk (0-4) = average ERC
           answeredCount: totalAnsweredCount,
-          missingCount: totalMissingCount
+          missingCount: totalMissingCount,
+          // Legacy field for old reports
+          overallRisk: Math.round(overallRisk * 100) / 100 // Legacy: Converted from performance (4 - performance)
         },
         byPrinciple,
         questionBreakdown: questionBreakdown // Store per-question breakdown

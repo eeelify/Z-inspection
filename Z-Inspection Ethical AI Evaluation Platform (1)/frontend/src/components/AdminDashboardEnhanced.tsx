@@ -98,12 +98,39 @@ const ProjectCard: React.FC<{
       </div>
 
       <div className="flex items-center space-x-2 mb-4">
-        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
-          {project.status.toUpperCase()}
-        </span>
-        <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
-          {stageLabels[project.stage]}
-        </span>
+        {(() => {
+          // Check if project has report generated
+          const hasReport = (project as any).reportGenerated || false;
+          const isComplete = progressDisplay >= 100;
+          
+          if (isComplete && hasReport) {
+            // Report generated → show RESOLVED
+            return (
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                RESOLVED
+              </span>
+            );
+          } else if (isComplete && !hasReport) {
+            // Progress 100% but no report → show "Report can be generated"
+            return (
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                ONGOING - Report Available
+              </span>
+            );
+          } else {
+            // Still in progress → show current status and stage
+            return (
+              <>
+                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
+                  {project.status.toUpperCase()}
+                </span>
+                <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
+                  {stageLabels[project.stage]}
+                </span>
+              </>
+            );
+          }
+        })()}
       </div>
 
       <div className="mb-4">
