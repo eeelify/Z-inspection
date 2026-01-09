@@ -1,8 +1,11 @@
+const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
-const Project = require('../models/Project');
-const Tension = require('../models/Tension');
 const ProjectAssignment = require('../models/projectAssignment');
+
+// These models are defined in server.js, so we get them from mongoose
+const getProject = () => mongoose.model('Project');
+const getTension = () => mongoose.model('Tension');
 
 /**
  * Create notifications for multiple recipients with deduplication
@@ -109,7 +112,7 @@ async function getAssignedExperts(projectId) {
     }
 
     // Fallback to Project.assignedUsers (but filter out admins)
-    const project = await Project.findById(projectId).populate('assignedUsers');
+    const project = await getProject().findById(projectId).populate('assignedUsers');
     if (!project) return [];
 
     // Get assigned user IDs
@@ -153,7 +156,7 @@ async function getAllAdmins() {
  */
 async function getTensionParticipants(tensionId) {
   try {
-    const tension = await Tension.findById(tensionId);
+    const tension = await getTension().findById(tensionId);
     if (!tension) return [];
 
     const participants = new Set();
@@ -348,7 +351,7 @@ async function notifyEvaluationStarted(projectId, userId, questionnaireKey, ques
     const admins = await getAllAdmins();
     if (admins.length === 0) return;
 
-    const project = await Project.findById(projectId);
+    const project = await getProject().findById(projectId);
     const projectTitle = project?.title || 'Project';
 
     const payload = {
@@ -381,7 +384,7 @@ async function notifyProjectCreated(projectId, userIds, actorId, actorRole) {
   try {
     if (!userIds || userIds.length === 0) return;
 
-    const project = await Project.findById(projectId);
+    const project = await getProject().findById(projectId);
     if (!project) return;
 
     const projectTitle = project.title || 'Project';
@@ -444,7 +447,7 @@ async function notifyProjectAssigned(projectId, userId, assignmentId, role, acto
       return; // Already notified
     }
 
-    const project = await Project.findById(projectId);
+    const project = await getProject().findById(projectId);
     const projectTitle = project?.title || 'Project';
 
     const payload = {
@@ -490,7 +493,7 @@ async function notifyEvaluationCompleted(projectId, userId, questionnaireKey, qu
     const admins = await getAllAdmins();
     if (admins.length === 0) return;
 
-    const project = await Project.findById(projectId);
+    const project = await getProject().findById(projectId);
     const projectTitle = project?.title || 'Project';
 
     const payload = {
@@ -568,7 +571,7 @@ async function checkAndNotifyAllExpertsCompleted(projectId, questionnaireKey, qu
     const admins = await getAllAdmins();
     if (admins.length === 0) return;
 
-    const project = await Project.findById(projectId);
+    const project = await getProject().findById(projectId);
     const projectTitle = project?.title || 'Project';
 
     const payload = {

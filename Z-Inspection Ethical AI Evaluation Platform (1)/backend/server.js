@@ -1169,14 +1169,92 @@ app.get('/api/project-assignments', async (req, res) => {
       .select('projectId userId role status completedAt evolutionCompletedAt')
       .lean();
 
-    res.json(
-      (assignments || []).map((a) => ({
+    if (!assignments || assignments.length === 0) {
+      return res.json([]);
+    }
+
+    // OPTIMIZATION: Batch fetch all data at once instead of querying in a loop
+    const projectIds = assignments.map(a => a.projectId);
+    
+    // 1. Fetch all projects in one query
+    const projects = await Project.find({ _id: { $in: projectIds } })
+      .select('_id useCase')
+      .lean();
+    const projectMap = new Map(projects.map(p => [String(p._id), p]));
+    
+    // 2. Fetch all use cases in one query
+    const useCaseIds = projects.map(p => p.useCase).filter(Boolean);
+    const useCases = useCaseIds.length > 0 
+      ? await mongoose.model('UseCase').find({ _id: { $in: useCaseIds } })
+          .select('_id ownerId')
+          .lean()
+      : [];
+    const useCaseMap = new Map(useCases.map(uc => [String(uc._id), uc]));
+    
+    // 3. Fetch all expert assignments for all projects in one query
+    const allProjectAssignments = await ProjectAssignment.find({ 
+      projectId: { $in: projectIds },
+      status: { $in: ['assigned', 'in_progress', 'submitted'] }
+    })
+    .select('projectId userId evolutionCompletedAt')
+    .lean();
+    
+    // Group assignments by project
+    const assignmentsByProject = new Map();
+    for (const assignment of allProjectAssignments) {
+      const projId = String(assignment.projectId);
+      if (!assignmentsByProject.has(projId)) {
+        assignmentsByProject.set(projId, []);
+      }
+      assignmentsByProject.get(projId).push(assignment);
+    }
+    
+    // 4. Process each user assignment
+    const assignmentsWithStatus = assignments.map(a => {
+      let allExpertsCompleted = false;
+      
+      try {
+        const projectId = String(a.projectId);
+        const project = projectMap.get(projectId);
+        const projectAssignments = assignmentsByProject.get(projectId) || [];
+        
+        // Get expert IDs (excluding admins and use case owner)
+        let expertAssignments = projectAssignments.filter(pa => {
+          // TODO: Filter out admins if needed (would need user role data)
+          return true;
+        });
+        
+        // Exclude use case owner
+        if (project?.useCase) {
+          const useCase = useCaseMap.get(String(project.useCase));
+          if (useCase?.ownerId) {
+            const ownerIdStr = String(useCase.ownerId);
+            expertAssignments = expertAssignments.filter(
+              pa => String(pa.userId) !== ownerIdStr
+            );
+          }
+        }
+        
+        // Check if all experts have completed
+        if (expertAssignments.length > 0) {
+          allExpertsCompleted = expertAssignments.every(
+            pa => pa.evolutionCompletedAt
+          );
+        }
+      } catch (error) {
+        console.error(`Error checking allExpertsCompleted for project ${a.projectId}:`, error);
+      }
+      
+      return {
         ...a,
         id: String(a._id),
         projectId: String(a.projectId),
         userId: String(a.userId),
-      }))
-    );
+        allExpertsCompleted
+      };
+    });
+
+    res.json(assignmentsWithStatus);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1203,20 +1281,41 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     const user = await User.findById(userIdObj).select('name role').lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Check tension votes
-    const userTensions = await Tension.find({ projectId: projectIdObj }).select('votes').lean();
-    const totalTensions = userTensions.length;
-    const votedTensions = userTensions.filter((t) => {
-      const votes = Array.isArray(t.votes) ? t.votes : [];
-      return votes.some((v) => String(v.userId) === userIdStr);
-    }).length;
+    // Check if user is the use case owner (owners don't need to vote on tensions)
+    let isUseCaseOwner = false;
+    if (project.useCase) {
+      const UseCase = mongoose.model('UseCase');
+      const useCase = await UseCase.findById(project.useCase).select('ownerId').lean();
+      if (useCase?.ownerId && String(useCase.ownerId) === userIdStr) {
+        isUseCaseOwner = true;
+      }
+    }
 
-    if (totalTensions > 0 && votedTensions < totalTensions) {
-      return res.status(400).json({
-        error: 'NOT_ALL_TENSIONS_VOTED',
-        totalTensions,
-        votedTensions,
-      });
+    // Initialize tension voting variables (needed for response)
+    let totalTensions = 0;
+    let votedTensions = 0;
+
+    // Check tension votes (skip for use case owners - they are not experts)
+    if (!isUseCaseOwner) {
+      const allTensions = await Tension.find({ projectId: projectIdObj }).select('votes createdBy').lean();
+      
+      // Exclude tensions created by the user (they can't vote on their own tensions)
+      const tensionsToVoteOn = allTensions.filter((t) => String(t.createdBy) !== userIdStr);
+      totalTensions = tensionsToVoteOn.length;
+      
+      votedTensions = tensionsToVoteOn.filter((t) => {
+        const votes = Array.isArray(t.votes) ? t.votes : [];
+        return votes.some((v) => String(v.userId) === userIdStr);
+      }).length;
+
+      if (totalTensions > 0 && votedTensions < totalTensions) {
+        return res.status(400).json({
+          error: 'NOT_ALL_TENSIONS_VOTED',
+          totalTensions,
+          votedTensions,
+          expertNames: user.name || 'you'
+        });
+      }
     }
 
     // Check if all questions are answered
@@ -1406,7 +1505,18 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     // Check if ALL assigned experts have completed their evaluations (progress = 100%)
     const { getAssignedExperts } = require('./services/notificationService');
     
-    const assignedExpertIds = await getAssignedExperts(projectIdObj);
+    let assignedExpertIds = await getAssignedExperts(projectIdObj);
+    
+    // Exclude the use case owner from expert progress check (they are not an expert)
+    if (project.useCase) {
+      const UseCase = mongoose.model('UseCase');
+      const useCase = await UseCase.findById(project.useCase).select('ownerId').lean();
+      if (useCase?.ownerId) {
+        const ownerIdStr = String(useCase.ownerId);
+        assignedExpertIds = assignedExpertIds.filter(expertId => String(expertId) !== ownerIdStr);
+      }
+    }
+    
     if (assignedExpertIds.length > 0) {
       // Check progress for all assigned experts using the same logic as /api/user-progress
       const expertProgresses = [];
@@ -1585,7 +1695,18 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     // Check if all tensions (if any) have been voted on by all assigned experts
     const projectTensions = await Tension.find({ projectId: projectIdObj }).lean();
     if (projectTensions.length > 0) {
-      const assignedExpertIds = await getAssignedExperts(projectIdObj);
+      let assignedExpertIds = await getAssignedExperts(projectIdObj);
+      
+      // Exclude the use case owner from tension voting check (they are not an expert)
+      if (project.useCase) {
+        const UseCase = mongoose.model('UseCase');
+        const useCase = await UseCase.findById(project.useCase).select('ownerId').lean();
+        if (useCase?.ownerId) {
+          const ownerIdStr = String(useCase.ownerId);
+          assignedExpertIds = assignedExpertIds.filter(expertId => String(expertId) !== ownerIdStr);
+        }
+      }
+      
       const assignedExpertIdsStr = assignedExpertIds.map(id => id.toString());
       
       for (const tension of projectTensions) {
@@ -1658,10 +1779,36 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     assignment.evolutionCompletedAt = new Date();
     await assignment.save();
 
+    // Check if ALL experts have now completed their evolution
+    let allExpertsCompleted = false;
+    let assignedExpertsForCheck = await getAssignedExperts(projectIdObj);
+    
+    // Exclude use case owner from this check too
+    if (project.useCase) {
+      const UseCase = mongoose.model('UseCase');
+      const useCase = await UseCase.findById(project.useCase).select('ownerId').lean();
+      if (useCase?.ownerId) {
+        const ownerIdStr = String(useCase.ownerId);
+        assignedExpertsForCheck = assignedExpertsForCheck.filter(expertId => String(expertId) !== ownerIdStr);
+      }
+    }
+    
+    if (assignedExpertsForCheck.length > 0) {
+      const allAssignments = await ProjectAssignment.find({
+        projectId: projectIdObj,
+        userId: { $in: assignedExpertsForCheck }
+      }).select('evolutionCompletedAt').lean();
+      
+      allExpertsCompleted = allAssignments.length === assignedExpertsForCheck.length &&
+                           allAssignments.every(a => a.evolutionCompletedAt);
+    }
+
     // Notify ALL admins (case-insensitive match)
     const adminUsers = await User.find({ role: { $regex: /^admin$/i } }).select('_id').lean();
     if (Array.isArray(adminUsers) && adminUsers.length > 0) {
-      const notificationText = `[NOTIFICATION] Evolution completed for project "${project.title}" by ${user.name}`;
+      const notificationText = allExpertsCompleted
+        ? `[NOTIFICATION] ALL EXPERTS completed evolution for project "${project.title}"`
+        : `[NOTIFICATION] Evolution completed for project "${project.title}" by ${user.name}`;
       await Promise.all(
         adminUsers
           .filter((a) => a?._id)
@@ -1685,6 +1832,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
       totalTensions,
       votedTensions,
       evolutionCompletedAt: assignment.evolutionCompletedAt,
+      allExpertsCompleted: allExpertsCompleted, // Frontend will use this
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -5415,14 +5563,14 @@ mongoose.connection.once('open', async () => {
       { $set: { code: 'T2_TECH', appliesToRoles: ['technical-expert'] } }
     );
     
-    // Verify counts
-    const generalCount = await Question.countDocuments({ questionnaireKey: 'general-v1' });
-    const technicalCount = await Question.countDocuments({ questionnaireKey: 'technical-expert-v1' });
+    // Verify counts (silent mode - uncomment for debugging)
+    // const generalCount = await Question.countDocuments({ questionnaireKey: 'general-v1' });
+    // const technicalCount = await Question.countDocuments({ questionnaireKey: 'technical-expert-v1' });
     
-    console.log(`✅ 24 QUESTION MODE:`);
-    console.log(`   General: Fixed T1 (${genT1Result.modifiedCount}), T2 (${genT2Result.modifiedCount}). Total: ${generalCount} questions.`);
-    console.log(`   Technical: T1->T1_TECH (${techT1Result.modifiedCount}), T2->T2_TECH (${techT2Result.modifiedCount}). Total: ${technicalCount} questions.`);
-    console.log(`   Expected: 12 General + 12 Technical = 24 questions.`);
+    // console.log(`✅ 24 QUESTION MODE:`);
+    // console.log(`   General: Fixed T1 (${genT1Result.modifiedCount}), T2 (${genT2Result.modifiedCount}). Total: ${generalCount} questions.`);
+    // console.log(`   Technical: T1->T1_TECH (${techT1Result.modifiedCount}), T2->T2_TECH (${techT2Result.modifiedCount}). Total: ${technicalCount} questions.`);
+    // console.log(`   Expected: 12 General + 12 Technical = 24 questions.`);
     
   } catch (error) {
     console.error('⚠️ Could not update question codes on startup:', error.message);

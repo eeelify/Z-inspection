@@ -15,6 +15,7 @@ import {
   FileText,
   Trash2,
   RefreshCw,
+  CheckCircle,
 } from "lucide-react";
 import { Project, User, UseCase } from "../types";
 import { ChatPanel } from "./ChatPanel";
@@ -773,8 +774,9 @@ export function UserDashboard({
 
   // Assigned Projects
   const myProjects = projects.filter((p) => p.assignedUsers.includes(currentUser.id));
-  const assignedProjects = myProjects.filter((p) => !assignmentByProjectId[p.id]?.evolutionCompletedAt);
-  const finishedProjects = myProjects.filter((p) => Boolean(assignmentByProjectId[p.id]?.evolutionCompletedAt));
+  // A project is finished only when ALL experts have completed their evolution
+  const assignedProjects = myProjects.filter((p) => !assignmentByProjectId[p.id]?.allExpertsCompleted);
+  const finishedProjects = myProjects.filter((p) => Boolean(assignmentByProjectId[p.id]?.allExpertsCompleted));
 
   const activeProjectList = currentTab === "assigned" ? assignedProjects : finishedProjects;
 
@@ -1330,79 +1332,93 @@ export function UserDashboard({
                       {(() => {
                         const progress = projectProgresses[project.id] ?? project.progress ?? 0;
                         const evolutionCompleted = Boolean(assignmentByProjectId[project.id]?.evolutionCompletedAt);
-                        const canFinish = progress >= 100 && !evolutionCompleted;
+                        const allExpertsFinished = Boolean(assignmentByProjectId[project.id]?.allExpertsCompleted);
+                        const projectId = project.id || (project as any)._id;
+                        const isChecking = checkingExperts[projectId] || false;
+                        const allCompleted = allExpertsCompleted[projectId];
                         
-                        if (canFinish) {
-                          const projectId = project.id || (project as any)._id;
-                          const isChecking = checkingExperts[projectId] || false;
-                          const allCompleted = allExpertsCompleted[projectId];
-                          
-                          // Check all experts progress when canFinish becomes true
-                          if (allCompleted === undefined && !isChecking) {
-                            setCheckingExperts(prev => ({ ...prev, [projectId]: true }));
-                            (async () => {
-                              try {
-                                const assignedUsers = project.assignedUsers || [];
-                                if (assignedUsers.length === 0) {
-                                  setAllExpertsCompleted(prev => ({ ...prev, [projectId]: true }));
-                                  setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
-                                  return;
-                                }
-                                
-                                const progressPromises = assignedUsers.map(async (userId: string) => {
-                                  try {
-                                    const user = users.find(u => (u.id || (u as any)._id) === userId);
-                                    if (!user) return { userId, progress: 0 };
-                                    const userProgress = await fetchUserProgress(project, user);
-                                    return { userId, progress: userProgress };
-                                  } catch (err) {
-                                    console.error(`Error fetching progress for user ${userId}:`, err);
-                                    return { userId, progress: 0 };
-                                  }
-                                });
-                                
-                                const expertProgresses = await Promise.all(progressPromises);
-                                const allCompleted = expertProgresses.every(ep => ep.progress >= 100);
-                                setAllExpertsCompleted(prev => ({ ...prev, [projectId]: allCompleted }));
-                                
-                                if (allCompleted) {
-                                  if (tensionsVoted[projectId] === undefined && !checkingTensions[projectId]) {
-                                    setCheckingTensions(prev => ({ ...prev, [projectId]: true }));
-                                    try {
-                                      const tensionsRes = await fetch(api(`/api/tensions/${projectId}?userId=${currentUser.id || (currentUser as any)._id}`));
-                                      if (tensionsRes.ok) {
-                                        const tensions = await tensionsRes.json();
-                                        if (tensions.length === 0) {
-                                          setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
-                                        } else {
-                                          const assignedUserIds = assignedUsers.map((id: string) => String(id));
-                                          const allTensionsVoted = tensions.every((tension: any) => {
-                                            const votes = tension.votes || [];
-                                            const votedUserIds = votes.map((v: any) => String(v.userId));
-                                            return assignedUserIds.every((userId: string) => votedUserIds.includes(userId));
-                                          });
-                                          setTensionsVoted(prev => ({ ...prev, [projectId]: allTensionsVoted }));
-                                        }
-                                      } else {
-                                        setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
-                                      }
-                                    } catch (err) {
-                                      console.error('Error checking tensions:', err);
-                                      setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
-                                    } finally {
-                                      setCheckingTensions(prev => ({ ...prev, [projectId]: false }));
-                                    }
-                                  }
-                                }
-                              } catch (err) {
-                                console.error('Error checking all experts progress:', err);
-                                setAllExpertsCompleted(prev => ({ ...prev, [projectId]: null }));
-                              } finally {
+                        // Auto-check when user reaches 100% progress
+                        if (progress >= 100 && !evolutionCompleted && allCompleted === undefined && !isChecking) {
+                          setCheckingExperts(prev => ({ ...prev, [projectId]: true }));
+                          (async () => {
+                            try {
+                              const assignedUsers = project.assignedUsers || [];
+                              if (assignedUsers.length === 0) {
+                                setAllExpertsCompleted(prev => ({ ...prev, [projectId]: true }));
                                 setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
+                                return;
                               }
-                            })();
-                          }
-                          
+                              
+                              const progressPromises = assignedUsers.map(async (userId: string) => {
+                                try {
+                                  const user = users.find(u => (u.id || (u as any)._id) === userId);
+                                  if (!user) return { userId, progress: 0 };
+                                  const userProgress = await fetchUserProgress(project, user);
+                                  return { userId, progress: userProgress };
+                                } catch (err) {
+                                  console.error(`Error fetching progress for user ${userId}:`, err);
+                                  return { userId, progress: 0 };
+                                }
+                              });
+                              
+                              const expertProgresses = await Promise.all(progressPromises);
+                              const allCompleted = expertProgresses.every(ep => ep.progress >= 100);
+                              setAllExpertsCompleted(prev => ({ ...prev, [projectId]: allCompleted }));
+                              
+                              if (allCompleted) {
+                                if (tensionsVoted[projectId] === undefined && !checkingTensions[projectId]) {
+                                  setCheckingTensions(prev => ({ ...prev, [projectId]: true }));
+                                  try {
+                                    const tensionsRes = await fetch(api(`/api/tensions/${projectId}?userId=${currentUser.id || (currentUser as any)._id}`));
+                                    if (tensionsRes.ok) {
+                                      const tensions = await tensionsRes.json();
+                                      if (tensions.length === 0) {
+                                        setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
+                                      } else {
+                                        const assignedUserIds = assignedUsers.map((id: string) => String(id));
+                                        const allTensionsVoted = tensions.every((tension: any) => {
+                                          const votes = tension.votes || [];
+                                          const votedUserIds = votes.map((v: any) => String(v.userId));
+                                          return assignedUserIds.every((userId: string) => votedUserIds.includes(userId));
+                                        });
+                                        setTensionsVoted(prev => ({ ...prev, [projectId]: allTensionsVoted }));
+                                      }
+                                    } else {
+                                      setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                    }
+                                  } catch (err) {
+                                    console.error('Error checking tensions:', err);
+                                    setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                  } finally {
+                                    setCheckingTensions(prev => ({ ...prev, [projectId]: false }));
+                                  }
+                                }
+                              }
+                            } catch (err) {
+                              console.error('Error checking all experts progress:', err);
+                              setAllExpertsCompleted(prev => ({ ...prev, [projectId]: null }));
+                            } finally {
+                              setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
+                            }
+                          })();
+                        }
+                        
+                        // STATE 1: Not started or in progress (< 100%)
+                        if (progress < 100 && !evolutionCompleted) {
+                          return (
+                            <button
+                              onClick={() => onStartEvaluation(project)}
+                              className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
+                              style={{ backgroundColor: roleColor }}
+                            >
+                              <Play className="h-3 w-3 mr-2" />
+                              {progress > 0 ? 'Continue Evaluation' : 'Start Evaluation'}
+                            </button>
+                          );
+                        }
+                        
+                        // STATE 2: User finished (100%) but hasn't pressed finish evolution yet
+                        if (progress >= 100 && !evolutionCompleted) {
                           if (isChecking || checkingTensions[projectId]) {
                             return (
                               <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center">
@@ -1439,25 +1455,29 @@ export function UserDashboard({
                                 style={{ backgroundColor: roleColor }}
                               >
                                 <Target className="h-3 w-3 mr-2" />
-                                Finish Evaluation
+                                Finish Evolution
                               </button>
                             );
                           }
-                          
-                          return null;
                         }
-
-                        if (canStartEvaluation(project) && progress < 100 && !evolutionCompleted) {
-                          return (
-                            <button
-                              onClick={() => onStartEvaluation(project)}
-                              className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
-                              style={{ backgroundColor: roleColor }}
-                            >
-                              <Play className="h-3 w-3 mr-2" />
-                              {progress > 0 ? 'Continue Evaluation' : 'Start Evaluation'}
-                            </button>
-                          );
+                        
+                        // STATE 3: User has finished evolution
+                        if (evolutionCompleted) {
+                          if (allExpertsFinished) {
+                            return (
+                              <div className="px-4 py-2 text-white rounded-lg text-sm flex items-center bg-green-600">
+                                <CheckCircle className="h-3 w-3 mr-2" />
+                                Finished Evolution
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
+                                <Clock className="h-3 w-3 mr-2" />
+                                Waiting for other experts
+                              </div>
+                            );
+                          }
                         }
 
                         return null;

@@ -744,18 +744,18 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             {/* Risk Score Selection (0-4) */}
             <div className="mt-8 pt-6 border-t border-gray-200">
               <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Risk Score for This Question</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Importance Score for This Question</h3>
                 <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
                   Required
                 </span>
               </div>
               <div className="grid grid-cols-5 gap-3 max-w-4xl">
                 {([
-                  { value: 4, label: 'High risk', labelTr: 'Yüksek risk', desc: 'High likelihood of harm / major ethical concern. Immediate mitigation required.', descTr: 'Zarar olasılığı yüksek / ciddi etik sorun. Acil azaltım gerekli.', color: 'red' },
-                  { value: 3, label: 'Medium–High risk', labelTr: 'Orta–yüksek risk', desc: 'Meaningful risk; mitigation required before wider deployment.', descTr: 'Anlamlı risk; yaygın kullanımdan önce azaltım gerekli.', color: 'orange' },
-                  { value: 2, label: 'Medium risk', labelTr: 'Orta risk', desc: 'Some risk; monitor and improve safeguards.', descTr: 'Bir miktar risk; izleme ve güvenlik önlemleri güçlendirilmeli.', color: 'yellow' },
-                  { value: 1, label: 'Low risk', labelTr: 'Düşük risk', desc: 'Minor risk; acceptable with basic controls.', descTr: 'Küçük risk; temel kontrollerle kabul edilebilir.', color: 'blue' },
-                  { value: 0, label: 'No / Negligible risk', labelTr: 'Risk yok / ihmal edilebilir', desc: 'No meaningful ethical risk identified for this question.', descTr: 'Bu soru için anlamlı etik risk tespit edilmedi.', color: 'green' }
+                  { value: 4, label: 'Very Important', labelTr: 'Çok Önemli', desc: 'Critical question / This ethical principle should be dominant.', descTr: 'Kritik soru / Bu etik ilke baskın olmalı.', color: 'red' },
+                  { value: 3, label: 'Important', labelTr: 'Önemli', desc: 'Important question / This topic requires attention.', descTr: 'Önemli soru / Bu konuya dikkat edilmeli.', color: 'orange' },
+                  { value: 2, label: 'Moderately Important', labelTr: 'Orta Derecede Önemli', desc: 'Moderately important / Should be considered.', descTr: 'Orta derecede önemli / Dikkate alınmalı.', color: 'yellow' },
+                  { value: 1, label: 'Less Important', labelTr: 'Az Önemli', desc: 'Less important / Minor consideration.', descTr: 'Az önemli / Küçük bir husus.', color: 'blue' },
+                  { value: 0, label: 'Not Important', labelTr: 'Önemsiz', desc: 'Not important / Negligible for this evaluation.', descTr: 'Önemsiz / Bu değerlendirme için ihmal edilebilir.', color: 'green' }
                 ] as const).map(({ value, label, labelTr, desc, descTr, color }) => {
                   const questionKey = getQuestionKey(currentQuestion);
                   // Get risk value - check all possible keys (same logic as working buttons 4, 3, 2)

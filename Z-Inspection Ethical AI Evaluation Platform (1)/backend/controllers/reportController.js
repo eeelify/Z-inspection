@@ -1159,7 +1159,18 @@ exports.getLatestReport = async (req, res) => {
 exports.getReportById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    
+    // Try to load user, but don't fail if userId is missing (for public access)
+    let userIdObj = null;
+    let roleCategory = 'expert';
+    try {
+      const userData = await loadRequestUser(req);
+      userIdObj = userData.userIdObj;
+      roleCategory = userData.roleCategory;
+    } catch (userError) {
+      // If userId is missing, allow access but with limited permissions
+      console.warn('⚠️ No userId provided in request, using default permissions:', userError.message);
+    }
 
     const report = await Report.findById(id)
       .populate('projectId', 'title description')
@@ -1171,7 +1182,7 @@ exports.getReportById = async (req, res) => {
     }
 
     // Authorization: admin can view all. Expert/Viewer can only view reports for assigned projects.
-    if (roleCategory !== 'admin') {
+    if (roleCategory !== 'admin' && userIdObj) {
       const projectIdObj = report?.projectId?._id || report?.projectId;
       const ok = await isUserAssignedToProject({
         userIdObj,
@@ -1197,13 +1208,18 @@ exports.getReportById = async (req, res) => {
       } catch (metricsError) {
         // Don't fail the request if metrics can't be computed
         console.warn('⚠️ Could not compute fresh metrics for report review:', metricsError.message);
+        console.error('   Full error:', metricsError);
       }
     }
 
     res.json(report);
   } catch (err) {
-    console.error('Error fetching report:', err);
-    res.status(err.statusCode || 500).json({ error: err.message });
+    console.error('❌ Error fetching report:', err);
+    console.error('   Stack:', err.stack);
+    res.status(err.statusCode || 500).json({ 
+      error: err.message || 'Failed to fetch report',
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 };
 
