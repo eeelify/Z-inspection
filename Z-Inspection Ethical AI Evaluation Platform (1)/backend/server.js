@@ -412,6 +412,9 @@ const ReportSchema = new mongoose.Schema({
   // Computed metrics (for caching)
   computedMetrics: { type: mongoose.Schema.Types.Mixed, default: null },
   
+  // Scoring data (for HTML report generation and display)
+  scoring: { type: mongoose.Schema.Types.Mixed, default: null },
+  
   // New workflow: sections-based report editing
   sections: [{
     principle: String,
@@ -4540,7 +4543,35 @@ app.get('/api/projects', async (req, res) => {
       .limit(1000);
     
     console.log(`✅ Found ${projects.length} projects`);
-    res.json(projects);
+    
+    // Add evaluation status for each project (for admin dashboard)
+    const Response = mongoose.model('Response');
+    const Report = mongoose.model('Report');
+    
+    const enrichedProjects = await Promise.all(projects.map(async (project) => {
+      try {
+        // Check if any expert has answered any question
+        const anyAnswers = await Response.exists({ projectId: project._id });
+        
+        // Check if report has been generated
+        const reportExists = await Report.exists({ projectId: project._id });
+        
+        return {
+          ...project,
+          hasAnyAnswers: !!anyAnswers,
+          reportGenerated: !!reportExists
+        };
+      } catch (err) {
+        console.error(`Error enriching project ${project._id}:`, err);
+        return {
+          ...project,
+          hasAnyAnswers: false,
+          reportGenerated: false
+        };
+      }
+    }));
+    
+    res.json(enrichedProjects);
   } catch (err) {
     console.error('❌ Error fetching projects:', err);
     console.error('❌ Error stack:', err.stack);

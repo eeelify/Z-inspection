@@ -71,14 +71,17 @@ if (usePuppeteer) {
     }
     const scores = principles.map(p => {
       const data = byPrincipleOverall[p];
-      // Support both old format (avgScore, avg) and new format (risk)
       // TASK B: If null, return null (will be handled specially in chart)
       if (!data) return null;
-      // New format: use risk (scaled 0-4)
-      if (typeof data.risk === 'number') return data.risk;
-      // Old format: use avgScore or avg
-      if (typeof data.avgScore === 'number') return data.avgScore;
+      
+      // NEW FORMAT (Performance-based): use overallPerformance or avg
+      if (typeof data.overallPerformance === 'number') return data.overallPerformance;
       if (typeof data.avg === 'number') return data.avg;
+      
+      // LEGACY FORMAT (Risk-based): use avgScore or risk
+      if (typeof data.avgScore === 'number') return data.avgScore;
+      if (typeof data.risk === 'number') return data.risk;
+      
       return null;
     });
     
@@ -107,8 +110,8 @@ if (usePuppeteer) {
               throw new Error(`INVALID SCORE FOR CHART: Score ${s} is outside valid range [0-4]`);
             }
             // PERFORMANCE MODE: High score = good (green), Low score = bad (red)
-            const { colorForScore } = require('../utils/riskUtils');
-            return colorForScore(s, true); // true = performance mode
+            const { colorForPerformance } = require('../utils/riskUtils');
+            return colorForPerformance(s);
           }),
           borderColor: '#ffffff',
           borderWidth: 2
@@ -128,7 +131,7 @@ if (usePuppeteer) {
           },
           subtitle: {
             display: true,
-            text: 'Risk Scale: 0=MINIMAL, 1=LOW, 2=MEDIUM, 3=HIGH, 4=CRITICAL',
+            text: 'Performance Scale: 0=POOR, 1=FAIR, 2=GOOD, 3=VERY GOOD, 4=EXCELLENT (Higher = Better)',
             font: { size: 11, style: 'italic' },
             padding: { bottom: 10 }
           },

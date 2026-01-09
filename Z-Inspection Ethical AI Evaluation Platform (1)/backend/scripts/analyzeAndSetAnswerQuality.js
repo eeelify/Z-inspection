@@ -83,7 +83,20 @@ function inferAnswerQuality(optionKey, labelEn, labelTr) {
     // Quality
     /\badequate\b/,
     /\byeterli\b/,
-    /\bsufficient\b/
+    /\bsufficient\b/,
+    
+    // Low Risk (INVERTED: low risk = good = 1.0)
+    /\blow[_\s]risk\b/,
+    /\bdüşük[_\s]risk\b/,
+    /\bminimal[_\s]risk\b/,
+    
+    // Fully respects
+    /\bfully[_\s]respects\b/,
+    /\btamamen[_\s]saygı\b/,
+    
+    // Fully reliable
+    /\bfully[_\s]reliable\b/,
+    /\btamamen[_\s]güvenilir\b/
   ];
   
   // === 0.75 - GOOD ANSWERS ===
@@ -104,7 +117,11 @@ function inferAnswerQuality(optionKey, labelEn, labelTr) {
     /\bsık sık\b/,
     
     // Implementation
-    /\bmostly implemented\b/
+    /\bmostly implemented\b/,
+    
+    // Partially respects (better than moderate)
+    /\bpartially[_\s]respects\b/,
+    /\bkısmen[_\s]saygı\b/
   ];
   
   // === 0.5 - PARTIAL/NEUTRAL ANSWERS ===
@@ -113,6 +130,8 @@ function inferAnswerQuality(optionKey, labelEn, labelTr) {
     /\bpartially\b/,
     /\bkısmen\b/,
     /\bpartially compliant\b/,
+    /\bpartially[_\s]reliable\b/,
+    /\bkısmen[_\s]güvenilir\b/,
     
     // Clarity
     /\bsomewhat unclear\b/,
@@ -141,6 +160,8 @@ function inferAnswerQuality(optionKey, labelEn, labelTr) {
     // Moderate
     /\bmoderate\b/,
     /\borta\b/,
+    /\bmoderate[_\s]risk\b/,
+    /\borta[_\s]risk\b/,
     
     // Depends
     /\bdepends\b/,
@@ -176,7 +197,14 @@ function inferAnswerQuality(optionKey, labelEn, labelTr) {
     
     // Inadequate
     /\binadequate\b/,
-    /\byetersiz\b/
+    /\byetersiz\b/,
+    
+    // Moderate risk (moderate = not great but not terrible)
+    // Placing in weak (0.25) is debatable - could also be 0.5
+    // But for risk, "moderate risk" means there IS notable risk, so 0.25 might be appropriate
+    // May unintentionally restrict
+    /\bmay[_\s]unintentionally[_\s]restrict\b/,
+    /\bistemeden[_\s]kısıtlama\b/
   ];
   
   // === 0.0 - BAD/NEGATIVE ANSWERS ===
@@ -209,7 +237,21 @@ function inferAnswerQuality(optionKey, labelEn, labelTr) {
     // Missing/None
     /\bmissing\b/,
     /\bnone\b/,
-    /\byok\b/
+    /\byok\b/,
+    
+    // High Risk (INVERTED: high risk = bad)
+    /\bhigh[_\s]risk\b/,
+    /\byüksek[_\s]risk\b/,
+    
+    // Severe restriction
+    /\bsignificantly[_\s]restricts\b/,
+    /\bönemli[_\s]ölçüde[_\s]kısıtla\b/,
+    /\bseverely[_\s]restricts\b/,
+    
+    // Unreliable
+    /\bunreliable\b/,
+    /\bgüvenilmez\b/,
+    /\bnot[_\s]reliable\b/
   ];
   
   // Check in order: bad, weak, good, excellent, then partial (default)

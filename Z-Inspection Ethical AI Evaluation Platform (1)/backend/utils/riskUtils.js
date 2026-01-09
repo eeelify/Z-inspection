@@ -118,11 +118,67 @@ function getRiskDescription(score) {
   return descriptions[level] || 'Unknown risk level';
 }
 
+/**
+ * Get performance level label from numeric score (for performance model)
+ * @param {number} score - Performance score from 0 to 4
+ * @returns {string} Performance level
+ */
+function performanceLevelFromScore(score) {
+  if (score === null || score === undefined || isNaN(score)) {
+    return "UNKNOWN";
+  }
+  
+  // PERFORMANCE SCALE: Higher score = Better performance
+  if (score >= 3.5) return "EXCELLENT";
+  if (score >= 2.5) return "GOOD";
+  if (score >= 1.5) return "FAIR";
+  if (score >= 0.5) return "POOR";
+  return "CRITICAL"; // score < 0.5
+}
+
+/**
+ * Get performance tier object (for performance-based reporting)
+ * @param {number} score - Performance score from 0 to 4
+ * @returns {Object} { label: string, color: string }
+ */
+/**
+ * Get color for performance score (higher = better = green)
+ * @param {number} score - Score from 0 to 4
+ * @returns {string} Hex color code
+ */
+function colorForPerformance(score) {
+  if (score === null || score === undefined || isNaN(score)) {
+    return "#9ca3af"; // Gray for N/A
+  }
+  
+  // PERFORMANCE MODEL: High score = good (green), Low score = bad (red)
+  if (score >= 3.5) return "#10b981";      // Green - EXCELLENT
+  if (score >= 2.5) return "#84cc16";      // Light green - GOOD
+  if (score >= 1.5) return "#fbbf24";      // Yellow - FAIR
+  if (score >= 0.5) return "#f97316";      // Orange - POOR
+  return "#ef4444";                        // Red - CRITICAL
+}
+
+function getPerformanceTier(score) {
+  if (score === null || score === undefined || isNaN(score)) {
+    return { label: "UNKNOWN", color: "#9ca3af" };
+  }
+  
+  // PERFORMANCE MODEL: High score = good (green), Low score = bad (red)
+  const label = performanceLevelFromScore(score);
+  const color = colorForPerformance(score);
+  
+  return { label, color };
+}
+
 module.exports = {
   riskLevelFromScore,
   colorForScore,
+  colorForPerformance,
   getRiskTier,
   assertRiskScaleCorrectness,
-  getRiskDescription
+  getRiskDescription,
+  performanceLevelFromScore,
+  getPerformanceTier
 };
 

@@ -106,11 +106,11 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
 
   // Risk tier mapping using shared function
   // PERFORMANCE MODEL: Higher score = Better performance
-  const { getRiskTier } = require('../utils/riskUtils');
+  const { getPerformanceTier } = require('../utils/riskUtils');
 
   // Use overallPerformance (new) or avg (legacy fallback)
   const overallPerformance = scoring.totalsOverall?.overallPerformance || scoring.totalsOverall?.avg || 0;
-  const performanceTier = getRiskTier(overallPerformance, true); // true = performance mode (high = good)
+  const performanceTier = getPerformanceTier(overallPerformance); // Get performance-specific tier with correct colors
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -549,7 +549,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         </thead>
         <tbody>
           ${(options.analytics?.topRiskyQuestions || topRiskDrivers.questions || []).slice(0, 10).map((q, idx) => {
-            const riskTier = getRiskTier(q.avgRiskScore || q.avgRiskScore);
+            const perfTier = getPerformanceTier(q.avgRiskScore || q.avgScore || 0);
             // Get answer snippet from topRiskyQuestionContext
             const contextItem = options.analytics?.topRiskyQuestionContext?.find(c => c.questionId === q.questionId);
             let excerpt = '';
@@ -732,14 +732,14 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       
       ${geminiNarrative?.principleFindings ? geminiNarrative.principleFindings.map(finding => {
         const principleData = scoring.byPrincipleOverall[finding.principle];
-        const riskTier = principleData ? getRiskTier(principleData.avgScore) : null;
+        const perfTier = principleData ? getPerformanceTier(principleData.avgScore) : null;
         return `
         <div style="margin-bottom: 1cm; padding: 0.6cm; background: #f9fafb; border-left: 4px solid #3b82f6;">
           <h3>${finding.principle || 'Unknown Principle'}</h3>
           ${principleData ? `
           <div style="margin: 0.4cm 0;">
             <strong>Average Score:</strong> ${principleData.avgScore.toFixed(2)}/4.0 
-            <span class="risk-badge risk-${riskTier.label.toLowerCase()}" style="margin-left: 0.5cm;">${riskTier.label} Risk</span>
+            <span class="risk-badge" style="margin-left: 0.5cm; background: ${perfTier.color}; color: white; padding: 4px 8px; border-radius: 4px;">${perfTier.label} Performance</span>
           </div>
           <div style="font-size: 9pt; color: #6b7280; margin-bottom: 0.4cm;">
             Risk: ${principleData.riskPct.toFixed(1)}% | Safe: ${principleData.safePct.toFixed(1)}% 

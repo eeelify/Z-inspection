@@ -99,35 +99,30 @@ const ProjectCard: React.FC<{
 
       <div className="flex items-center space-x-2 mb-4">
         {(() => {
-          // Check if project has report generated
+          // Check evaluation status from backend
+          const hasAnyAnswers = (project as any).hasAnyAnswers || false;
           const hasReport = (project as any).reportGenerated || false;
-          const isComplete = progressDisplay >= 100;
           
-          if (isComplete && hasReport) {
-            // Report generated → show RESOLVED
+          if (hasReport) {
+            // Report generated → RESOLVE
             return (
               <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                RESOLVED
+                RESOLVE
               </span>
             );
-          } else if (isComplete && !hasReport) {
-            // Progress 100% but no report → show "Report can be generated"
+          } else if (hasAnyAnswers) {
+            // Questions being answered → ASSESS
             return (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                ONGOING - Report Available
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                ASSESS
               </span>
             );
           } else {
-            // Still in progress → show current status and stage
+            // No answers yet → SETUP
             return (
-              <>
-                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
-                  {project.status.toUpperCase()}
-                </span>
-                <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
-                  {stageLabels[project.stage]}
-                </span>
-              </>
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                SETUP
+              </span>
             );
           }
         })()}

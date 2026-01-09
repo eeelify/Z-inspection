@@ -203,13 +203,15 @@ function calculateAnswerSeverityFreeText(answerEntry) {
  * Main function to calculate answerSeverity based on question type
  * @param {Object} question - Question document
  * @param {Object} answerEntry - Answer entry from Response
- * @returns {Object} { answerSeverity: number (0-1), metadata: object }
+ * @returns {Object} { answerSeverity: number (0-1), isQuality: boolean, source: string, metadata: object }
  */
 function calculateAnswerSeverity(question, answerEntry) {
   if (question.answerType === 'single_choice' || question.answerType === 'multi_choice') {
     const result = calculateAnswerSeveritySelect(question, answerEntry);
     return {
       answerSeverity: result.answerSeverity,
+      isQuality: result.isQuality || false, // ✅ CRITICAL: Pass through isQuality flag
+      source: result.source,
       metadata: {
         answerType: 'select',
         mappingMissing: result.mappingMissing,
@@ -220,6 +222,8 @@ function calculateAnswerSeverity(question, answerEntry) {
     const result = calculateAnswerSeverityFreeText(answerEntry);
     return {
       answerSeverity: result.answerSeverity,
+      isQuality: result.isQuality || false,
+      source: result.source,
       metadata: {
         answerType: 'free_text',
         source: result.source
@@ -229,6 +233,8 @@ function calculateAnswerSeverity(question, answerEntry) {
     // Numeric or unknown - default to medium severity
     return {
       answerSeverity: 0.5,
+      isQuality: false,
+      source: 'default_unsupported_type',
       metadata: {
         answerType: question.answerType || 'unknown',
         source: 'default_unsupported_type'

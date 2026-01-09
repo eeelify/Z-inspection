@@ -892,6 +892,8 @@ exports.generateReport = async (req, res) => {
         chartTypes: Object.keys(chartImages),
         hasHTMLReport: true
       },
+      // Store scoring data for HTML report generation (CRITICAL for correct report display)
+      scoring: reportMetrics?.scores || null,
       // Store chart images as base64 in computedMetrics
       computedMetrics: reportMetrics ? {
         ...reportMetrics,
@@ -949,6 +951,15 @@ exports.generateReport = async (req, res) => {
     
     console.log(`✅ Report generated and saved: ${reportId}`);
     console.log(`📊 Report has ${normalizedChartCount} chart(s) in computedMetrics`);
+
+    // CRITICAL: Mark this report as the latest one (unmark all previous reports)
+    try {
+      await Report.markAsLatest(reportId, projectIdObj);
+      console.log(`✅ Report marked as latest for project ${projectIdObj}`);
+    } catch (latestErr) {
+      console.error(`⚠️ Failed to mark report as latest:`, latestErr);
+      // Continue anyway - report is still generated and saved
+    }
 
     // Notify all assigned experts (excluding admin who generated the report)
     try {

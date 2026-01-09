@@ -174,14 +174,15 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
           continue;
         }
 
-        // SCORING MODEL: Get Question Importance (0-4) from question.riskScore or answer.score
-        // Priority: question.riskScore (expert-provided importance) > answer.score (legacy)
+        // SCORING MODEL: Get Question Importance (0-4) from expert's answer or question default
+        // Priority: answer.score (expert-assigned importance per use case) > question.riskScore (default)
         let questionImportance = 2; // Default to medium importance
-        if (question.riskScore !== undefined && question.riskScore !== null) {
-          questionImportance = Math.max(0, Math.min(4, question.riskScore));
-        } else if (answer.score !== undefined && answer.score !== null) {
-          // Fallback to answer.score for backward compatibility
+        if (answer.score !== undefined && answer.score !== null) {
+          // PRIORITY 1: Use expert's assigned importance for this specific answer
           questionImportance = Math.max(0, Math.min(4, answer.score));
+        } else if (question.riskScore !== undefined && question.riskScore !== null) {
+          // PRIORITY 2: Fallback to question's default importance
+          questionImportance = Math.max(0, Math.min(4, question.riskScore));
         }
 
         // SCORING MODEL: Calculate Answer Quality/Severity (0-1) from answer content
