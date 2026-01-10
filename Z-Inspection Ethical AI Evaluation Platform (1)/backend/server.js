@@ -126,6 +126,7 @@ const ProjectSchema = new mongoose.Schema({
   progress: { type: Number, default: 0 },
   assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   useCase: { type: String },
+  createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Admin who created this project
   inspectionContext: { 
     requester: String,
     inspectionReason: String,
@@ -4514,13 +4515,29 @@ app.get('/api/projects', async (req, res) => {
     // Build query
     const query = {};
     
-    // Filter out projects hidden for this user (soft delete) if hiddenForUsers field exists
-    // Note: hiddenForUsers field may not exist in all projects, so we check if it exists
+    // Check if user is admin - if so, only show projects created by this admin
     if (userId && isValidObjectId(userId)) {
-      query.$or = [
-        { hiddenForUsers: { $exists: false } },
-        { hiddenForUsers: { $nin: [new mongoose.Types.ObjectId(userId)] } }
-      ];
+      try {
+        const user = await User.findById(userId).select('role').lean();
+        if (user && user.role && user.role.toLowerCase().includes('admin')) {
+          // Admin users can only see projects they created
+          // Only show projects where createdByAdmin exists and equals userId
+          query.createdByAdmin = { $exists: true, $eq: new mongoose.Types.ObjectId(userId) };
+          console.log('🔒 Admin user detected - filtering by createdByAdmin:', userId);
+        }
+      } catch (err) {
+        console.warn('Could not verify user role:', err.message);
+      }
+      
+      // Filter out projects hidden for this user (soft delete) if hiddenForUsers field exists
+      // Note: hiddenForUsers field may not exist in all projects, so we check if it exists
+      if (!query.createdByAdmin) {
+        // Only apply hiddenForUsers filter if not already filtering by createdByAdmin
+        query.$or = [
+          { hiddenForUsers: { $exists: false } },
+          { hiddenForUsers: { $nin: [new mongoose.Types.ObjectId(userId)] } }
+        ];
+      }
     }
     
     console.log('🔍 Query:', JSON.stringify(query));
@@ -4687,6 +4704,22 @@ app.get('/api/scores', async (req, res) => {
 
 app.post('/api/projects', async (req, res) => {
   try {
+    // Get userId from request (body, query, or headers)
+    const userId = req.body?.userId || req.query?.userId || req.headers?.['x-user-id'] || req.headers?.['x-userid'];
+    
+    // If userId is provided and user is admin, set createdByAdmin
+    if (userId && isValidObjectId(userId)) {
+      try {
+        const user = await User.findById(userId).select('role').lean();
+        if (user && user.role && user.role.toLowerCase().includes('admin')) {
+          req.body.createdByAdmin = userId;
+        }
+      } catch (err) {
+        // If user lookup fails, continue without setting createdByAdmin
+        console.warn('Could not verify user role for createdByAdmin:', err.message);
+      }
+    }
+    
     // If a useCase is linked, ensure its owner is assigned to the project (server-side safety).
     if (req.body?.useCase) {
       try {

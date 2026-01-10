@@ -218,6 +218,7 @@ export function AdminDashboardEnhanced({
     // If still no project, create one via API
     if (!commProject) {
       try {
+        const userId = currentUser?.id || (currentUser as any)?._id;
         const response = await fetch(api('/api/projects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -228,6 +229,7 @@ export function AdminDashboardEnhanced({
             stage: 'set-up',
             status: 'ongoing',
             targetDate: new Date().toISOString(),
+            userId: userId, // Add userId so backend can set createdByAdmin
             assignedUsers: [currentUser.id, otherUser.id],
             progress: 0
           }),

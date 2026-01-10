@@ -50,8 +50,11 @@ function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
+        // Only send userId for admin users (for project filtering)
+        const isAdmin = currentUser?.role?.toLowerCase().includes('admin');
+        const userId = isAdmin ? (currentUser?.id || (currentUser as any)?._id) : null;
         const [projectsRes, usersRes, useCasesRes] = await Promise.all([
-          fetch(api('/api/projects'), { signal: controller.signal }),
+          fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`), { signal: controller.signal }),
           fetch(api('/api/users'), { signal: controller.signal }),
           fetch(api('/api/use-cases'), { signal: controller.signal })
         ]);
@@ -122,7 +125,10 @@ function App() {
     // Periodically refresh projects (every 10 seconds) to catch assignment updates
     const refreshInterval = setInterval(() => {
       if (currentUser) {
-        fetch(api('/api/projects'))
+        // Only send userId for admin users (for project filtering)
+        const isAdmin = currentUser?.role?.toLowerCase().includes('admin');
+        const userId = isAdmin ? (currentUser?.id || (currentUser as any)?._id) : null;
+        fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`))
           .then(res => res.ok ? res.json() : null)
           .then(data => {
             if (data) {
@@ -424,11 +430,15 @@ function App() {
   // --- CREATION HANDLERS (BACKEND'E KAYIT) ---
   const handleCreateProject = async (projectData: Partial<Project>): Promise<Project | null> => {
     try {
+      // Only send userId for admin users (so backend can set createdByAdmin)
+      const isAdmin = currentUser?.role?.toLowerCase().includes('admin');
+      const userId = isAdmin ? (currentUser?.id || (currentUser as any)?._id) : null;
       const response = await fetch(api('/api/projects'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...projectData,
+          ...(userId && { userId }), // Only add userId if admin
           status: "ongoing",
           stage: "set-up",
           progress: 0,
