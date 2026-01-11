@@ -153,7 +153,7 @@ async function aggregateUnifiedAnswers(projectIdObj) {
   const unifiedAnswers = [];
 
   // 1. Fetch from responses collection (no status filter - get all with answers)
-  const responses = await Response.find({ 
+  const responses = await Response.find({
     projectId: projectIdObj
   }).populate('answers.questionId').lean();
 
@@ -161,11 +161,11 @@ async function aggregateUnifiedAnswers(projectIdObj) {
     for (const answer of response.answers || []) {
       const questionId = answer.questionId?._id?.toString() || answer.questionId?.toString() || answer.questionId;
       const questionCode = answer.questionCode;
-      
+
       // Extract text answer based on answer type
       let textAnswer = '';
       let selectedOption = '';
-      
+
       if (answer.answer) {
         if (answer.answer.text) {
           textAnswer = answer.answer.text;
@@ -203,22 +203,22 @@ async function aggregateUnifiedAnswers(projectIdObj) {
   }
 
   // 2. Fetch from generalquestionanswers collection
-  const generalAnswersDocs = await GeneralQuestionsAnswers.find({ 
-    projectId: projectIdObj 
+  const generalAnswersDocs = await GeneralQuestionsAnswers.find({
+    projectId: projectIdObj
   }).lean();
 
   for (const gqa of generalAnswersDocs) {
     const role = gqa.userRole || 'unknown';
-    
+
     // Process principles structure
     if (gqa.principles) {
       for (const [principle, principleData] of Object.entries(gqa.principles)) {
         const answers = principleData.answers || {};
         const risks = principleData.risks || {};
-        
+
         for (const [questionKey, answerValue] of Object.entries(answers)) {
           const riskScore = risks[questionKey] !== undefined ? risks[questionKey] : null;
-          
+
           unifiedAnswers.push({
             questionId: questionKey,
             questionCode: questionKey,
@@ -235,23 +235,23 @@ async function aggregateUnifiedAnswers(projectIdObj) {
         }
       }
     }
-    
+
     // Also process legacy flat structure for backward compatibility
     if (gqa.answers && Object.keys(gqa.answers).length > 0) {
       const answers = gqa.answers || {};
       const risks = gqa.risks || {};
-      
+
       for (const [questionKey, answerValue] of Object.entries(answers)) {
         // Skip if already processed in principles structure
-        const alreadyProcessed = unifiedAnswers.some(ua => 
-          ua.questionId === questionKey && 
+        const alreadyProcessed = unifiedAnswers.some(ua =>
+          ua.questionId === questionKey &&
           ua.sourceCollection === 'generalquestionanswers' &&
           ua.userId === (gqa.userId?.toString() || gqa.userId)
         );
-        
+
         if (!alreadyProcessed) {
           const riskScore = risks[questionKey] !== undefined ? risks[questionKey] : null;
-          
+
           unifiedAnswers.push({
             questionId: questionKey,
             questionCode: questionKey,
@@ -278,8 +278,8 @@ async function aggregateUnifiedAnswers(projectIdObj) {
  */
 async function collectAnalysisData(projectId) {
   try {
-    const projectIdObj = isValidObjectId(projectId) 
-      ? new mongoose.Types.ObjectId(projectId) 
+    const projectIdObj = isValidObjectId(projectId)
+      ? new mongoose.Types.ObjectId(projectId)
       : projectId;
 
     // Get project
@@ -291,13 +291,13 @@ async function collectAnalysisData(projectId) {
     // Ensure all scores are computed using NEW ethical scoring system before generating report
     // This ensures medical, legal, education and other role-specific scores are included
     const { computeEthicalScores, computeProjectEthicalScores } = require('../services/ethicalScoringService');
-    
+
     // Get all unique userId/questionnaireKey combinations for this project
-    const responses = await Response.find({ 
+    const responses = await Response.find({
       projectId: projectIdObj,
       status: { $in: ['draft', 'submitted'] }
     }).select('userId questionnaireKey').lean();
-    
+
     const uniqueCombinations = new Set();
     responses.forEach(r => {
       if (r.userId && r.questionnaireKey) {
@@ -305,18 +305,18 @@ async function collectAnalysisData(projectId) {
         uniqueCombinations.add(`${userIdStr}_${r.questionnaireKey}`);
       }
     });
-    
+
     // Check if scores need recomputation (old format vs new format)
     const existingScores = await Score.find({ projectId: projectIdObj })
       .select('totals.overallRisk totals.overallMaturity computedAt')
       .lean();
-    
-    const needsRecomputation = existingScores.length === 0 || 
+
+    const needsRecomputation = existingScores.length === 0 ||
       existingScores.some(s => !s.totals?.overallRisk && !s.totals?.overallMaturity);
-    
+
     if (needsRecomputation) {
       console.log('🔄 Scores need recomputation (old format detected or missing), computing with new ethical scoring system...');
-      
+
       // Compute scores for all combinations using NEW ethical scoring
       for (const combo of uniqueCombinations) {
         const [userId, questionnaireKey] = combo.split('_');
@@ -327,7 +327,7 @@ async function collectAnalysisData(projectId) {
           console.warn(`⚠️ Could not compute ethical scores for ${userId}/${questionnaireKey}:`, error.message);
         }
       }
-      
+
       // Compute project-level scores
       try {
         await computeProjectEthicalScores(projectIdObj);
@@ -347,23 +347,23 @@ async function collectAnalysisData(projectId) {
     console.log(`📊 Aggregated ${unifiedAnswers.length} unified answers (from responses and generalquestionanswers)`);
 
     // Get general questions answers (keep for backward compatibility in prompt builder)
-    const generalAnswers = await GeneralQuestionsAnswers.find({ 
-      projectId: projectIdObj 
+    const generalAnswers = await GeneralQuestionsAnswers.find({
+      projectId: projectIdObj
     }).lean();
 
     // Get evaluations
-    const evaluations = await Evaluation.find({ 
-      projectId: projectIdObj 
+    const evaluations = await Evaluation.find({
+      projectId: projectIdObj
     }).lean();
 
     // Get tensions (with ALL fields)
-    const tensions = await Tension.find({ 
-      projectId: projectIdObj 
+    const tensions = await Tension.find({
+      projectId: projectIdObj
     }).lean();
 
     // Get assigned users
-    const users = await User.find({ 
-      _id: { $in: project.assignedUsers || [] } 
+    const users = await User.find({
+      _id: { $in: project.assignedUsers || [] }
     }).select('name email role').lean();
 
     return {
@@ -407,26 +407,26 @@ exports.generateReport = async (req, res) => {
     const unifiedAnswers = analysisData.unifiedAnswers || [];
     const tensions = analysisData.tensions || [];
     const scores = analysisData.scores || [];
-    
+
     console.log(`📊 Validation: ${unifiedAnswers.length} unified answers, ${tensions.length} tensions, ${scores.length} scores`);
-    
+
     // Preflight validation will be done after reportMetrics and charts are built (see STEP 2.6)
-    
+
     // Check for high-severity tensions only (removed wrong score < 3 logic)
     const highSeverityTensions = tensions.filter(t => {
       const severity = String(t.severity || '').toLowerCase();
       return severity.includes('high') || severity.includes('critical');
     });
-    
+
     if (highSeverityTensions.length > 0) {
       console.log(`⚠️  ${highSeverityTensions.length} high-severity tensions require detailed explanation`);
     }
-    
+
     // Validate that we have answers if any exist in database
     if (unifiedAnswers.length === 0) {
       console.warn('⚠️  WARNING: No unified answers found. Report may be incomplete.');
     }
-    
+
     // Validate tensions are included
     if (tensions.length > 0) {
       console.log(`✅ ${tensions.length} tensions will be analyzed in the report`);
@@ -439,7 +439,7 @@ exports.generateReport = async (req, res) => {
     let reportMetrics;
     let chartResults = {};
     let chartErrors = null;
-    
+
     try {
       // Build metrics using reportMetricsService - include ALL questionnaires (general + role-specific)
       // Pass null to include all questionnaires, not just 'general-v1'
@@ -454,7 +454,7 @@ exports.generateReport = async (req, res) => {
         uniqueEvaluatorCount: reportMetrics?.scoring?.totalsOverall?.uniqueEvaluatorCount,
         count: reportMetrics?.scoring?.totalsOverall?.count
       });
-      
+
       // Get analytics for chart data - include ALL questionnaires
       const analytics = await getProjectAnalytics(projectId, null);
       const { getProjectEvaluators } = require('../services/reportMetricsService');
@@ -463,12 +463,12 @@ exports.generateReport = async (req, res) => {
         assigned: evaluatorsData?.assigned?.length || 0,
         submitted: evaluatorsData?.submitted?.length || 0
       });
-      
+
       // ============================================================
       // STEP 2: Generate ALL charts using Chart Contract
       // ============================================================
       console.log('📊 Generating charts using Chart Contract system...');
-      
+
       // Prepare tensions data
       let tensionsSummary = {};
       if (tensions.length > 0) {
@@ -481,7 +481,7 @@ exports.generateReport = async (req, res) => {
           resolved: 0,
           total: tensions.length
         };
-        
+
         tensions.forEach(t => {
           const state = String(t.status || 'ongoing').toLowerCase();
           if (state.includes('proposed')) reviewStateCounts.proposed++;
@@ -491,9 +491,9 @@ exports.generateReport = async (req, res) => {
           else if (state.includes('resolved')) reviewStateCounts.resolved++;
           else reviewStateCounts.proposed++; // Default to proposed
         });
-        
+
         const evidenceTypeDistribution = reportMetrics.tensionsSummary?.evidenceTypeDistribution || {};
-        
+
         tensionsSummary = {
           summary: {
             ...reviewStateCounts,
@@ -502,12 +502,12 @@ exports.generateReport = async (req, res) => {
           list: tensions
         };
       }
-      
+
       // Build coverage data for evidence charts
       const coverageData = {
         evidenceMetrics: analytics.evidenceMetrics || null
       };
-      
+
       // CRITICAL DEBUG: Log data before passing to chart generation
       console.log('🔍 [DEBUG reportController] Passing data to chart generation:');
       console.log('   scoring.byPrincipleOverall exists:', !!reportMetrics.scoring?.byPrincipleOverall);
@@ -515,7 +515,7 @@ exports.generateReport = async (req, res) => {
         const principleKeys = Object.keys(reportMetrics.scoring.byPrincipleOverall);
         console.log('   Principle count:', principleKeys.length);
         console.log('   Principle keys:', principleKeys.join(', '));
-        
+
         // Log first 2 principles in detail
         principleKeys.slice(0, 2).forEach(key => {
           const data = reportMetrics.scoring.byPrincipleOverall[key];
@@ -531,7 +531,7 @@ exports.generateReport = async (req, res) => {
         console.error('   ❌ reportMetrics.scoring.byPrincipleOverall is MISSING or EMPTY!');
         console.error('   reportMetrics.scoring keys:', Object.keys(reportMetrics.scoring || {}));
       }
-      
+
       // Call the unified chart generation function with Chart Contract
       const chartGenerationResult = await chartGenerationService.generateAllCharts({
         projectId,
@@ -541,12 +541,12 @@ exports.generateReport = async (req, res) => {
         tensions: tensionsSummary,
         coverage: coverageData
       });
-      
+
       chartResults = chartGenerationResult.charts;
       chartErrors = chartGenerationResult.chartErrors;
-      
+
       console.log(`✅ Chart Contract system generated ${Object.keys(chartResults).length} chart(s)`);
-      
+
       // Log chart status
       Object.entries(chartResults).forEach(([chartId, chart]) => {
         const status = chart.meta?.status || 'unknown';
@@ -559,12 +559,12 @@ exports.generateReport = async (req, res) => {
           console.error(`   ❌ ${chartId}: error (${reason})`);
         }
       });
-      
+
       if (chartErrors && chartErrors.length > 0) {
         console.warn(`⚠️  ${chartErrors.length} chart generation error(s) occurred (charts have placeholders)`);
         chartErrors.forEach(err => console.warn(`   - ${err.chart}: ${err.error}`));
       }
-      
+
     } catch (error) {
       console.error('❌ Chart generation pipeline failed:', error.message);
       console.error(error.stack);
@@ -575,21 +575,21 @@ exports.generateReport = async (req, res) => {
     // STEP 2.5: CONVERT CHART CONTRACT OBJECTS TO DATA URIs FOR HTML
     // ============================================================
     console.log('🔄 Converting chart objects to data URIs for HTML template...');
-    
+
     // Chart Contract objects have .pngBase64 (without data: prefix)
     // HTML template expects data:image/png;base64,... strings
     const chartImages = {};
-    
+
     for (const [chartId, chartResult] of Object.entries(chartResults)) {
       if (!chartResult || !chartResult.pngBase64) {
         console.warn(`⚠️  Chart ${chartId} is missing pngBase64, skipping`);
         continue;
       }
-      
+
       // If pngBase64 already has data: prefix, use it as is
       if (chartResult.pngBase64.startsWith('data:image/')) {
         chartImages[chartId] = chartResult.pngBase64;
-      } 
+      }
       // Otherwise, add data: prefix
       else if (chartResult.pngBase64.length > 0) {
         chartImages[chartId] = `data:image/png;base64,${chartResult.pngBase64}`;
@@ -599,7 +599,7 @@ exports.generateReport = async (req, res) => {
         console.warn(`⚠️  Chart ${chartId} has empty pngBase64 (status: ${chartResult.meta?.status})`);
       }
     }
-    
+
     const normalizedChartCount = Object.keys(chartImages).length;
     console.log(`✅ Converted ${normalizedChartCount} chart(s) to data URIs for HTML template`);
 
@@ -612,12 +612,12 @@ exports.generateReport = async (req, res) => {
     try {
       topDriversTable = await buildTopRiskDriversTable(projectId);
       console.log(`✅ Built top risk drivers table with ${topDriversTable.length} drivers`);
-      
+
       // C) Ensure table is never empty unless truly no questions
       if (topDriversTable.length === 0 && scores.length > 0) {
         console.warn('⚠️  WARNING: Top drivers table is empty despite having scores. This may indicate missing topDrivers in scores.byPrinciple.');
       }
-      
+
       // Add to reportMetrics for Gemini
       if (reportMetrics && reportMetrics.scoring) {
         reportMetrics.scoring.topRiskDrivers = {
@@ -634,16 +634,16 @@ exports.generateReport = async (req, res) => {
     // STEP 3: Generate report narrative using Gemini AI (NARRATIVE ONLY)
     // ============================================================
     console.log('🤖 Calling Gemini API for narrative generation...');
-    
+
     // ============================================================
     // STEP 2.6: PREFLIGHT VALIDATION (Chart Contract Compliance)
     // ============================================================
     console.log('🔍 Running preflight validation with Chart Contract...');
     const { validateReportPreflight } = require('../utils/reportPreflightValidator');
     const { getProjectEvaluators } = require('../services/reportMetricsService');
-    
+
     const evaluators = await getProjectEvaluators(projectId);
-    
+
     // Pass chart contract objects (with metadata) to preflight validator
     const preflightResult = validateReportPreflight({
       reportMetrics,
@@ -652,7 +652,7 @@ exports.generateReport = async (req, res) => {
       tensions,
       chartImages: chartResults // Pass full chart contract objects, not just data URIs
     });
-    
+
     if (preflightResult.errors.length > 0) {
       console.error('❌ Preflight validation FAILED:');
       preflightResult.errors.forEach(err => console.error(`   - ${err}`));
@@ -660,14 +660,14 @@ exports.generateReport = async (req, res) => {
         `Preflight validation failed: ${preflightResult.errors.join('; ')}`
       );
     }
-    
+
     if (preflightResult.warnings.length > 0) {
       console.warn('⚠️  Preflight warnings:');
       preflightResult.warnings.forEach(warn => console.warn(`   - ${warn}`));
     }
-    
+
     console.log('✅ Preflight validation passed');
-    
+
     // SAFETY ASSERTION: Verify risk scale correctness
     const { validateRiskScaleNotInverted } = require('../utils/riskScale');
     if (scores.length > 0) {
@@ -689,7 +689,7 @@ exports.generateReport = async (req, res) => {
         // Don't throw - log error but continue (non-blocking)
       }
     }
-    
+
     // Enhance analysisData with chart metadata for Gemini (informational only - charts already generated)
     const analysisDataWithCharts = {
       ...analysisData,
@@ -702,12 +702,12 @@ exports.generateReport = async (req, res) => {
       },
       reportMetrics: reportMetrics || null
     };
-    
+
     // Call Gemini for NARRATIVE ONLY (no chart references)
     let geminiNarrative;
     try {
       geminiNarrative = await generateReport(analysisDataWithCharts);
-      
+
       // DEFENSIVE VALIDATION: Validate narrative quality
       if (!geminiNarrative || geminiNarrative.trim().length === 0) {
         throw new Error('Empty narrative generated');
@@ -715,7 +715,7 @@ exports.generateReport = async (req, res) => {
     } catch (geminiError) {
       console.warn(`⚠️  Gemini narrative generation failed: ${geminiError.message}`);
       console.warn('   Generating fallback narrative with metrics only...');
-      
+
       // FALLBACK: Generate simple narrative from metrics
       const overallPerf = reportMetrics?.scoring?.totalsOverall?.overallPerformance || reportMetrics?.scoring?.totalsOverall?.avg || 0;
       const perfPct = Math.round((overallPerf / 4) * 100);
@@ -734,14 +734,14 @@ exports.generateReport = async (req, res) => {
         `Performance Score = Question Importance (0-4) × Answer Quality (0-1)\n` +
         `Higher scores indicate better ethical performance.\n`;
     }
-    
+
     // Check if narrative has minimum content
     const narrativeLength = geminiNarrative.trim().length;
     if (unifiedAnswers.length > 0 && narrativeLength < 500) {
       console.error(`⚠️  WARNING: Narrative seems too short (${narrativeLength} chars) for ${unifiedAnswers.length} answers`);
       // Don't throw error, but log warning
     }
-    
+
     // Check if tensions are mentioned (basic check)
     if (tensions.length > 0) {
       const tensionMentions = tensions.filter(t => {
@@ -758,13 +758,13 @@ exports.generateReport = async (req, res) => {
     // STEP 4: Generate HTML report with charts + narrative
     // ============================================================
     console.log('📄 Generating HTML report with charts and narrative...');
-    
+
     // Get analytics for HTML template
     const analytics = await getProjectAnalytics(projectId, 'general-v1');
-    
+
     // Chart images are already normalized to base64 data URIs, use directly
     const chartImagesBase64 = chartImages;
-    
+
     // Debug: Verify chart images before HTML generation
     console.log(`🔍 DEBUG: Chart images for HTML: ${Object.keys(chartImagesBase64).length} charts`);
     Object.keys(chartImagesBase64).forEach(key => {
@@ -772,7 +772,7 @@ exports.generateReport = async (req, res) => {
       const isDataUri = typeof img === 'string' && img.startsWith('data:image/');
       console.log(`  - ${key}: ${isDataUri ? '✅ data URI' : '❌ NOT data URI'} (${typeof img}, ${img?.length || 0} chars)`);
     });
-    
+
     // Create structured narrative object for HTML template
     // The template expects structured data, but we have markdown
     // We'll pass markdown as a fallback and let the template render it
@@ -784,7 +784,7 @@ exports.generateReport = async (req, res) => {
       principleFindings: [],
       recommendations: []
     };
-    
+
     // Generate HTML report
     const htmlReport = generateHTMLReport(
       reportMetrics || {},
@@ -796,26 +796,26 @@ exports.generateReport = async (req, res) => {
         reportMetrics: reportMetrics
       }
     );
-    
+
     if (!htmlReport || htmlReport.trim().length === 0) {
       throw new Error('HTML report generation failed: Empty HTML generated');
     }
-    
+
     // Debug: Check if charts are in HTML
     // Count chart images embedded as data URIs (correct way to check)
     const imgTagCount = (htmlReport.match(/<img[^>]*src=["']data:image\/[^"']+["']/g) || []).length;
     const expectedChartCount = Object.keys(chartImagesBase64).length;
-    
+
     console.log(`✅ HTML report generated (${htmlReport.length} chars)`);
     console.log(`🔍 DEBUG: img tags with data URIs in HTML: ${imgTagCount} (expected: ${expectedChartCount})`);
-    
+
     // Validation: Ensure all charts are embedded
     if (imgTagCount < expectedChartCount) {
       console.warn(`⚠️  WARNING: Only ${imgTagCount}/${expectedChartCount} charts found in HTML. Some charts may be missing.`);
     } else {
       console.log(`✅ All ${expectedChartCount} charts successfully embedded in HTML`);
     }
-    
+
     // Check if HTML is too large for MongoDB (16MB limit for String fields)
     const htmlSizeMB = htmlReport.length / (1024 * 1024);
     if (htmlSizeMB > 10) {
@@ -865,7 +865,7 @@ exports.generateReport = async (req, res) => {
         chartImagesForStorage[key] = dataUri;
       }
     }
-    
+
     // Debug: Verify htmlReport before saving
     console.log(`🔍 DEBUG: htmlReport type: ${typeof htmlReport}, length: ${htmlReport?.length || 0}, isString: ${typeof htmlReport === 'string'}`);
 
@@ -905,19 +905,19 @@ exports.generateReport = async (req, res) => {
     // Save report first (without htmlContent to avoid Mongoose dropping it)
     const savedReportDoc = await report.save();
     const reportId = savedReportDoc._id;
-    
+
     // CRITICAL: Save htmlContent separately using findByIdAndUpdate to ensure it's persisted
     // This avoids Mongoose strict mode issues with large fields
     await Report.findByIdAndUpdate(
-      reportId, 
-      { htmlContent: htmlReport }, 
-      { 
+      reportId,
+      { htmlContent: htmlReport },
+      {
         runValidators: false,  // Skip validation for large HTML content
         upsert: false,
         new: false  // Don't return updated doc, we'll verify separately
       }
     );
-    
+
     // CRITICAL: Verify HTML was actually saved with explicit check - HARD FAIL if not saved
     const verificationReport = await Report.findById(reportId).select('htmlContent').lean();
     if (!verificationReport) {
@@ -925,7 +925,7 @@ exports.generateReport = async (req, res) => {
     } else if (!verificationReport.htmlContent || verificationReport.htmlContent.length === 0) {
       console.error(`❌ ERROR: htmlContent not saved (length: ${verificationReport.htmlContent?.length || 0}). Report ID: ${reportId}`);
       console.error(`   Original htmlReport length: ${htmlReport?.length || 0}`);
-      
+
       // Final fallback: Try with set() and strict: false
       const reportDoc = await Report.findById(reportId);
       if (reportDoc) {
@@ -948,7 +948,7 @@ exports.generateReport = async (req, res) => {
     } else {
       console.log(`✅ htmlContent saved successfully: ${verificationReport.htmlContent.length} chars`);
     }
-    
+
     console.log(`✅ Report generated and saved: ${reportId}`);
     console.log(`📊 Report has ${normalizedChartCount} chart(s) in computedMetrics`);
 
@@ -964,7 +964,7 @@ exports.generateReport = async (req, res) => {
     // Notify all assigned experts (excluding admin who generated the report)
     try {
       const Message = mongoose.model('Message');
-      
+
       if (analysisData.project && analysisData.project.assignedUsers && analysisData.project.assignedUsers.length > 0) {
         const assignedUserIds = analysisData.project.assignedUsers
           .map(id => {
@@ -986,11 +986,11 @@ exports.generateReport = async (req, res) => {
         if (assignedUserIds.length > 0) {
           const projectTitle = analysisData.project.title || 'Project';
           const notificationText = `[NOTIFICATION] A new report draft has been generated for project "${projectTitle}". You can review it in the Reports section.`;
-          
+
           const projectIdObj = isValidObjectId(projectId)
             ? new mongoose.Types.ObjectId(projectId)
             : projectId;
-          
+
           await Promise.all(
             assignedUserIds.map(assignedUserId =>
               Message.create({
@@ -1004,7 +1004,7 @@ exports.generateReport = async (req, res) => {
               })
             )
           );
-          
+
           console.log(`📬 Notifications sent to ${assignedUserIds.length} assigned expert(s)`);
         }
       }
@@ -1030,7 +1030,7 @@ exports.generateReport = async (req, res) => {
     console.error('❌ Error name:', err.name);
     console.error('❌ Error message:', err.message);
     console.error('❌ Error stack:', err.stack);
-    
+
     // Log additional context
     if (err.code) {
       console.error('❌ Error code:', err.code);
@@ -1044,17 +1044,17 @@ exports.generateReport = async (req, res) => {
     if (err.keyValue) {
       console.error('❌ Error keyValue:', err.keyValue);
     }
-    
+
     // Try to stringify error details safely
     try {
       console.error('❌ Error details:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
     } catch (stringifyError) {
       console.error('❌ Could not stringify error details:', stringifyError.message);
     }
-    
+
     // More detailed error message
     let errorMessage = err.message || 'Failed to generate report';
-    
+
     // Check for common error types
     if (err.name === 'TypeError' && err.message.includes('toString')) {
       errorMessage = `Data conversion error: ${err.message}. This usually indicates a null or undefined value.`;
@@ -1073,8 +1073,8 @@ exports.generateReport = async (req, res) => {
     } else if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED'))) {
       errorMessage = 'API quota exceeded. Please try again later.';
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: errorMessage,
       type: err.name || 'Error',
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined,
@@ -1126,19 +1126,19 @@ exports.getLatestReport = async (req, res) => {
   try {
     const { projectId } = req.params;
     const { userId } = req.query;
-    
+
     if (!projectId) {
       return res.status(400).json({ error: 'Project ID is required' });
     }
-    
+
     const projectIdObj = toObjectIdOrValue(projectId);
     if (!projectIdObj) {
       return res.status(400).json({ error: 'Invalid project ID' });
     }
-    
+
     // Get user info for authorization
     const { userIdObj, roleCategory } = await loadRequestUser(req);
-    
+
     // Check if user is assigned to project (unless admin)
     if (roleCategory !== 'admin') {
       const ok = await isUserAssignedToProject({
@@ -1149,13 +1149,13 @@ exports.getLatestReport = async (req, res) => {
         return res.status(403).json({ error: 'Not authorized to view reports for this project' });
       }
     }
-    
+
     // Find the latest report for this project
     // Sort by version (descending), then by generatedAt (descending), then by createdAt (descending)
     const report = await Report.findOne({ projectId: projectIdObj })
       .sort({ version: -1, generatedAt: -1, createdAt: -1 })
       .lean();
-    
+
     // Filter out reports hidden for this user (soft delete)
     if (report && roleCategory !== 'admin') {
       if (report.hiddenForUsers && Array.isArray(report.hiddenForUsers)) {
@@ -1165,18 +1165,18 @@ exports.getLatestReport = async (req, res) => {
         }
       }
     }
-    
+
     if (!report) {
       return res.json({ report: null });
     }
-    
+
     // Build file URL
     const reportId = report._id.toString();
     let fileUrl = `/api/reports/${reportId}/file`;
     if (userId) {
       fileUrl += `?userId=${encodeURIComponent(userId)}`;
     }
-    
+
     res.json({
       report: {
         ...report,
@@ -1192,7 +1192,7 @@ exports.getLatestReport = async (req, res) => {
 exports.getReportById = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Try to load user, but don't fail if userId is missing (for public access)
     let userIdObj = null;
     let roleCategory = 'expert';
@@ -1234,7 +1234,7 @@ exports.getReportById = async (req, res) => {
         const projectIdObj = report?.projectId?._id || report?.projectId;
         // Include ALL questionnaires for draft report review
         const freshMetrics = await buildReportMetrics(projectIdObj, null);
-        
+
         // Add fresh metrics to report response
         report.freshMetrics = freshMetrics;
         console.log('✅ Added fresh metrics to draft report for review');
@@ -1249,7 +1249,7 @@ exports.getReportById = async (req, res) => {
   } catch (err) {
     console.error('❌ Error fetching report:', err);
     console.error('   Stack:', err.stack);
-    res.status(err.statusCode || 500).json({ 
+    res.status(err.statusCode || 500).json({
       error: err.message || 'Failed to fetch report',
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -1374,7 +1374,7 @@ exports.getReportFile = async (req, res) => {
     const { id } = req.params;
     const { userId } = req.query;
     const userIdObj = userId && isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
-    
+
     // Load user if userId provided
     let roleCategory = 'expert';
     if (userIdObj) {
@@ -1410,27 +1410,27 @@ exports.getReportFile = async (req, res) => {
 
     // Generate PDF on-the-fly (same logic as downloadReportPDF but with inline disposition)
     console.log('📄 Generating PDF for report file view:', id);
-    
+
     let pdfBuffer;
-    
+
     if (report.htmlContent && report.htmlContent.trim().length > 0) {
       console.log('✅ Using HTML content with embedded charts for PDF generation');
-      
+
       const puppeteer = require('puppeteer');
       let browser = null;
-      
+
       try {
         browser = await puppeteer.launch({
           headless: true,
           args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
-        
+
         const page = await browser.newPage();
         await page.setViewport({ width: 1200, height: 1600 });
         await page.setContent(report.htmlContent, {
           waitUntil: ['load', 'domcontentloaded', 'networkidle0']
         });
-        
+
         await page.evaluate(() => {
           return Promise.all(
             Array.from(document.images)
@@ -1440,9 +1440,9 @@ exports.getReportFile = async (req, res) => {
               }))
           );
         });
-        
+
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         pdfBuffer = await page.pdf({
           format: 'A4',
           margin: {
@@ -1455,7 +1455,7 @@ exports.getReportFile = async (req, res) => {
           preferCSSPageSize: true,
           displayHeaderFooter: false
         });
-        
+
         await browser.close();
         console.log('✅ PDF generated from HTML content');
       } catch (htmlPdfError) {
@@ -1467,7 +1467,7 @@ exports.getReportFile = async (req, res) => {
       // Legacy report fallback
       const reportAge = new Date() - new Date(report.generatedAt);
       const isLegacyReport = reportAge > (7 * 24 * 60 * 60 * 1000);
-      
+
       if (isLegacyReport) {
         console.log('⚠️ Legacy report without HTML content. Using markdown PDF generation...');
         pdfBuffer = await generatePDFFromMarkdown(
@@ -1564,30 +1564,30 @@ exports.downloadReportPDF = async (req, res) => {
     console.log(`📊 Report has htmlContent: ${!!report.htmlContent}, length: ${report.htmlContent?.length || 0}`);
 
     let pdfBuffer;
-    
+
     // If HTML content exists (with charts), use it for PDF generation
     if (report.htmlContent && report.htmlContent.trim().length > 0) {
       console.log('✅ Using HTML content with embedded charts for PDF generation');
-      
+
       const puppeteer = require('puppeteer');
       let browser = null;
-      
+
       try {
         browser = await puppeteer.launch({
           headless: true,
           args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
-        
+
         const page = await browser.newPage();
-        
+
         // Set viewport for consistent rendering
         await page.setViewport({ width: 1200, height: 1600 });
-        
+
         // Set HTML content and wait for images to load
         await page.setContent(report.htmlContent, {
           waitUntil: ['load', 'domcontentloaded', 'networkidle0']
         });
-        
+
         // Wait for all images (including base64 data URIs) to be fully loaded
         await page.evaluate(() => {
           return Promise.all(
@@ -1598,10 +1598,10 @@ exports.downloadReportPDF = async (req, res) => {
               }))
           );
         });
-        
+
         // Additional wait for chart rendering
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         // Generate PDF from HTML
         pdfBuffer = await page.pdf({
           format: 'A4',
@@ -1615,7 +1615,7 @@ exports.downloadReportPDF = async (req, res) => {
           preferCSSPageSize: true,
           displayHeaderFooter: false
         });
-        
+
         await browser.close();
         console.log('✅ PDF generated from HTML content with charts');
       } catch (htmlPdfError) {
@@ -1634,13 +1634,13 @@ exports.downloadReportPDF = async (req, res) => {
       // New reports MUST have htmlContent
       const reportAge = new Date() - new Date(report.generatedAt);
       const isLegacyReport = reportAge > (7 * 24 * 60 * 60 * 1000); // Older than 7 days
-      
+
       if (isLegacyReport) {
         console.log('⚠️ Legacy report without HTML content. Using markdown PDF generation...');
         pdfBuffer = await generatePDFFromMarkdown(
-      buildExportMarkdownFromReport(report),
-      report.title
-    );
+          buildExportMarkdownFromReport(report),
+          report.title
+        );
       } else {
         throw new Error(
           `CRITICAL: Report has no htmlContent but is not a legacy report (generated: ${report.generatedAt}). ` +
@@ -1651,7 +1651,7 @@ exports.downloadReportPDF = async (req, res) => {
 
     // Set response headers for PDF download
     const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.pdf`;
-    
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
@@ -1702,7 +1702,7 @@ exports.downloadReportDOCX = async (req, res) => {
 
     // Always fetch fresh data for DOCX generation - include ALL questionnaires
     const reportMetrics = await buildReportMetrics(projectId, null);
-    
+
     // Get the latest report content (use sections if available, otherwise content)
     let geminiNarrative = '';
     if (Array.isArray(report.sections) && report.sections.length > 0) {
@@ -1719,8 +1719,8 @@ exports.downloadReportDOCX = async (req, res) => {
       for (const [key, value] of Object.entries(report.computedMetrics.chartImages)) {
         if (typeof value === 'string') {
           // Convert base64 string to Buffer
-          const base64Data = value.startsWith('data:') 
-            ? value.split(',')[1] 
+          const base64Data = value.startsWith('data:')
+            ? value.split(',')[1]
             : value;
           chartBuffers[key] = Buffer.from(base64Data, 'base64');
         } else if (Buffer.isBuffer(value)) {
@@ -1739,7 +1739,7 @@ exports.downloadReportDOCX = async (req, res) => {
 
     // Set response headers for DOCX download
     const fileName = `${report.title.replace(/[^a-z0-9]/gi, '_')}_${id}.docx`;
-    
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', docxBuffer.length);
@@ -1779,6 +1779,7 @@ exports.getAssignedToMe = async (req, res) => {
     if (projectIds.length === 0) return res.json([]);
 
     const reports = await Report.find({ projectId: { $in: projectIds } })
+      .select('title projectId generatedBy generatedAt status metadata createdAt')
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
@@ -1977,7 +1978,7 @@ exports.generateReportAtomic = async (req, res) => {
     // STEP 3: Generate charts using Chart Contract
     // ============================================================
     console.log('📊 Generating charts...');
-    
+
     const tensions = analysisData.tensions || [];
     let tensionsSummary = {};
     if (tensions.length > 0) {
@@ -1989,7 +1990,7 @@ exports.generateReportAtomic = async (req, res) => {
         resolved: 0,
         total: tensions.length
       };
-      
+
       tensions.forEach(t => {
         const state = String(t.status || 'ongoing').toLowerCase();
         if (state.includes('proposed')) reviewStateCounts.proposed++;
@@ -1999,9 +2000,9 @@ exports.generateReportAtomic = async (req, res) => {
         else if (state.includes('resolved')) reviewStateCounts.resolved++;
         else reviewStateCounts.proposed++;
       });
-      
+
       const evidenceTypeDistribution = reportMetrics.tensionsSummary?.evidenceTypeDistribution || {};
-      
+
       tensionsSummary = {
         summary: {
           ...reviewStateCounts,
@@ -2010,11 +2011,11 @@ exports.generateReportAtomic = async (req, res) => {
         list: tensions
       };
     }
-    
+
     const coverageData = {
       evidenceMetrics: analytics.evidenceMetrics || null
     };
-    
+
     const chartGenerationResult = await chartGenerationService.generateAllCharts({
       projectId,
       questionnaireKey: null,
@@ -2023,9 +2024,9 @@ exports.generateReportAtomic = async (req, res) => {
       tensions: tensionsSummary,
       coverage: coverageData
     });
-    
+
     const chartResults = chartGenerationResult.charts;
-    
+
     console.log(`✅ Generated ${Object.keys(chartResults).length} chart(s)`);
 
     // ============================================================
@@ -2034,7 +2035,7 @@ exports.generateReportAtomic = async (req, res) => {
     const chartImages = {};
     for (const [chartId, chartResult] of Object.entries(chartResults)) {
       if (!chartResult || !chartResult.pngBase64) continue;
-      
+
       if (chartResult.pngBase64.startsWith('data:image/')) {
         chartImages[chartId] = chartResult.pngBase64;
       } else if (chartResult.pngBase64.length > 0) {
@@ -2048,7 +2049,7 @@ exports.generateReportAtomic = async (req, res) => {
     console.log('📊 Building top risk drivers...');
     const { buildTopRiskDriversTable } = require('../services/topDriversService');
     const topDriversTable = await buildTopRiskDriversTable(projectId);
-    
+
     if (reportMetrics && reportMetrics.scoring) {
       reportMetrics.scoring.topRiskDrivers = {
         ...reportMetrics.scoring.topRiskDrivers,
@@ -2060,7 +2061,7 @@ exports.generateReportAtomic = async (req, res) => {
     // STEP 6: Generate narrative with Gemini
     // ============================================================
     console.log('🤖 Generating narrative with Gemini...');
-    
+
     const analysisDataWithCharts = {
       ...analysisData,
       chartMetadata: {
@@ -2072,9 +2073,9 @@ exports.generateReportAtomic = async (req, res) => {
       },
       reportMetrics: reportMetrics || null
     };
-    
+
     const geminiNarrative = await generateReport(analysisDataWithCharts);
-    
+
     if (!geminiNarrative || geminiNarrative.trim().length === 0) {
       throw new Error('Gemini generated empty narrative');
     }
@@ -2083,7 +2084,7 @@ exports.generateReportAtomic = async (req, res) => {
     // STEP 7: Generate HTML report
     // ============================================================
     console.log('📄 Generating HTML report...');
-    
+
     const structuredNarrative = {
       markdown: geminiNarrative,
       executiveSummary: [],
@@ -2092,7 +2093,7 @@ exports.generateReportAtomic = async (req, res) => {
       principleFindings: [],
       recommendations: []
     };
-    
+
     const htmlReport = generateHTMLReport(
       reportMetrics || {},
       structuredNarrative,
@@ -2103,7 +2104,7 @@ exports.generateReportAtomic = async (req, res) => {
         reportMetrics: reportMetrics
       }
     );
-    
+
     if (!htmlReport || htmlReport.trim().length === 0) {
       throw new Error('HTML generation failed');
     }
@@ -2112,9 +2113,9 @@ exports.generateReportAtomic = async (req, res) => {
     // STEP 8: ATOMIC GENERATION - PDF + Word together
     // ============================================================
     console.log('🔒 Starting ATOMIC file generation (PDF + Word)...');
-    
+
     const { generateReportFilesAtomic } = require('../services/atomicReportGenerationService');
-    
+
     const metadata = {
       scoringModelVersion: 'erc_v1',
       questionsAnswered: analysisData.unifiedAnswers?.length || 0,
@@ -2126,7 +2127,7 @@ exports.generateReportAtomic = async (req, res) => {
       chartsGenerated: Object.keys(chartImages).length,
       chartTypes: Object.keys(chartImages)
     };
-    
+
     const atomicResult = await generateReportFilesAtomic({
       projectId,
       htmlContent: htmlReport,
@@ -2146,7 +2147,7 @@ exports.generateReportAtomic = async (req, res) => {
     // ============================================================
     try {
       const Message = mongoose.model('Message');
-      
+
       if (analysisData.project && analysisData.project.assignedUsers && analysisData.project.assignedUsers.length > 0) {
         const assignedUserIds = analysisData.project.assignedUsers
           .map(id => {
@@ -2185,7 +2186,7 @@ exports.generateReportAtomic = async (req, res) => {
     // STEP 10: Return success response
     // ============================================================
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    
+
     res.json({
       success: true,
       message: 'Report generated successfully (PDF + Word)',
@@ -2212,7 +2213,7 @@ exports.generateReportAtomic = async (req, res) => {
   } catch (error) {
     console.error('❌ ATOMIC REPORT GENERATION FAILED:', error);
     console.error(error.stack);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       details: 'Atomic report generation failed. No files were created.'
     });

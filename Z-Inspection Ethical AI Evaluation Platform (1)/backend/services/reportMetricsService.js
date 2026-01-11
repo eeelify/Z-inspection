@@ -59,7 +59,7 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
   // if (questionnaireKey) {
   //   scoreQuery.questionnaireKey = questionnaireKey;
   // }
-  
+
   const scores = await Score.find(scoreQuery).lean();
 
   // Debug: Log found scores with DETAILED principle data
@@ -68,11 +68,11 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
     scores.forEach((s, idx) => {
       const principleCount = s.byPrinciple ? Object.keys(s.byPrinciple).filter(p => s.byPrinciple[p] !== null && s.byPrinciple[p] !== undefined).length : 0;
       console.log(`  Score ${idx + 1}: userId=${s.userId}, questionnaireKey=${s.questionnaireKey}, principles with data=${principleCount}`);
-      
+
       // CRITICAL DEBUG: Log ALL principle keys in Score document (both canonical and non-canonical)
       if (s.byPrinciple) {
         console.log(`    📋 ALL principle keys in Score document: [${Object.keys(s.byPrinciple).join(', ')}]`);
-        
+
         // Log canonical principles
         CANONICAL_PRINCIPLES.forEach(principle => {
           const data = s.byPrinciple[principle];
@@ -82,7 +82,7 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
             console.log(`    ❌ ${principle}: null/undefined`);
           }
         });
-        
+
         // Log non-canonical principles (that will be mapped)
         Object.keys(s.byPrinciple).forEach(rawPrinciple => {
           if (!CANONICAL_PRINCIPLES.includes(rawPrinciple)) {
@@ -125,14 +125,14 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
         }
         // If missing or invalid, do nothing - will result in null
       });
-      
+
       // Then, collect from mapped principles (for backward compatibility with old Score documents)
       Object.keys(score.byPrinciple).forEach(rawPrinciple => {
         // Skip if already a CANONICAL_PRINCIPLE
         if (CANONICAL_PRINCIPLES.includes(rawPrinciple)) {
           return;
         }
-        
+
         // Map to canonical principle if mapping exists
         const mappedPrinciple = principleMapping[rawPrinciple];
         if (mappedPrinciple) {
@@ -156,20 +156,20 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
       const avg = sum / values.length;
       const min = Math.min(...values);
       const max = Math.max(...values);
-      
+
       // Round to 2 decimal places
       const roundedAvg = Math.round(avg * 100) / 100;
       const roundedMin = Math.round(min * 100) / 100;
       const roundedMax = Math.round(max * 100) / 100;
-      
+
       // CRITICAL: Validate that avg is not accidentally 0 when values exist
       if (roundedAvg === 0 && values.some(v => v > 0)) {
         console.error(`❌ CRITICAL BUG: Principle ${principle} has avg=0 but values=[${values.join(',')}]. This should not happen!`);
       }
-      
+
       // Debug logging for each principle
       console.log(`📊 [DEBUG buildPrincipleScores] ${principle}: values=[${values.join(', ')}], n=${values.length}, avg=${roundedAvg}, min=${roundedMin}, max=${roundedMax}`);
-      
+
       result[principle] = {
         avg: roundedAvg,
         min: roundedMin,
@@ -232,7 +232,7 @@ async function computeParticipation(projectId) {
       return hasText || hasChoice || hasNumeric;
     });
   });
-  
+
   const submittedUserIds = new Set(responsesWithAnswers.map(r => r.userId?.toString()).filter(Boolean));
   const submittedCount = submittedUserIds.size;
   const startedCount = submittedCount; // Same - answers exist means ready
@@ -276,40 +276,40 @@ async function getProjectEvaluators(projectId) {
 
   const Project = mongoose.model('Project');
   const UseCase = mongoose.model('UseCase');
-  
+
   // Step 1: Load assignments (prefer projectassignments collection)
   let assignedEvaluators = [];
   try {
     const assignments = await ProjectAssignment.find({
       projectId: projectIdObj
     }).lean();
-    
+
     if (assignments.length > 0) {
       // Get user details for assigned users
       const userIds = assignments.map(a => a.userId);
       const users = await User.find({ _id: { $in: userIds } })
         .select('_id name email role')
         .lean();
-      
+
       const userMap = new Map(users
         .filter(u => u._id) // Filter out null _id
         .map(u => [u._id.toString ? u._id.toString() : String(u._id), u]));
-      
+
       assignedEvaluators = assignments
         .filter(a => a.userId) // Filter out null userIds
         .map(a => {
           const userIdStr = a.userId.toString ? a.userId.toString() : String(a.userId);
           const user = userMap.get(userIdStr);
           return {
-          userId: userIdStr,
-          name: user?.name || 'Unknown',
-          email: user?.email || '',
-          role: a.role || user?.role || 'unknown',
-          assignmentStatus: a.status || 'assigned',
-          assignedAt: a.assignedAt,
-          questionnaires: a.questionnaires || []
-        };
-      });
+            userId: userIdStr,
+            name: user?.name || 'Unknown',
+            email: user?.email || '',
+            role: a.role || user?.role || 'unknown',
+            assignmentStatus: a.status || 'assigned',
+            assignedAt: a.assignedAt,
+            questionnaires: a.questionnaires || []
+          };
+        });
     }
   } catch (e) {
     console.warn('Could not load projectassignments, trying fallback:', e.message);
@@ -321,20 +321,41 @@ async function getProjectEvaluators(projectId) {
       const project = await Project.findById(projectIdObj).lean();
       if (project && project.useCase) {
         // Try to get from UseCase
-        const useCaseId = typeof project.useCase === 'string' 
-          ? project.useCase 
+        const useCaseId = typeof project.useCase === 'string'
+          ? project.useCase
           : (project.useCase && project.useCase.url) || project.useCase;
-        
+
         const useCase = await UseCase.findById(useCaseId).lean();
         if (useCase && useCase.assignedExperts && useCase.assignedExperts.length > 0) {
           const userIds = useCase.assignedExperts;
           const users = await User.find({ _id: { $in: userIds } })
             .select('_id name email role')
             .lean();
-          
+
           assignedEvaluators = users
             .filter(u => u._id) // Filter out null _id
             .map(u => ({
+              userId: u._id.toString ? u._id.toString() : String(u._id),
+              name: u.name || 'Unknown',
+              email: u.email || '',
+              role: u.role || 'unknown',
+              assignmentStatus: 'assigned',
+              assignedAt: null,
+              questionnaires: []
+            }));
+        }
+      }
+
+      // Final fallback: project.assignedUsers
+      if (assignedEvaluators.length === 0 && project && project.assignedUsers) {
+        const userIds = project.assignedUsers;
+        const users = await User.find({ _id: { $in: userIds } })
+          .select('_id name email role')
+          .lean();
+
+        assignedEvaluators = users
+          .filter(u => u._id) // Filter out null _id
+          .map(u => ({
             userId: u._id.toString ? u._id.toString() : String(u._id),
             name: u.name || 'Unknown',
             email: u.email || '',
@@ -343,27 +364,6 @@ async function getProjectEvaluators(projectId) {
             assignedAt: null,
             questionnaires: []
           }));
-        }
-      }
-      
-      // Final fallback: project.assignedUsers
-      if (assignedEvaluators.length === 0 && project && project.assignedUsers) {
-        const userIds = project.assignedUsers;
-        const users = await User.find({ _id: { $in: userIds } })
-          .select('_id name email role')
-          .lean();
-        
-        assignedEvaluators = users
-          .filter(u => u._id) // Filter out null _id
-          .map(u => ({
-          userId: u._id.toString ? u._id.toString() : String(u._id),
-          name: u.name || 'Unknown',
-          email: u.email || '',
-          role: u.role || 'unknown',
-          assignmentStatus: 'assigned',
-          assignedAt: null,
-          questionnaires: []
-        }));
       }
     } catch (e) {
       console.warn('Could not load fallback assignments:', e.message);
@@ -377,7 +377,7 @@ async function getProjectEvaluators(projectId) {
     // IMPORTANT: include status/submittedAt so callers can filter to submitted-only
     .select('_id userId role questionnaireKey status submittedAt answers')
     .lean();
-  
+
   // Filter: only responses with answers (answers exist = ready for analysis)
   const responsesWithAnswers = allResponses.filter(r => {
     if (!r.answers || !Array.isArray(r.answers) || r.answers.length === 0) {
@@ -386,20 +386,20 @@ async function getProjectEvaluators(projectId) {
     // Check if at least one answer has content
     return r.answers.some(answer => {
       if (!answer.answer) return false;
-      return answer.answer.text || 
-             answer.answer.choiceKey || 
-             answer.answer.numeric !== undefined || 
-             (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
+      return answer.answer.text ||
+        answer.answer.choiceKey ||
+        answer.answer.numeric !== undefined ||
+        (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
     });
   });
-  
+
   console.log(`📊 [DEBUG getProjectEvaluators] Found ${responsesWithAnswers.length} responses with answers`);
 
   // Get scores to ensure canonical metrics exist
   const allScores = await Score.find({
     projectId: projectIdObj
   }).lean();
-  
+
   // Create a map of userId+questionnaireKey -> score for quick lookup
   const scoreMap = new Map();
   allScores.forEach(s => {
@@ -415,8 +415,8 @@ async function getProjectEvaluators(projectId) {
     const userIdStr = r.userId ? (r.userId.toString ? r.userId.toString() : String(r.userId)) : 'unknown';
     const key = `${userIdStr}_${r.role || 'unknown'}_${r.questionnaireKey || 'general-v1'}`;
     const existing = responseMap.get(key);
-    if (!existing || 
-        (r.submittedAt && (!existing.submittedAt || r.submittedAt > existing.submittedAt))) {
+    if (!existing ||
+      (r.submittedAt && (!existing.submittedAt || r.submittedAt > existing.submittedAt))) {
       responseMap.set(key, r);
     }
   });
@@ -425,14 +425,14 @@ async function getProjectEvaluators(projectId) {
   const submittedUserIds = [...new Set(Array.from(responseMap.values())
     .filter(r => r.userId) // Filter out null userIds
     .map(r => r.userId.toString ? r.userId.toString() : String(r.userId)))];
-  
+
   // Load user details for submitted evaluators (may not be in assignedEvaluators)
   const missingUserIds = submittedUserIds.filter(id => !assignedEvaluators.some(e => e.userId === id));
   if (missingUserIds.length > 0) {
     const missingUsers = await User.find({ _id: { $in: missingUserIds } })
       .select('_id name email role')
       .lean();
-    
+
     missingUsers.forEach(user => {
       assignedEvaluators.push({
         userId: user._id.toString(),
@@ -445,13 +445,13 @@ async function getProjectEvaluators(projectId) {
       });
     });
   }
-  
+
   // CRITICAL FIX: Build submitted evaluators list - ONE entry per userId
   // Group by userId (not userId+role+questionnaireKey) to ensure no duplicates
   // If same user submitted multiple questionnaires, we still count them as ONE evaluator
   const submittedEvaluators = [];
   const seenUserIds = new Set(); // Track unique userIds to prevent duplicates
-  
+
   // Use for...of loop instead of forEach to support await
   for (const response of responseMap.values()) {
     const userId = response.userId ? (response.userId.toString ? response.userId.toString() : String(response.userId)) : null;
@@ -459,20 +459,20 @@ async function getProjectEvaluators(projectId) {
       console.warn('⚠️  Response has null userId, skipping');
       continue;
     }
-    
+
     // CRITICAL: Skip if we've already added this userId (prevent role duplication)
     if (seenUserIds.has(userId)) {
       continue; // Already counted this evaluator
     }
     seenUserIds.add(userId);
-    
+
     const evaluator = assignedEvaluators.find(e => e.userId === userId);
-    
+
     if (evaluator) {
       // Check if score exists for this userId+questionnaireKey
       const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
       const hasScore = scoreMap.has(scoreKey);
-      
+
       submittedEvaluators.push({
         userId: evaluator.userId,
         name: evaluator.name,
@@ -490,7 +490,7 @@ async function getProjectEvaluators(projectId) {
       if (user) {
         const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
         const hasScore = scoreMap.has(scoreKey);
-        
+
         submittedEvaluators.push({
           userId: user._id.toString(),
           name: user.name || 'Unknown',
@@ -516,7 +516,7 @@ async function getProjectEvaluators(projectId) {
       }
       return e.hasScore;
     });
-    
+
     // Track data quality: evaluators who submitted but have no score
     const missingScores = submittedEvaluators.filter(e => {
       if (questionnaireKey && e.questionnaireKey !== questionnaireKey) {
@@ -524,12 +524,12 @@ async function getProjectEvaluators(projectId) {
       }
       return !e.hasScore;
     });
-    
+
     // Store data quality notes for report
     if (missingScores.length > 0) {
-      console.warn(`⚠️ Data Quality: ${missingScores.length} evaluator(s) submitted but have no score:`, 
+      console.warn(`⚠️ Data Quality: ${missingScores.length} evaluator(s) submitted but have no score:`,
         missingScores.map(e => `${e.name} (${e.role})`).join(', '));
-      
+
       // Attach data quality info to the function for later retrieval
       getEvaluatorsWithScores.dataQualityNotes = [
         `Warning: ${missingScores.length} evaluator(s) submitted responses but have no canonical scores in MongoDB: ${missingScores.map(e => `${e.name} (${e.role})`).join(', ')}. Scores may need to be recomputed.`
@@ -537,7 +537,7 @@ async function getProjectEvaluators(projectId) {
     } else {
       getEvaluatorsWithScores.dataQualityNotes = [];
     }
-    
+
     return filtered;
   };
 
@@ -558,21 +558,49 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   try {
     const { computeEthicalScores } = require('./ethicalScoringService'); // ✅ NEW: Use performance model
     const Response = require('../models/response');
-    
-    // CRITICAL: Recompute scores for ALL questionnaires, not just the specified one
-    // This is because legal questions might be in a different questionnaireKey
-    // but we want them to be included in the report
-    const allQuestionnaireKeys = await Response.distinct('questionnaireKey', { projectId });
-    console.log(`🔄 [DEBUG buildReportMetrics] Recomputing scores for project ${projectId} (NEW PERFORMANCE MODEL)`);
-    console.log(`   Found ${allQuestionnaireKeys.length} questionnaire keys: [${allQuestionnaireKeys.join(', ')}]`);
-    
-    // Recompute scores for each questionnaire key (userId = null means all users)
-    for (const qKey of allQuestionnaireKeys) {
-      console.log(`   Recomputing scores for questionnaireKey: ${qKey}`);
-      await computeEthicalScores(projectId, null, qKey); // ✅ NEW function
+    const Score = require('../models/score'); // Ensure Score is available
+
+    // CHECK FOR STALENESS: Only recompute if new data exists
+    // 1. Get timestamp of latest response update for this project
+    const latestResponse = await Response.findOne({ projectId }, { updatedAt: 1 })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    // 2. Get timestamp of latest score computation for this project (excluding project-level aggregation)
+    const latestScore = await Score.findOne({ projectId, role: { $ne: 'project' } }, { computedAt: 1 })
+      .sort({ computedAt: -1 })
+      .lean();
+
+    const lastResponseTime = latestResponse?.updatedAt ? new Date(latestResponse.updatedAt).getTime() : 0;
+    const lastComputeTime = latestScore?.computedAt ? new Date(latestScore.computedAt).getTime() : 0;
+
+    // 3. Determine if update is needed
+    // Recompute if:
+    // - There are no scores at all (lastComputeTime === 0)
+    // - A response has been updated since the last computation (lastResponseTime > lastComputeTime)
+    // - Force refresh is requested (not implemented here but good practice)
+    const needsUpdate = lastComputeTime === 0 || lastResponseTime > lastComputeTime;
+
+    if (needsUpdate) {
+      console.log(`🔄 [DEBUG buildReportMetrics] STALE DATA DETECTED. Recomputing scores for project ${projectId}.`);
+      console.log(`   Last response: ${latestResponse?.updatedAt}, Last computation: ${latestScore?.computedAt}`);
+
+      // CRITICAL: Recompute scores for ALL questionnaires, not just the specified one
+      // This is because legal questions might be in a different questionnaireKey
+      // but we want them to be included in the report
+      const allQuestionnaireKeys = await Response.distinct('questionnaireKey', { projectId });
+      console.log(`   Found ${allQuestionnaireKeys.length} questionnaire keys: [${allQuestionnaireKeys.join(', ')}]`);
+
+      // Recompute scores for each questionnaire key (userId = null means all users)
+      for (const qKey of allQuestionnaireKeys) {
+        console.log(`   Recomputing scores for questionnaireKey: ${qKey}`);
+        await computeEthicalScores(projectId, null, qKey); // ✅ NEW function
+      }
+      console.log(`✅ [DEBUG buildReportMetrics] Scores recomputed successfully for all questionnaires`);
+    } else {
+      console.log(`⏩ [DEBUG buildReportMetrics] Scores are FRESH. Skipping recomputation for project ${projectId}.`);
     }
-    
-    console.log(`✅ [DEBUG buildReportMetrics] Scores recomputed successfully for all questionnaires`);
+
   } catch (scoreError) {
     console.warn(`⚠️ [WARNING buildReportMetrics] Failed to recompute scores, continuing with existing Score documents: ${scoreError.message}`);
     console.error(`   Error details:`, scoreError);
@@ -594,7 +622,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   const evaluators = await getProjectEvaluators(projectId);
   // Include ALL questionnaires - pass null to get evaluators from all questionnaires
   const evaluatorsWithScores = await evaluators.withScores(questionnaireKey || null);
-  
+
   // Get data quality notes (evaluators who submitted but have no scores)
   const dataQualityNotes = evaluators.withScores.dataQualityNotes || [];
 
@@ -608,10 +636,10 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   // if (questionnaireKey) {
   //   scoreQuery.questionnaireKey = questionnaireKey;
   // }
-  
+
   const scores = await Score.find(scoreQuery).lean();
   console.log(`📊 [DEBUG buildReportMetrics] Found ${scores.length} Score documents (all questionnaires)`);
-  
+
   // IMPORTANT: Exclude project-level aggregated score docs from evaluator aggregations.
   // Otherwise roles/counts (e.g., "project") and overall averages get double-counted.
   const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
@@ -628,9 +656,9 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     projectId: projectIdObj,
     ...(questionnaireKey ? { questionnaireKey } : {}) // Only filter if questionnaireKey is provided
   })
-  .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
-  .lean();
-  
+    .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
+    .lean();
+
   console.log(`📊 [DEBUG buildReportMetrics] Found ${allResponses.length} total responses`);
   allResponses.forEach((r, idx) => {
     const answersCount = r.answers ? r.answers.length : 0;
@@ -641,7 +669,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     }).length : 0;
     console.log(`  Response ${idx + 1}: userId=${r.userId}, status=${r.status}, answersCount=${answersCount}, textAnswers=${textAnswersCount}`);
   });
-  
+
   // Get responses with answers (no status filter - answers exist = ready)
   const responses = allResponses.filter(r => {
     if (!r.answers || !Array.isArray(r.answers) || r.answers.length === 0) {
@@ -649,10 +677,10 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     }
     return r.answers.some(answer => {
       if (!answer.answer) return false;
-      return answer.answer.text || 
-             answer.answer.choiceKey || 
-             answer.answer.numeric !== undefined || 
-             (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
+      return answer.answer.text ||
+        answer.answer.choiceKey ||
+        answer.answer.numeric !== undefined ||
+        (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
     });
   });
   console.log(`📊 [DEBUG buildReportMetrics] Found ${responses.length} responses with answers`);
@@ -661,7 +689,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   const tensions = await Tension.find({
     projectId: projectIdObj
   }).lean();
-  
+
   // Get users for createdBy join (to avoid "unknown" in reports)
   const tensionCreatorIds = [...new Set(tensions
     .map(t => t.createdBy?.toString())
@@ -749,19 +777,19 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Aggregate totals - Support both old format (avg) and new format (overallRisk, overallMaturity)
     // Prefer new format if available, fallback to old format for backward compatibility
     const hasNewFormat = evaluatorScores.some(s => s.totals?.overallRisk !== undefined || s.totals?.overallMaturity !== undefined);
-    
+
     if (hasNewFormat) {
       // Use new ethical scoring format
       // Try new fields first, fall back to legacy fields
       const overallPerformances = evaluatorScores.map(s => s.totals?.overallPerformance || s.totals?.avg).filter(v => v !== null && v !== undefined && !isNaN(v));
       const overallMaturities = evaluatorScores.map(s => s.totals?.overallMaturity).filter(v => v !== null && v !== undefined && !isNaN(v));
-      
+
       if (overallPerformances.length > 0) {
         const avgPerformance = overallPerformances.reduce((a, b) => a + b, 0) / overallPerformances.length;
-        const avgMaturity = overallMaturities.length > 0 
-          ? overallMaturities.reduce((a, b) => a + b, 0) / overallMaturities.length 
+        const avgMaturity = overallMaturities.length > 0
+          ? overallMaturities.reduce((a, b) => a + b, 0) / overallMaturities.length
           : 0;
-        
+
         // Helper function to convert performance to label
         const performanceLabelEN = (score) => {
           if (score >= 3.5) return 'Excellent Performance';
@@ -770,7 +798,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
           if (score >= 0.5) return 'Poor Performance';
           return 'Critical Issues';
         };
-        
+
         scoring.totalsOverall = {
           overallPerformance: avgPerformance, // NEW: Performance score (0-4, higher = better)
           performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage
@@ -806,143 +834,143 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       }
     }
 
-  // TASK 2 & 4: Use buildPrincipleScores - ONLY from Score collection
-  const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey);
-  
-  // TASK 9: Validation - Check score ranges
-  Object.entries(principleScoresData).forEach(([principle, data]) => {
-    if (data !== null) {
-      if (data.avg < 0 || data.avg > 4) {
-        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid score ${data.avg}. Scores must be between 0 and 4.`);
+    // TASK 2 & 4: Use buildPrincipleScores - ONLY from Score collection
+    const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey);
+
+    // TASK 9: Validation - Check score ranges
+    Object.entries(principleScoresData).forEach(([principle, data]) => {
+      if (data !== null) {
+        if (data.avg < 0 || data.avg > 4) {
+          throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid score ${data.avg}. Scores must be between 0 and 4.`);
+        }
       }
-    }
-  });
-  
-  // Map to scoring.byPrincipleOverall structure
-  // Support ERC format (risk field) and old format (avg field)
-  console.log(`🔍 [DEBUG buildReportMetrics] Mapping ${Object.keys(principleScoresData).length} principles to byPrincipleOverall`);
-  
-  Object.entries(principleScoresData).forEach(([principle, data]) => {
-    if (data === null || data === undefined) {
-      // TASK 3: Missing = null, NOT 0
-      console.log(`  ⚠️  ${principle}: NULL (no data)`);
-      scoring.byPrincipleOverall[principle] = null;
-    } else {
-      // CRITICAL FIX: Check if ANY score has principle data (not just risk/maturity check)
-      const principleScores = evaluatorScores
-        .map(s => s.byPrinciple?.[principle])
-        .filter(p => p && typeof p === 'object');
-      
-      console.log(`  📊 ${principle}: Found ${principleScores.length} score document(s) with data`);
-      
-      if (principleScores.length > 0) {
-        // Extract performance values (NEW: .performance or .score field, LEGACY: .risk or .avg)
-        const performanceValues = principleScores
-          .map(p => p.performance !== undefined ? p.performance : (p.score !== undefined ? p.score : p.avg))
-          .filter(v => v !== null && v !== undefined && !isNaN(v));
-        
-        console.log(`    Performance values: [${performanceValues.join(', ')}]`);
-        
-        if (performanceValues.length > 0) {
-          const avgPerformance = performanceValues.reduce((a, b) => a + b, 0) / performanceValues.length;
-          const minPerformance = Math.min(...performanceValues);
-          const maxPerformance = Math.max(...performanceValues);
-          
-          // Good vs poor split: score > 2.5 is good performance, score <= 2.5 is poor
-          const goodPerformanceCount = performanceValues.filter(v => v > 2.5).length;
-          const poorPerformanceCount = performanceValues.length - goodPerformanceCount;
-          const totalCount = performanceValues.length;
-          
-          // Get top drivers from first score doc that has them
-          const scoreWithDrivers = principleScores.find(p => p.topDrivers && p.topDrivers.length > 0);
-          const topDrivers = scoreWithDrivers?.topDrivers || [];
-          
-          // Helper function to convert performance to label
-          const performanceLabelEN = (score) => {
-            if (score >= 3.5) return 'Excellent Performance';
-            if (score >= 2.5) return 'Good Performance';
-            if (score >= 1.5) return 'Fair Performance';
-            if (score >= 0.5) return 'Poor Performance';
-            return 'Critical Issues';
-          };
-          
+    });
+
+    // Map to scoring.byPrincipleOverall structure
+    // Support ERC format (risk field) and old format (avg field)
+    console.log(`🔍 [DEBUG buildReportMetrics] Mapping ${Object.keys(principleScoresData).length} principles to byPrincipleOverall`);
+
+    Object.entries(principleScoresData).forEach(([principle, data]) => {
+      if (data === null || data === undefined) {
+        // TASK 3: Missing = null, NOT 0
+        console.log(`  ⚠️  ${principle}: NULL (no data)`);
+        scoring.byPrincipleOverall[principle] = null;
+      } else {
+        // CRITICAL FIX: Check if ANY score has principle data (not just risk/maturity check)
+        const principleScores = evaluatorScores
+          .map(s => s.byPrinciple?.[principle])
+          .filter(p => p && typeof p === 'object');
+
+        console.log(`  📊 ${principle}: Found ${principleScores.length} score document(s) with data`);
+
+        if (principleScores.length > 0) {
+          // Extract performance values (NEW: .performance or .score field, LEGACY: .risk or .avg)
+          const performanceValues = principleScores
+            .map(p => p.performance !== undefined ? p.performance : (p.score !== undefined ? p.score : p.avg))
+            .filter(v => v !== null && v !== undefined && !isNaN(v));
+
+          console.log(`    Performance values: [${performanceValues.join(', ')}]`);
+
+          if (performanceValues.length > 0) {
+            const avgPerformance = performanceValues.reduce((a, b) => a + b, 0) / performanceValues.length;
+            const minPerformance = Math.min(...performanceValues);
+            const maxPerformance = Math.max(...performanceValues);
+
+            // Good vs poor split: score > 2.5 is good performance, score <= 2.5 is poor
+            const goodPerformanceCount = performanceValues.filter(v => v > 2.5).length;
+            const poorPerformanceCount = performanceValues.length - goodPerformanceCount;
+            const totalCount = performanceValues.length;
+
+            // Get top drivers from first score doc that has them
+            const scoreWithDrivers = principleScores.find(p => p.topDrivers && p.topDrivers.length > 0);
+            const topDrivers = scoreWithDrivers?.topDrivers || [];
+
+            // Helper function to convert performance to label
+            const performanceLabelEN = (score) => {
+              if (score >= 3.5) return 'Excellent Performance';
+              if (score >= 2.5) return 'Good Performance';
+              if (score >= 1.5) return 'Fair Performance';
+              if (score >= 0.5) return 'Poor Performance';
+              return 'Critical Issues';
+            };
+
+            scoring.byPrincipleOverall[principle] = {
+              performance: Math.round(avgPerformance * 100) / 100, // NEW: Performance score (0-4, higher = better)
+              performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage (0-100%)
+              avgScore: Math.round(avgPerformance * 100) / 100,
+              avg: Math.round(avgPerformance * 100) / 100,
+              score: Math.round(avgPerformance * 100) / 100, // Performance score (0-4, higher = better)
+              min: Math.round(minPerformance * 100) / 100,
+              max: Math.round(maxPerformance * 100) / 100,
+              count: totalCount,
+              answeredCount: principleScores[0]?.answeredCount || totalCount,
+              performanceLabel: performanceLabelEN(avgPerformance), // NEW label
+              goodPerformancePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
+              poorPerformancePct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
+              goodCount: goodPerformanceCount,
+              poorCount: poorPerformanceCount,
+              topDrivers: topDrivers,
+              // LEGACY fields for backward compatibility (converted from performance)
+              risk: Math.round((4 - avgPerformance) * 100) / 100, // Convert performance to risk
+              erc: Math.round((4 - avgPerformance) * 100) / 100,  // Alias for old charts
+              riskLabel: riskLabelEN(4 - avgPerformance), // Convert performance to risk label
+              riskPct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
+              safePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
+              safeCount: goodPerformanceCount,
+              notSafeCount: poorPerformanceCount
+            };
+
+            console.log(`    ✅ Populated: avgPerformance=${avgPerformance.toFixed(2)}, count=${totalCount}, topDrivers=${topDrivers.length}`);
+          } else {
+            console.log(`    ❌ No valid risk values found`);
+            scoring.byPrincipleOverall[principle] = null;
+          }
+        } else if (data.avg !== undefined && data.avg !== null) {
+          // Fallback: Use data from buildPrincipleScores (old aggregation logic)
+          console.log(`    🔄 Fallback to buildPrincipleScores data: avg=${data.avg}, count=${data.count}`);
+
+          const highRiskCount = evaluatorScores.filter(s => {
+            const pData = s.byPrinciple?.[principle];
+            return pData && typeof pData.avg === 'number' && isRiskyScore(pData.avg);
+          }).length;
+          const totalCount = data.count || 1;
+
           scoring.byPrincipleOverall[principle] = {
-            performance: Math.round(avgPerformance * 100) / 100, // NEW: Performance score (0-4, higher = better)
-            performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage (0-100%)
-            avgScore: Math.round(avgPerformance * 100) / 100,
-            avg: Math.round(avgPerformance * 100) / 100,
-            score: Math.round(avgPerformance * 100) / 100, // Performance score (0-4, higher = better)
-            min: Math.round(minPerformance * 100) / 100,
-            max: Math.round(maxPerformance * 100) / 100,
+            avgScore: data.avg,
+            avg: data.avg,
+            risk: data.avg,
+            erc: data.avg,
+            min: data.min,
+            max: data.max,
             count: totalCount,
-            answeredCount: principleScores[0]?.answeredCount || totalCount,
-            performanceLabel: performanceLabelEN(avgPerformance), // NEW label
-            goodPerformancePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
-            poorPerformancePct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
-            goodCount: goodPerformanceCount,
-            poorCount: poorPerformanceCount,
-            topDrivers: topDrivers,
-            // LEGACY fields for backward compatibility (converted from performance)
-            risk: Math.round((4 - avgPerformance) * 100) / 100, // Convert performance to risk
-            erc: Math.round((4 - avgPerformance) * 100) / 100,  // Alias for old charts
-            riskLabel: riskLabelEN(4 - avgPerformance), // Convert performance to risk label
-            riskPct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
-            safePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
-            safeCount: goodPerformanceCount,
-            notSafeCount: poorPerformanceCount
+            riskLabel: riskLabelEN(data.avg),
+            riskPct: totalCount > 0 ? Math.round((highRiskCount / totalCount) * 100) : 0,
+            safePct: totalCount > 0 ? Math.round(((totalCount - highRiskCount) / totalCount) * 100) : 0,
+            safeCount: totalCount - highRiskCount,
+            notSafeCount: highRiskCount,
+            topDrivers: []
           };
-          
-          console.log(`    ✅ Populated: avgPerformance=${avgPerformance.toFixed(2)}, count=${totalCount}, topDrivers=${topDrivers.length}`);
+
+          console.log(`    ✅ Populated from buildPrincipleScores`);
         } else {
-          console.log(`    ❌ No valid risk values found`);
+          console.log(`    ❌ No data available`);
           scoring.byPrincipleOverall[principle] = null;
         }
-      } else if (data.avg !== undefined && data.avg !== null) {
-        // Fallback: Use data from buildPrincipleScores (old aggregation logic)
-        console.log(`    🔄 Fallback to buildPrincipleScores data: avg=${data.avg}, count=${data.count}`);
-        
-        const highRiskCount = evaluatorScores.filter(s => {
-          const pData = s.byPrinciple?.[principle];
-          return pData && typeof pData.avg === 'number' && isRiskyScore(pData.avg);
-        }).length;
-        const totalCount = data.count || 1;
-        
-        scoring.byPrincipleOverall[principle] = {
-          avgScore: data.avg,
-          avg: data.avg,
-          risk: data.avg,
-          erc: data.avg,
-          min: data.min,
-          max: data.max,
-          count: totalCount,
-          riskLabel: riskLabelEN(data.avg),
-          riskPct: totalCount > 0 ? Math.round((highRiskCount / totalCount) * 100) : 0,
-          safePct: totalCount > 0 ? Math.round(((totalCount - highRiskCount) / totalCount) * 100) : 0,
-          safeCount: totalCount - highRiskCount,
-          notSafeCount: highRiskCount,
-          topDrivers: []
-        };
-        
-        console.log(`    ✅ Populated from buildPrincipleScores`);
-      } else {
-        console.log(`    ❌ No data available`);
-        scoring.byPrincipleOverall[principle] = null;
       }
+    });
+
+    // CRITICAL DEBUG: Log final byPrincipleOverall
+    const populatedPrinciples = Object.entries(scoring.byPrincipleOverall)
+      .filter(([_, data]) => data !== null)
+      .map(([principle, data]) => `${principle}=${data.avg?.toFixed(2) || 'N/A'}`);
+    console.log(`✅ [DEBUG buildReportMetrics] byPrincipleOverall populated: ${populatedPrinciples.length} principles`);
+    console.log(`   ${populatedPrinciples.join(', ')}`);
+
+    if (populatedPrinciples.length === 0) {
+      console.error(`❌ CRITICAL: byPrincipleOverall is EMPTY! Charts will not render.`);
+      console.error(`   Scores count: ${scores.length}`);
+      console.error(`   principleScoresData keys: ${Object.keys(principleScoresData).join(', ')}`);
     }
-  });
-  
-  // CRITICAL DEBUG: Log final byPrincipleOverall
-  const populatedPrinciples = Object.entries(scoring.byPrincipleOverall)
-    .filter(([_, data]) => data !== null)
-    .map(([principle, data]) => `${principle}=${data.avg?.toFixed(2) || 'N/A'}`);
-  console.log(`✅ [DEBUG buildReportMetrics] byPrincipleOverall populated: ${populatedPrinciples.length} principles`);
-  console.log(`   ${populatedPrinciples.join(', ')}`);
-  
-  if (populatedPrinciples.length === 0) {
-    console.error(`❌ CRITICAL: byPrincipleOverall is EMPTY! Charts will not render.`);
-    console.error(`   Scores count: ${scores.length}`);
-    console.error(`   principleScoresData keys: ${Object.keys(principleScoresData).join(', ')}`);
-  }
 
     // Aggregate by role
     const roleGroups = {};
@@ -992,7 +1020,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Build dynamic principle-by-principle table with actual evaluators
     // TASK 2: Use canonical principles from buildPrincipleScores
     scoring.byPrincipleTable = {};
-    
+
     // Use principles from buildPrincipleScores result
     const allPrinciples = Object.keys(principleScoresData);
 
@@ -1008,12 +1036,12 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
       // For each evaluator with scores, get their score for this principle
       evaluatorsWithScores.forEach(evaluator => {
-        const evaluatorScore = evaluatorScores.find(s => 
-          s.userId.toString() === evaluator.userId && 
-          s.byPrinciple && 
+        const evaluatorScore = evaluatorScores.find(s =>
+          s.userId.toString() === evaluator.userId &&
+          s.byPrinciple &&
           s.byPrinciple[principle]
         );
-        
+
         if (evaluatorScore && evaluatorScore.byPrinciple[principle]) {
           // TASK 4: NO FALLBACK TO 0 - NULL means not evaluated, 0 is a valid score
           const scoreValue = evaluatorScore.byPrinciple[principle].avg ?? null;
@@ -1024,7 +1052,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
             role: evaluator.role,
             score: scoreValue
           });
-          
+
           if (scoreValue < principleData.range.min) principleData.range.min = scoreValue;
           if (scoreValue > principleData.range.max) principleData.range.max = scoreValue;
         }
@@ -1034,7 +1062,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       const validScores = principleData.evaluators
         .map(e => e.score)
         .filter(s => s > 0);
-      
+
       if (validScores.length > 0) {
         principleData.average = validScores.reduce((a, b) => a + b, 0) / validScores.length;
         principleData.count = validScores.length;
@@ -1096,27 +1124,27 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
       // Determine if question is common (first 12) or role-specific
       const isCommonQuestion = question.order <= 12;
-      
+
       // Get actual roles who answered (with evaluator names if available)
       const rolesWhoAnswered = [];
       const roleUserMap = {};
-      
+
       // Build map of role -> user IDs who answered this question
       scoreData.forEach(d => {
         if (!roleUserMap[d.role]) {
           roleUserMap[d.role] = new Set();
         }
         // Find the response that contains this answer
-        const response = responses.find(r => 
-          r.role === d.role && 
-          r.answers && 
+        const response = responses.find(r =>
+          r.role === d.role &&
+          r.answers &&
           r.answers.some(a => a.questionId && a.questionId.toString() === questionId)
         );
         if (response && response.userId) {
           roleUserMap[d.role].add(response.userId.toString());
         }
       });
-      
+
       // Build role labels with evaluator names
       Object.entries(roleUserMap).forEach(([role, userIds]) => {
         if (userIds.size > 0) {
@@ -1127,7 +1155,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
               return evaluator ? evaluator.name : null;
             })
             .filter(Boolean);
-          
+
           if (evaluatorNames.length > 0) {
             rolesWhoAnswered.push(`${role}: ${evaluatorNames.join(', ')}`);
           } else {
@@ -1140,7 +1168,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
       // Get question text (join from questions collection)
       const questionText = question.text || question.questionText || question.code || questionId;
-      
+
       // Get answer excerpts with better handling of empty answers
       // Only include questions with responses that have actual text answers
       const hasSubmittedAnswer = responses.some(response => {
@@ -1152,12 +1180,12 @@ async function buildReportMetrics(projectId, questionnaireKey) {
           return aText && aText.trim().length > 0;
         });
       });
-      
+
       // If no submitted answers with text, skip this question from top risk drivers
       // OR mark it as "submitted but empty"
       let answerExcerptsFinal = answerExcerpts.slice(0, 2);
       let answerStatus = 'has_text';
-      
+
       if (answerExcerptsFinal.length === 0 && hasSubmittedAnswer) {
         // Submitted but answer text is empty/not captured
         answerStatus = 'submitted_empty';
@@ -1166,7 +1194,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         // No submitted responses with text - skip this question
         return; // Skip questions without submitted text answers
       }
-      
+
       topRiskDrivers.push({
         questionId,
         questionCode: question.code || questionId,
@@ -1211,7 +1239,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Use deterministic computeReviewState function (same as analyticsService)
     // This ensures consistency across dashboard, table, and narrative
     const reviewState = computeReviewState(tension.votes, tension.createdBy);
-    
+
     // F) Normalize reviewState to canonical enum values
     let normalizedReviewState = reviewState;
     // Map various formats to canonical enum
@@ -1228,7 +1256,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     } else {
       normalizedReviewState = 'Proposed'; // Default
     }
-    
+
     // Count by normalized review state
     if (normalizedReviewState === 'Accepted') tensionsSummary.accepted++;
     else if (normalizedReviewState === 'UnderReview') tensionsSummary.underReview++;
@@ -1253,7 +1281,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       const voterId = v.userId ? v.userId.toString() : null;
       return voterId !== creatorId;
     });
-    
+
     const assignedCount = assignedUserIds.size;
     const participationPct = assignedCount > 0 ? (votes.length / assignedCount) * 100 : 0;
     totalParticipation += participationPct;
@@ -1261,7 +1289,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     const agreeCount = votes.filter(v => v.voteType === 'agree').length;
     const disagreeCount = votes.filter(v => v.voteType === 'disagree').length;
     const agreePct = votes.length > 0 ? (agreeCount / votes.length) * 100 : 0;
-    
+
     // Get discussion count (from embedded comments or evidence item comments)
     let discussionCount = 0;
     // Count tension-level comments
@@ -1296,7 +1324,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       const creator = creatorMap.get(creatorIdStr);
       createdByName = creator ? creator.name : creatorIdStr; // Use name or fall back to ID
     }
-    
+
     tensionsList.push({
       tensionId: tension._id.toString(),
       createdAt: tension.createdAt,
@@ -1322,8 +1350,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       evidence: {
         count: evidenceCount,
         types: [...new Set(evidenceItems.map(e => e.evidenceType))],
-        typesString: evidenceCount > 0 
-          ? [...new Set(evidenceItems.map(e => e.evidenceType))].join(', ') 
+        typesString: evidenceCount > 0
+          ? [...new Set(evidenceItems.map(e => e.evidenceType))].join(', ')
           : 'None', // Human-readable string for display
         items: evidenceItems
       },
@@ -1392,10 +1420,10 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       } catch (reviewStateError) {
         console.warn(`⚠️  Tension review state chart failed (skipped): ${reviewStateError.message}`);
       }
-      
+
       // TASK 7: Evidence coverage and evidence type charts REMOVED (invalid/misleading per Z-Inspection methodology)
       // These charts are not aligned with Z-Inspection methodology and are weak/misleading
-      
+
       if (tensionsList.length > 0) {
         try {
           // Convert tension list to severity distribution
@@ -1477,11 +1505,11 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       evaluatorsWithMissingScores: evaluators.submitted
         .filter(e => e.scoreMissing || false)
         .map(e => ({
-        userId: e.userId,
-        name: e.name,
-        role: e.role,
-        questionnaireKey: e.questionnaireKey
-      }))
+          userId: e.userId,
+          name: e.name,
+          role: e.role,
+          questionnaireKey: e.questionnaireKey
+        }))
     },
     charts: {
       // Chart buffers will be stored separately, but metadata is included here
@@ -1534,7 +1562,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     projectId: projectIdObj,
     questionnaireKey: questionnaireKey || { $exists: true }
   }).lean();
-  
+
   // Exclude project-level aggregated score docs from evaluator aggregations
   const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
 
@@ -1546,11 +1574,11 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     projectId: projectIdObj,
     questionnaireKey: questionnaireKey || { $exists: true }
   })
-  .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
-  .lean();
-  
+    .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
+    .lean();
+
   console.log(`📊 [DEBUG buildDashboardMetrics] Found ${allResponsesRaw.length} total responses`);
-  
+
   // Get responses with answers (no draft/submitted distinction)
   const responses = allResponsesRaw.filter(r => {
     if (!r.answers || !Array.isArray(r.answers) || r.answers.length === 0) {
@@ -1558,15 +1586,15 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     }
     return r.answers.some(answer => {
       if (!answer.answer) return false;
-      return answer.answer.text || 
-             answer.answer.choiceKey || 
-             answer.answer.numeric !== undefined || 
-             (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
+      return answer.answer.text ||
+        answer.answer.choiceKey ||
+        answer.answer.numeric !== undefined ||
+        (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
     });
   });
-  
+
   console.log(`📊 [DEBUG buildDashboardMetrics] Found ${responses.length} responses with answers`);
-  
+
   // Debug: Check if answers are being fetched
   responses.forEach((r, idx) => {
     const answersCount = r.answers ? r.answers.length : 0;
@@ -1669,13 +1697,13 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   // TASK 2 & 4: Use buildPrincipleScores - ONLY from Score collection
   // NEVER recompute from Response or generalquestionanswers
   const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey);
-  
+
   // TASK 9: Validation - Check if all principle scores are null
   const allNull = Object.values(principleScoresData).every(v => v === null);
   if (allNull) {
     throw new Error('REPORT GENERATION ABORTED: All principle scores are null. Cannot generate report without any evaluated principles.');
   }
-  
+
   // Map to scoresData.byPrinciple structure
   Object.entries(principleScoresData).forEach(([principle, data]) => {
     if (data === null) {
@@ -1692,11 +1720,11 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       if (data.max !== undefined && (data.max < 0 || data.max > 4)) {
         throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid max score ${data.max}. Scores must be between 0 and 4.`);
       }
-      
+
       // TASK 7: Validate risk classification matches score
       const classification = classifyRisk(data.avg);
       validateRiskScaleNotInverted(data.avg, classification);
-      
+
       scoresData.byPrinciple[principle] = {
         avg: data.avg,
         min: data.min,
@@ -1705,7 +1733,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       };
     }
   });
-  
+
   // TASK 7: Validation - Check for auto-conversion of null to 0
   Object.entries(scoresData.byPrinciple).forEach(([principle, data]) => {
     const originalData = principleScoresData[principle];
@@ -1713,7 +1741,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       throw new Error(`VALIDATION ERROR: Principle ${principle} was null but was auto-converted to 0. This is not allowed. NULL means not evaluated, 0 means MINIMAL risk.`);
     }
   });
-  
+
   // TASK 9: Validation - Check for auto-conversion of null to 0
   Object.entries(scoresData.byPrinciple).forEach(([principle, data]) => {
     const originalData = principleScoresData[principle];
@@ -1771,7 +1799,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       response.answers.forEach(answer => {
         if (answer.questionId && typeof answer.score === 'number') {
           const qId = answer.questionId.toString();
-          
+
           // Aggregate scores
           if (!questionScores[qId]) {
             questionScores[qId] = [];
@@ -1799,7 +1827,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   Object.entries(questionScores).forEach(([questionId, scoreArray]) => {
     const avgPerformance = scoreArray.reduce((sum, s) => sum + s, 0) / scoreArray.length;
     const question = questionMap.get(questionId);
-    
+
     if (question) {
       // Get answer snippet (prefer first available)
       const answerData = questionAnswerMap[questionId] || [];
@@ -1864,25 +1892,25 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     // Use deterministic computeReviewState function (same as analyticsService)
     // This ensures consistency across dashboard, table, and narrative
     const reviewState = computeReviewState(tension.votes, tension.createdBy);
-    
+
     // Normalize reviewState to match chart labels
     let normalizedReviewState = reviewState;
     if (reviewState === 'Single review') {
       normalizedReviewState = 'Under review'; // Map "Single review" to "Under review" for consistency
     }
 
-    tensionsSummary.countsByReviewState[normalizedReviewState] = 
+    tensionsSummary.countsByReviewState[normalizedReviewState] =
       (tensionsSummary.countsByReviewState[normalizedReviewState] || 0) + 1;
 
     // Count evidence
     const evidence = tension.evidences || tension.evidence || [];
     const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
-    
+
     if (evidenceCount > 0) {
       tensionsWithEvidence++;
       evidence.forEach(e => {
         const type = e.type || e.evidenceType || 'Other';
-        tensionsSummary.evidenceTypeDistribution[type] = 
+        tensionsSummary.evidenceTypeDistribution[type] =
           (tensionsSummary.evidenceTypeDistribution[type] || 0) + 1;
       });
     }
@@ -1893,7 +1921,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       const voterId = v.userId ? v.userId.toString() : null;
       return voterId !== creatorId;
     });
-    
+
     // Get creator info (join from users collection) - reuse creatorId from above
 
     const agreeCount = votes.filter(v => v.voteType === 'agree').length;
@@ -1915,7 +1943,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     const creator = creatorId ? creatorMap.get(creatorId) : null;
     const createdByName = creator?.name || 'Unknown';
     const createdByRole = creator?.role || 'Unknown';
-    
+
     // Collect unresolved tensions for sorting
     if (normalizedReviewState !== 'Accepted' && normalizedReviewState !== 'Resolved') {
       unresolvedTensions.push({
@@ -1939,7 +1967,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
 
   tensionsSummary.evidenceCoverage.tensionsWithEvidence = tensionsWithEvidence;
   tensionsSummary.evidenceCoverage.tensionsWithoutEvidence = tensions.length - tensionsWithEvidence;
-  tensionsSummary.evidenceCoverage.coveragePct = tensions.length > 0 
+  tensionsSummary.evidenceCoverage.coveragePct = tensions.length > 0
     ? parseFloat(((tensionsWithEvidence / tensions.length) * 100).toFixed(1))
     : 0;
 
@@ -1951,16 +1979,16 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       const voterId = v.userId ? v.userId.toString() : null;
       return voterId !== creatorId;
     });
-    
+
     const agreeCount = votes.filter(v => v.voteType === 'agree').length;
     const disagreeCount = votes.filter(v => v.voteType === 'disagree').length;
     const totalVotes = votes.length;
     const consensusPct = totalVotes > 0 ? (agreeCount / totalVotes) * 100 : 0;
-    
+
     const evidence = tension.evidences || tension.evidence || [];
     const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
     const evidenceTypes = [...new Set(evidence.map(e => e.type || e.evidenceType || 'Other'))];
-    
+
     // Get discussion count
     let discussionCount = 0;
     if (tension.comments && Array.isArray(tension.comments)) {
@@ -1973,17 +2001,17 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
         }
       });
     }
-    
+
     const reviewState = computeReviewState(tension.votes, tension.createdBy);
     let normalizedReviewState = reviewState;
     if (reviewState === 'Single review') {
       normalizedReviewState = 'Under review';
     }
-    
+
     const creator = creatorId ? creatorMap.get(creatorId) : null;
     const createdByName = creator?.name || 'Unknown';
     const createdByRole = creator?.role || 'Unknown';
-    
+
     tensionsList.push({
       tensionId: tension._id.toString(),
       createdAt: tension.createdAt,
@@ -2019,8 +2047,8 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       consensus: {
         assignedExpertsCount: evaluators.submitted.length, // Use actual submitted count
         votesTotal: votes.length,
-        participationPct: evaluators.submitted.length > 0 
-          ? (votes.length / evaluators.submitted.length) * 100 
+        participationPct: evaluators.submitted.length > 0
+          ? (votes.length / evaluators.submitted.length) * 100
           : 0,
         agreeCount,
         disagreeCount,
@@ -2059,7 +2087,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   let submittedCountWithMissingText = 0;
   let submittedCountWithText = 0;
   let emptyAnswersCount = 0;
-  
+
   responses.forEach(response => {
     if (response.answers && Array.isArray(response.answers)) {
       const hasTextAnswer = response.answers.some(a => {
@@ -2079,7 +2107,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
 
   // Count tensions without evidence
   const tensionsWithoutEvidence = tensionsList.filter(t => t.evidence.count === 0);
-  const mitigationMissingCount = tensionsList.filter(t => 
+  const mitigationMissingCount = tensionsList.filter(t =>
     !t.mitigation?.proposed || t.mitigation.proposed.trim().length === 0
   ).length;
 
@@ -2115,13 +2143,13 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     evidence: {
       tensionsWithoutEvidenceCount: tensionsWithoutEvidence.length,
       tensionsWithoutEvidenceIds: tensionsWithoutEvidence.map(t => t.tensionId || t._id?.toString() || 'unknown'),
-      evidenceCoveragePct: tensionsList.length > 0 
+      evidenceCoveragePct: tensionsList.length > 0
         ? ((tensionsList.length - tensionsWithoutEvidence.length) / tensionsList.length * 100).toFixed(1)
         : 100
     },
     mitigation: {
       missingCount: mitigationMissingCount,
-      missingPct: tensionsList.length > 0 
+      missingPct: tensionsList.length > 0
         ? ((mitigationMissingCount / tensionsList.length) * 100).toFixed(1)
         : 0
     }
@@ -2130,7 +2158,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   // Check for missing answers (questions that should be answered but aren't)
   const requiredQuestions = questions.filter(q => q.required !== false);
   const answeredQuestionIds = new Set();
-  
+
   responses.forEach(response => {
     if (response.answers && Array.isArray(response.answers)) {
       response.answers.forEach(answer => {
@@ -2141,7 +2169,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     }
   });
 
-  const missingAnswers = requiredQuestions.filter(q => 
+  const missingAnswers = requiredQuestions.filter(q =>
     !answeredQuestionIds.has(q._id.toString())
   );
 
@@ -2175,11 +2203,11 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     warnings: [],
     errors: []
   };
-  
+
   // Check 1: submittedCount consistency (TASK A - Single Source of Truth)
   const dashboardSubmittedCount = team.submittedCount;
   const appendixSubmittedCount = evaluators.submitted.length;
-  
+
   // Defensive guard: if appendix shows included evaluators > 0 but dashboard shows 0, throw error
   if (appendixSubmittedCount > 0 && dashboardSubmittedCount === 0) {
     const errorMsg = `❌ CRITICAL: Appendix shows ${appendixSubmittedCount} evaluator(s) with answers but dashboard shows 0. This indicates evaluator counting is inconsistent.`;
@@ -2188,14 +2216,14 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     console.error(`   Appendix using: evaluators.submitted.length from getProjectEvaluators`);
     throw new Error(errorMsg);
   }
-  
+
   if (dashboardSubmittedCount !== appendixSubmittedCount) {
     consistencyChecks.passed = false;
     consistencyChecks.errors.push(
       `Evaluator count mismatch: Dashboard shows ${dashboardSubmittedCount}, Appendix shows ${appendixSubmittedCount}. Both should count evaluators with answers consistently.`
     );
   }
-  
+
   // Check 2: Risk label mapping consistency
   // Verify that riskLabel function matches the expected interpretation
   // CORRECT: 0 = MINIMAL risk, 4 = CRITICAL risk
@@ -2208,7 +2236,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     // CORRECT SCALE: 0=MINIMAL risk, 4=CRITICAL risk
     return false; // No mismatch expected, but we check anyway
   });
-  
+
   // Check 3: Score interpretation text consistency
   // Verify that any "Higher score = higher risk" text matches the riskLabel mapping
   // This is a semantic check - we'll flag if scores suggest opposite interpretation
@@ -2220,11 +2248,11 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   const riskLabelForAvg = riskLabelEN(avgScore);
   // If avg score is high (3-4) and we're calling it "Low risk", that's inconsistent
   // But our mapping is: 0-1=Low, 3-4=Critical, so high score = Critical = correct
-  
+
   // Check 4: Evidence coverage consistency
   const tensionsWithEvidenceCount = tensionsSummary.total - (dataQuality.evidence?.tensionsWithoutEvidenceCount || 0);
   const evidenceCoverageFromSummary = tensionsSummary.evidenceCoverage || 0;
-  const calculatedCoverage = tensionsSummary.total > 0 
+  const calculatedCoverage = tensionsSummary.total > 0
     ? ((tensionsWithEvidenceCount / tensionsSummary.total) * 100).toFixed(1)
     : 100;
   if (Math.abs(parseFloat(evidenceCoverageFromSummary) - parseFloat(calculatedCoverage)) > 1) {
@@ -2232,9 +2260,9 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       `Evidence coverage calculation mismatch: Summary shows ${evidenceCoverageFromSummary}%, calculated ${calculatedCoverage}%`
     );
   }
-  
+
   // Check 5: Top risky questions have submitted answers
-  const topRiskyWithNoAnswers = topRiskyQuestions.filter(q => 
+  const topRiskyWithNoAnswers = topRiskyQuestions.filter(q =>
     !q.answerSnippet || q.answerSnippet.trim().length === 0
   ).length;
   if (topRiskyWithNoAnswers > 0) {
@@ -2252,7 +2280,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   console.log(`  - submittedCount: ${submittedCount}`);
   console.log(`  - completionPct: ${team?.completionPct ?? 'N/A'}%`);
   console.log('');
-  
+
   // High-signal pipeline summary (helps diagnose counting issues)
   try {
     const statusCounts = (allResponsesRaw || []).reduce((acc, r) => {
