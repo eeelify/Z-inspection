@@ -98,6 +98,8 @@ mongoose
 
 
 // --- 2. ŞEMALAR (MODELS) ---
+require('./models/response'); // Ensure Response model is loaded
+
 
 // User
 const UserSchema = new mongoose.Schema({
@@ -336,17 +338,8 @@ const TensionSchema = new mongoose.Schema({
 const Tension = mongoose.model('Tension', TensionSchema);
 
 // Message
-const MessageSchema = new mongoose.Schema({
-  fromUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  toUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  text: { type: String, required: true },
-  // Notification-only messages should show in bell notifications but not in chat threads
-  isNotification: { type: Boolean, default: false, index: true },
-  createdAt: { type: Date, default: Date.now },
-  readAt: { type: Date }
-});
-MessageSchema.index({ fromUserId: 1, toUserId: 1, createdAt: -1 });
-const Message = mongoose.model('Message', MessageSchema);
+// Message
+const Message = require('./models/Message');
 
 // Report - Analysis Reports (expert comment workflow)
 const ExpertCommentSchema = new mongoose.Schema({
@@ -1049,12 +1042,12 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
 // YORUM EKLEME
 app.post('/api/tensions/:id/comment', async (req, res) => {
   try {
-    const {text, authorId, authorName } = req.body;
+    const { text, authorId, authorName } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
 
     if (!tension.comments) tension.comments = [];
-    tension.comments.push({text, authorId, authorName, date: new Date() });
+    tension.comments.push({ text, authorId, authorName, date: new Date() });
 
     await tension.save();
     res.json(tension.comments);
@@ -1102,7 +1095,7 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
 app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, res) => {
   try {
     const { tensionId, evidenceId } = req.params;
-    const {text, userId } = req.body;
+    const { text, userId } = req.body;
 
     // Validation
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -2814,7 +2807,7 @@ app.post('/api/general-questions', async (req, res) => {
                   answerFormat = { choiceKey: option?.key || answerValue };
                 } else if (question.answerType === 'open_text') {
                   score = generalRisksMap[qId] !== undefined ? generalRisksMap[qId] : 0;
-                  answerFormat = {text: answerValue };
+                  answerFormat = { text: answerValue };
                 }
 
                 generalResponseAnswers.push({
@@ -2951,7 +2944,7 @@ app.post('/api/general-questions', async (req, res) => {
                     answerFormat = { choiceKey: option?.key || answerValue };
                   } else if (question.answerType === 'open_text') {
                     score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
-                    answerFormat = {text: answerValue };
+                    answerFormat = { text: answerValue };
                   }
 
                   roleResponseAnswers.push({
@@ -3709,7 +3702,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
           return { answer: { choiceKey: opt ? opt.key : v }, optionScore: opt?.score };
         }
         if (t === 'open_text') {
-          return { answer: {text: String(value ?? '') } };
+          return { answer: { text: String(value ?? '') } };
         }
         if (t === 'multi_choice') {
           const arr = Array.isArray(value) ? value : [value];
@@ -3720,7 +3713,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
           return { answer: { numeric: Number.isFinite(n) ? n : undefined } };
         }
         // fallback: store as text
-        return { answer: {text: typeof value === 'string' ? value : JSON.stringify(value) } };
+        return { answer: { text: typeof value === 'string' ? value : JSON.stringify(value) } };
       };
 
       for (const [key, value] of Object.entries(flatAnswers)) {
@@ -4846,7 +4839,7 @@ app.post('/api/messages', async (req, res) => {
       try {
         const fromUser = await User.findById(fromUserId);
         const toUser = await User.findById(toUserId);
-        
+
         if (fromUser && toUser && process.env.RESEND_API_KEY) {
           let project = null;
           if (projectId) {
@@ -4854,10 +4847,10 @@ app.post('/api/messages', async (req, res) => {
           }
 
           const { sendEmail } = require('./services/emailService');
-          const subject = project 
+          const subject = project
             ? `New message from ${fromUser.name} - ${project.title}`
             : `New message from ${fromUser.name}`;
-          
+
           const html = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
@@ -4900,11 +4893,11 @@ app.post('/api/messages/send-email', async (req, res) => {
       const { sendEmail } = require('./services/emailService');
       await sendEmail(
         to,
-        `New message from ${fromName}${projectTitle? ` - ${projectTitle}` : ''} `,
+        `New message from ${fromName}${projectTitle ? ` - ${projectTitle}` : ''} `,
         `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;" >
             <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
-            <p>You have received a new message from <strong>${fromName}</strong>${projectTitle? ` regarding project <strong>"${projectTitle}"</strong>` : ''}.</p>
+            <p>You have received a new message from <strong>${fromName}</strong>${projectTitle ? ` regarding project <strong>"${projectTitle}"</strong>` : ''}.</p>
             <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 0; color: #374151;">${message.replace(/\n/g, '<br>')}</p>
             </div>
@@ -4913,7 +4906,7 @@ app.post('/api/messages/send-email', async (req, res) => {
             <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
           </div>
           `,
-        `You have received a new message from ${fromName}${projectTitle? ` regarding project "${projectTitle}"` : ''}: \n\n${message} \n\nPlease log in to the platform to respond.`
+        `You have received a new message from ${fromName}${projectTitle ? ` regarding project "${projectTitle}"` : ''}: \n\n${message} \n\nPlease log in to the platform to respond.`
       );
       console.log('📧 Email sent successfully to:', to);
       return res.json({ success: true, message: 'Email sent successfully' });
@@ -4992,7 +4985,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
       toUserId: userIdObj,
       readAt: null
     })
-      .populate('projectId', 'title')
+      .populate({ path: 'projectId', select: 'title', strictPopulate: false })
       .populate('fromUserId', 'name email')
       .sort({ createdAt: -1 })
       .lean();
@@ -5577,7 +5570,7 @@ app.post('/api/shared-discussions', async (req, res) => {
     const { userId, text, projectId, replyTo, mentions } = req.body;
 
     if (!userId || !text) {
-      console.error('❌ Missing required fields:', { userId: !!userId, text: !!text});
+      console.error('❌ Missing required fields:', { userId: !!userId, text: !!text });
       return res.status(400).json({ error: 'Missing required fields: userId, text' });
     }
 
