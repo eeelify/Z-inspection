@@ -976,7 +976,6 @@ export function AdminDashboardEnhanced({
               otherUser={chatOtherUser}
               inline={true}
               defaultFullscreen={false}
-              showProjectTitle={true}
               onClose={() => {
                 setChatPanelOpen(false);
                 // Keep project/user so ChatPanel stays mounted

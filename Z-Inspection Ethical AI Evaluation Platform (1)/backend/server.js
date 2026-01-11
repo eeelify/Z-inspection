@@ -1,7 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 const compression = require('compression');
 const path = require('path');
 // Load environment variables:
@@ -338,7 +337,6 @@ const Tension = mongoose.model('Tension', TensionSchema);
 
 // Message
 const MessageSchema = new mongoose.Schema({
-  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   fromUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   toUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   text: { type: String, required: true },
@@ -347,7 +345,7 @@ const MessageSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   readAt: { type: Date }
 });
-MessageSchema.index({ projectId: 1, fromUserId: 1, toUserId: 1, createdAt: -1 });
+MessageSchema.index({ fromUserId: 1, toUserId: 1, createdAt: -1 });
 const Message = mongoose.model('Message', MessageSchema);
 
 // Report - Analysis Reports (expert comment workflow)
@@ -1051,12 +1049,12 @@ app.post('/api/tensions/:id/vote', async (req, res) => {
 // YORUM EKLEME
 app.post('/api/tensions/:id/comment', async (req, res) => {
   try {
-    const { text, authorId, authorName } = req.body;
+    const {text, authorId, authorName } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
 
     if (!tension.comments) tension.comments = [];
-    tension.comments.push({ text, authorId, authorName, date: new Date() });
+    tension.comments.push({text, authorId, authorName, date: new Date() });
 
     await tension.save();
     res.json(tension.comments);
@@ -1104,7 +1102,7 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
 app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, res) => {
   try {
     const { tensionId, evidenceId } = req.params;
-    const { text, userId } = req.body;
+    const {text, userId } = req.body;
 
     // Validation
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -2816,7 +2814,7 @@ app.post('/api/general-questions', async (req, res) => {
                   answerFormat = { choiceKey: option?.key || answerValue };
                 } else if (question.answerType === 'open_text') {
                   score = generalRisksMap[qId] !== undefined ? generalRisksMap[qId] : 0;
-                  answerFormat = { text: answerValue };
+                  answerFormat = {text: answerValue };
                 }
 
                 generalResponseAnswers.push({
@@ -2953,7 +2951,7 @@ app.post('/api/general-questions', async (req, res) => {
                     answerFormat = { choiceKey: option?.key || answerValue };
                   } else if (question.answerType === 'open_text') {
                     score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
-                    answerFormat = { text: answerValue };
+                    answerFormat = {text: answerValue };
                   }
 
                   roleResponseAnswers.push({
@@ -3711,7 +3709,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
           return { answer: { choiceKey: opt ? opt.key : v }, optionScore: opt?.score };
         }
         if (t === 'open_text') {
-          return { answer: { text: String(value ?? '') } };
+          return { answer: {text: String(value ?? '') } };
         }
         if (t === 'multi_choice') {
           const arr = Array.isArray(value) ? value : [value];
@@ -3722,7 +3720,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
           return { answer: { numeric: Number.isFinite(n) ? n : undefined } };
         }
         // fallback: store as text
-        return { answer: { text: typeof value === 'string' ? value : JSON.stringify(value) } };
+        return { answer: {text: typeof value === 'string' ? value : JSON.stringify(value) } };
       };
 
       for (const [key, value] of Object.entries(flatAnswers)) {
@@ -4336,9 +4334,9 @@ app.post('/api/auth/request-code', async (req, res) => {
     const { sendVerificationEmail } = require('./config/mailer');
     await sendVerificationEmail(email, code);
 
-    res.status(200).json({ message: "Verification code sent." });
+    return res.status(200).json({ message: "Verification code sent." });
   } catch (err) {
-    console.error("[REQUEST CODE] error while sending code:", err);
+    console.error("[REQUEST CODE] failed:", err);
     return res.status(500).json({ message: "Failed to send verification code." });
   }
 });
@@ -4388,21 +4386,22 @@ app.post('/api/auth/verify-code-and-register', async (req, res) => {
 
     // Send welcome email (non-blocking, log error if fails but don't fail registration)
     try {
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        const transporter = require('./config/mailer');
-        const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: email,
-          subject: 'Welcome to Z-Inspection Platform',
-          html: `
-            <p>Hello ${name},</p>
-            <p>Welcome to Z-Inspection Ethical AI Evaluation Platform.</p>
-            <p>You can now sign in with your account and start adding your projects.</p>
+      if (process.env.RESEND_API_KEY) {
+        const { sendEmail } = require('./services/emailService');
+        await sendEmail(
+          email,
+          'Welcome to Z-Inspection Platform',
           `
-        };
-        await transporter.sendMail(mailOptions);
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #1F2937; margin-bottom: 20px;">Welcome!</h2>
+              <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hello ${name},</p>
+              <p style="color: #374151; font-size: 16px; line-height: 1.6;">Welcome to Z-Inspection Ethical AI Evaluation Platform.</p>
+              <p style="color: #374151; font-size: 16px; line-height: 1.6;">You can now sign in with your account and start adding your projects.</p>
+            </div>
+          `
+        );
       } else {
-        console.warn('Welcome email not sent: Email credentials not configured');
+        console.warn('Welcome email not sent: RESEND_API_KEY not configured');
       }
     } catch (emailError) {
       console.error('Welcome email sending error (non-blocking):', emailError);
@@ -4793,16 +4792,15 @@ app.delete('/api/projects/:id', async (req, res) => {
 
 // Messages
 
-// GET /api/messages/thread?projectId=&user1=&user2=
+// GET /api/messages/thread?user1=&user2=
 app.get('/api/messages/thread', async (req, res) => {
   try {
-    const { projectId, user1, user2 } = req.query;
-    if (!projectId || !user1 || !user2) {
-      return res.status(400).json({ error: 'Missing required parameters: projectId, user1, user2' });
+    const { user1, user2 } = req.query;
+    if (!user1 || !user2) {
+      return res.status(400).json({ error: 'Missing required parameters: user1, user2' });
     }
 
     const messages = await Message.find({
-      projectId: projectId,
       isNotification: { $ne: true },
       $or: [
         { fromUserId: user1, toUserId: user2 },
@@ -4822,15 +4820,15 @@ app.get('/api/messages/thread', async (req, res) => {
 // POST /api/messages
 app.post('/api/messages', async (req, res) => {
   try {
-    const { projectId, fromUserId, toUserId, text, isNotification } = req.body;
-    if (!projectId || !fromUserId || !toUserId || !text) {
-      return res.status(400).json({ error: 'Missing required fields: projectId, fromUserId, toUserId, text' });
+    const { fromUserId, toUserId, text, isNotification, projectId } = req.body;
+    if (!fromUserId || !toUserId || !text) {
+      return res.status(400).json({ error: 'Missing required fields: fromUserId, toUserId, text' });
     }
 
     const message = new Message({
-      projectId,
       fromUserId,
       toUserId,
+      projectId,
       text,
       isNotification: Boolean(isNotification),
       createdAt: new Date()
@@ -4843,57 +4841,46 @@ app.post('/api/messages', async (req, res) => {
       .populate('projectId', 'title');
 
     // Send email notification (async, don't wait for it)
+    // Send email notification (async, don't wait for it)
     (async () => {
       try {
         const fromUser = await User.findById(fromUserId);
         const toUser = await User.findById(toUserId);
-        const project = await Project.findById(projectId);
-
-        if (fromUser && toUser && project) {
-          // Create transporter (using Gmail as example - configure with your SMTP settings)
-          const transporter = nodemailer.createTransport({
-            service: 'gmail', // or use your SMTP settings
-            auth: {
-              user: process.env.EMAIL_USER || 'your-email@gmail.com',
-              pass: process.env.EMAIL_PASS || 'your-app-password'
-            }
-          });
-
-          // Only send email if credentials are configured
-          if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-            await transporter.sendMail({
-              from: `"Z-Inspection Platform" <${process.env.EMAIL_USER}>`,
-              to: toUser.email,
-              subject: `New message from ${fromUser.name} - ${project.title}`,
-              html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
-                  <p>You have received a new message from <strong>${fromUser.name}</strong> regarding project <strong>"${project.title}"</strong>.</p>
-                  <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p style="margin: 0; color: #374151;">${text.replace(/\n/g, '<br>')}</p>
-                  </div>
-                  <p style="color: #6B7280; font-size: 14px;">Please log in to the platform to respond.</p>
-                  <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
-                  <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
-                </div>
-              `,
-              text: `You have received a new message from ${fromUser.name} regarding project "${project.title}":\n\n${text}\n\nPlease log in to the platform to respond.`
-            });
-            console.log('📧 Email sent successfully to:', toUser.email);
-          } else {
-            // Log email notification if credentials not configured
-            console.log('📧 Email Notification (credentials not configured):');
-            console.log(`To: ${toUser.email} (${toUser.name})`);
-            console.log(`From: ${fromUser.name}`);
-            console.log(`Project: ${project.title}`);
-            console.log(`Message: ${text.substring(0, 100)}...`);
-            console.log('---');
-            console.log('💡 To enable email sending, set EMAIL_USER and EMAIL_PASS in .env file');
+        
+        if (fromUser && toUser && process.env.RESEND_API_KEY) {
+          let project = null;
+          if (projectId) {
+            project = await mongoose.model('Project').findById(projectId);
           }
+
+          const { sendEmail } = require('./services/emailService');
+          const subject = project 
+            ? `New message from ${fromUser.name} - ${project.title}`
+            : `New message from ${fromUser.name}`;
+          
+          const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
+              <p>You have received a new message from <strong>${fromUser.name}</strong>${project ? ` regarding project <strong>"${project.title}"</strong>` : ''}.</p>
+              <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <p style="margin: 0; color: #374151;">${text.replace(/\n/g, '<br>')}</p>
+              </div>
+              <p style="color: #6B7280; font-size: 14px;">Please log in to the platform to respond.</p>
+              <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
+              <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
+            </div>
+          `;
+
+          await sendEmail(toUser.email, subject, html, `You have received a new message from ${fromUser.name}${project ? ` regarding project "${project.title}"` : ''}:\n\n${text}\n\nPlease log in to the platform to respond.`);
+          console.log('📧 Email sent successfully to:', toUser.email);
+        } else if (!process.env.RESEND_API_KEY) {
+          console.log('📧 Email Notification (RESEND_API_KEY not configured):');
+          console.log(`To: ${toUser?.email} (${toUser?.name})`);
+          console.log(`From: ${fromUser?.name}`);
+          console.log(`Message: ${text.substring(0, 100)}...`);
         }
       } catch (emailErr) {
         console.error('Email notification error:', emailErr);
-        // Don't fail the message send if email fails
       }
     })();
 
@@ -4908,25 +4895,16 @@ app.post('/api/messages/send-email', async (req, res) => {
   try {
     const { to, toName, fromName, projectTitle, message, projectId } = req.body;
 
-    // Create transporter (using Gmail as example - configure with your SMTP settings)
-    const transporter = nodemailer.createTransport({
-      service: 'gmail', // or use your SMTP settings
-      auth: {
-        user: process.env.EMAIL_USER || 'your-email@gmail.com',
-        pass: process.env.EMAIL_PASS || 'your-app-password'
-      }
-    });
-
     // Only send email if credentials are configured
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      await transporter.sendMail({
-        from: `"Z-Inspection Platform" <${process.env.EMAIL_USER}>`,
-        to: to,
-        subject: `New message from ${fromName} - ${projectTitle}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    if (process.env.RESEND_API_KEY) {
+      const { sendEmail } = require('./services/emailService');
+      await sendEmail(
+        to,
+        `New message from ${fromName}${projectTitle? ` - ${projectTitle}` : ''} `,
+        `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;" >
             <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
-            <p>You have received a new message from <strong>${fromName}</strong> regarding project <strong>"${projectTitle}"</strong>.</p>
+            <p>You have received a new message from <strong>${fromName}</strong>${projectTitle? ` regarding project <strong>"${projectTitle}"</strong>` : ''}.</p>
             <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 0; color: #374151;">${message.replace(/\n/g, '<br>')}</p>
             </div>
@@ -4934,25 +4912,25 @@ app.post('/api/messages/send-email', async (req, res) => {
             <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
             <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
           </div>
-        `,
-        text: `You have received a new message from ${fromName} regarding project "${projectTitle}":\n\n${message}\n\nPlease log in to the platform to respond.`
-      });
+          `,
+        `You have received a new message from ${fromName}${projectTitle? ` regarding project "${projectTitle}"` : ''}: \n\n${message} \n\nPlease log in to the platform to respond.`
+      );
       console.log('📧 Email sent successfully to:', to);
-      res.json({ success: true, message: 'Email sent successfully' });
+      return res.json({ success: true, message: 'Email sent successfully' });
     } else {
       // Log email notification if credentials not configured
-      console.log('📧 Email Notification (credentials not configured):');
+      console.log('📧 Email Notification (RESEND_API_KEY not configured):');
       console.log(`To: ${to} (${toName})`);
-      console.log(`From: ${fromName}`);
-      console.log(`Project: ${projectTitle}`);
+      console.log(`From: ${fromName} `);
+      if (projectTitle) console.log(`Project: ${projectTitle} `);
       console.log(`Message: ${message.substring(0, 100)}...`);
       console.log('---');
-      console.log('💡 To enable email sending, set EMAIL_USER and EMAIL_PASS in .env file');
-      res.json({ success: true, message: 'Email notification logged (credentials not configured)' });
+      console.log('💡 To enable email sending, set RESEND_API_KEY in .env file');
+      return res.json({ success: true, message: 'Email notification logged (RESEND_API_KEY not configured)' });
     }
   } catch (err) {
     console.error('Email send error:', err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -4963,17 +4941,26 @@ app.post('/api/messages/mark-read', async (req, res) => {
 
     if (messageIds && Array.isArray(messageIds)) {
       // Mark specific messages as read
-      await Message.updateMany(
-        { _id: { $in: messageIds }, toUserId: userId },
-        { readAt: new Date() }
-      );
-    } else if (projectId && userId && otherUserId) {
+      if (userId) {
+        const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+        await Message.updateMany(
+          { _id: { $in: messageIds }, toUserId: userIdObj },
+          { readAt: new Date() }
+        );
+      } else {
+        await Message.updateMany(
+          { _id: { $in: messageIds }, toUserId: userId },
+          { readAt: new Date() }
+        );
+      }
+    } else if (userId && otherUserId) {
       // Mark all messages in a thread as read
+      const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+      const otherUserIdObj = isValidObjectId(otherUserId) ? new mongoose.Types.ObjectId(otherUserId) : otherUserId;
       await Message.updateMany(
         {
-          projectId: projectId,
-          fromUserId: otherUserId,
-          toUserId: userId,
+          fromUserId: otherUserIdObj,
+          toUserId: userIdObj,
           readAt: null
         },
         { readAt: new Date() }
@@ -4998,7 +4985,9 @@ app.get('/api/messages/unread-count', async (req, res) => {
 
     // Get unread messages grouped by project and sender.
     // IMPORTANT: Avoid populate() here because missing/deleted refs (project/user) can break the entire endpoint.
+
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
     const unreadMessages = await Message.find({
       toUserId: userIdObj,
       readAt: null
@@ -5009,38 +4998,35 @@ app.get('/api/messages/unread-count', async (req, res) => {
       .lean();
 
     // Group by projectId and fromUserId
+
     const conversations = {};
     unreadMessages.forEach(msg => {
       // Skip messages with missing or null populated fields
-      if (!msg || !msg.projectId || !msg.fromUserId) {
+      if (!msg || !msg.fromUserId) {
         // Only log in development mode to reduce noise
         if (process.env.NODE_ENV === 'development') {
-          console.warn('Skipping message with missing projectId or fromUserId:', msg?._id);
+          console.warn('Skipping message with missing fromUserId:', msg?._id);
         }
         return;
       }
-
-      const projectIdRaw = msg.projectId._id || msg.projectId;
+      const projectIdRaw = msg.projectId ? (msg.projectId._id || msg.projectId) : null;
       const fromUserIdRaw = msg.fromUserId._id || msg.fromUserId;
 
-      if (!projectIdRaw || !fromUserIdRaw) {
+      if (!fromUserIdRaw) {
+
         // Only log in development mode to reduce noise
         if (process.env.NODE_ENV === 'development') {
-          console.warn('Skipping message with invalid projectId or fromUserId:', msg?._id);
+          console.warn('Skipping message with invalid fromUserId:', msg?._id);
         }
         return;
       }
-
-      const projectId = String(projectIdRaw);
       const fromUserId = String(fromUserIdRaw);
-      const key = `${projectId}-${fromUserId}`;
+      const key = projectIdRaw ? `${String(projectIdRaw)}_${fromUserId}` : fromUserId;
 
       if (!conversations[key]) {
         conversations[key] = {
-          projectId: projectId,
-          projectTitle: msg.projectId.title || '(No title)',
+          projectId: projectIdRaw ? String(projectIdRaw) : null,
           fromUserId: fromUserId,
-          fromUserName: msg.fromUserId.name || 'Unknown',
           count: 0,
           lastMessage: msg.text || '',
           lastMessageTime: msg.createdAt,
@@ -5069,7 +5055,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
       .filter((id) => isValidObjectId(id));
 
     const [projects, fromUsers] = await Promise.all([
-      Project.find({ _id: { $in: projectIds } }).select('title').lean(),
+      mongoose.model('Project').find({ _id: { $in: projectIds } }).select('title').lean(),
       User.find({ _id: { $in: fromUserIds } }).select('name email').lean()
     ]);
 
@@ -5112,9 +5098,8 @@ app.get('/api/messages/conversations', async (req, res) => {
     // lean() -> populate edilmiş alanlar plain object olur, daha stabil
     const allMessages = await Message.find({
       isNotification: { $ne: true },
-      $or: [{ fromUserId: userIdObj }, { toUserId: userIdObj }],
+      $or: [{ fromUserId: userIdObj }, { toUserId: userIdObj }]
     })
-      .populate('projectId', 'title')
       .populate('fromUserId', 'name email role')
       .populate('toUserId', 'name email role')
       .sort({ createdAt: -1 })
@@ -5123,29 +5108,25 @@ app.get('/api/messages/conversations', async (req, res) => {
     const conversationsMap = {};
 
     for (const msg of allMessages) {
-      // populate bazen null gelebilir (silinmiş user/project vs.)
-      if (!msg || !msg.projectId || !msg.fromUserId || !msg.toUserId) continue;
+      // populate bazen null gelebilir (silinmiş user vs.)
+      if (!msg || !msg.fromUserId || !msg.toUserId) continue;
 
-      const projectIdRaw = msg.projectId._id || msg.projectId;
       const fromRaw = msg.fromUserId._id || msg.fromUserId;
       const toRaw = msg.toUserId._id || msg.toUserId;
 
-      if (!projectIdRaw || !fromRaw || !toRaw) continue;
+      if (!fromRaw || !toRaw) continue;
 
-      const projectId = String(projectIdRaw);
       const fromId = String(fromRaw);
       const toId = String(toRaw);
 
       const otherUserId = fromId === userIdStr ? toId : fromId;
-      const key = `${projectId}-${otherUserId}`;
+      const key = otherUserId;
 
       if (!conversationsMap[key]) {
         const otherUser =
           fromId === userIdStr ? msg.toUserId : msg.fromUserId;
 
         conversationsMap[key] = {
-          projectId,
-          projectTitle: msg.projectId.title || '(No title)',
           otherUserId,
           otherUserName: otherUser?.name || 'Unknown',
           otherUserRole: otherUser?.role || 'unknown',
@@ -5184,9 +5165,9 @@ app.get('/api/messages/conversations', async (req, res) => {
 // DELETE /api/messages/delete-conversation
 app.delete('/api/messages/delete-conversation', async (req, res) => {
   try {
-    const { projectId, userId, otherUserId } = req.body;
-    if (!projectId || !userId || !otherUserId) {
-      return res.status(400).json({ error: 'Missing required parameters: projectId, userId, otherUserId' });
+    const { userId, otherUserId } = req.body;
+    if (!userId || !otherUserId) {
+      return res.status(400).json({ error: 'Missing required parameters: userId, otherUserId' });
     }
 
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
@@ -5194,7 +5175,6 @@ app.delete('/api/messages/delete-conversation', async (req, res) => {
 
     // Delete all messages in this conversation
     const result = await Message.deleteMany({
-      projectId: projectId,
       $or: [
         { fromUserId: userIdObj, toUserId: otherUserIdObj },
         { fromUserId: otherUserIdObj, toUserId: userIdObj }
@@ -5208,6 +5188,165 @@ app.delete('/api/messages/delete-conversation', async (req, res) => {
     });
   } catch (err) {
     console.error('Error deleting conversation:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Notification endpoints
+const Notification = require('./models/Notification');
+
+// GET /api/notifications?userId=&limit=
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { userId, limit = 50 } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId parameter' });
+    }
+
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+    // Check if user is admin - if so, filter by projects created by this admin
+    let projectFilter = {};
+    try {
+      const user = await User.findById(userIdObj).select('role').lean();
+      if (user && user.role && user.role.toLowerCase().includes('admin')) {
+        // Admin user - only show notifications from projects created by this admin
+        const userProjects = await Project.find({
+          createdByAdmin: userIdObj
+        }).select('_id').lean();
+        const projectIds = userProjects.map(p => p._id);
+        if (projectIds.length === 0) {
+          // Admin has no projects, return empty notifications
+          return res.json({ notifications: [], unreadCount: 0 });
+        }
+        projectFilter = { projectId: { $in: projectIds } };
+      }
+    } catch (err) {
+      console.warn('Could not verify admin access for notifications:', err.message);
+    }
+
+    const notifications = await Notification.find({
+      recipientId: userIdObj,
+      ...projectFilter
+    })
+      .populate('projectId', 'title')
+      .populate('actorId', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    const unreadCount = await Notification.countDocuments({
+      recipientId: userIdObj,
+      isRead: false,
+      ...projectFilter
+    });
+
+    res.json({ notifications, unreadCount });
+  } catch (err) {
+    console.error('Error fetching notifications:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notifications/:id/read
+app.post('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId parameter' });
+    }
+
+    const notificationId = isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id;
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+    // Get notification and check admin access
+    const notification = await Notification.findById(notificationId).lean();
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    // Verify notification belongs to user
+    if (String(notification.recipientId) !== String(userId)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Check if user is admin and if so, verify the project belongs to this admin
+    try {
+      const user = await User.findById(userIdObj).select('role').lean();
+      if (user && user.role && user.role.toLowerCase().includes('admin')) {
+        const project = await Project.findById(notification.projectId).select('createdByAdmin').lean();
+        if (project && project.createdByAdmin) {
+          const projectAdminId = String(project.createdByAdmin);
+          const userIdStr = String(userId);
+          if (projectAdminId !== userIdStr) {
+            return res.status(403).json({ error: 'Access denied: This project belongs to another admin' });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not verify admin access for notification read:', err.message);
+    }
+
+    await Notification.findByIdAndUpdate(notificationId, {
+      isRead: true,
+      readAt: new Date()
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error marking notification as read:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/notifications/read-all
+app.post('/api/notifications/read-all', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId parameter' });
+    }
+
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+    // Check if user is admin - if so, filter by projects created by this admin
+    let projectFilter = {};
+    try {
+      const user = await User.findById(userIdObj).select('role').lean();
+      if (user && user.role && user.role.toLowerCase().includes('admin')) {
+        // Admin user - only mark notifications from projects created by this admin as read
+        const userProjects = await Project.find({
+          createdByAdmin: userIdObj
+        }).select('_id').lean();
+        const projectIds = userProjects.map(p => p._id);
+        if (projectIds.length === 0) {
+          // Admin has no projects, return success
+          return res.json({ success: true, updatedCount: 0 });
+        }
+        projectFilter = { projectId: { $in: projectIds } };
+      }
+    } catch (err) {
+      console.warn('Could not verify admin access for read-all:', err.message);
+    }
+
+    const result = await Notification.updateMany(
+      {
+        recipientId: userIdObj,
+        isRead: false,
+        ...projectFilter
+      },
+      {
+        isRead: true,
+        readAt: new Date()
+      }
+    );
+
+    res.json({ success: true, updatedCount: result.modifiedCount });
+  } catch (err) {
+    console.error('Error marking all notifications as read:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5438,7 +5577,7 @@ app.post('/api/shared-discussions', async (req, res) => {
     const { userId, text, projectId, replyTo, mentions } = req.body;
 
     if (!userId || !text) {
-      console.error('❌ Missing required fields:', { userId: !!userId, text: !!text });
+      console.error('❌ Missing required fields:', { userId: !!userId, text: !!text});
       return res.status(400).json({ error: 'Missing required fields: userId, text' });
     }
 
@@ -5560,20 +5699,15 @@ app.get('/api/health', (req, res) => {
 });
 
 // Check if email credentials are loaded (for debugging)
-const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+const emailConfigured = !!(process.env.RESEND_API_KEY);
 const isProduction = process.env.NODE_ENV === 'production';
-console.log(`📧 Email service: ${emailConfigured ? '✅ Configured' : '⚠️  Not configured'}`);
+console.log(`📧 Email service: ${emailConfigured ? '✅ Configured (Resend)' : 'ℹ️  Not configured (email features disabled)'}`);
 if (emailConfigured) {
-  console.log(`📧 Email user: ${process.env.EMAIL_USER}`);
-  console.log(`📧 Email pass: ${process.env.EMAIL_PASS ? '***' + process.env.EMAIL_PASS.slice(-4) : 'NOT SET'}`);
+  console.log(`📧 Resend API Key: ${process.env.RESEND_API_KEY ? '***' + process.env.RESEND_API_KEY.slice(-4) : 'NOT SET'}`);
+  console.log(`📧 Email From: ${process.env.EMAIL_FROM || 'Z-Inspection <no-reply@resend.dev> (default)'}`);
 } else {
-  if (isProduction) {
-    console.log(`⚠️  EMAIL_USER or EMAIL_PASS not found in environment variables`);
-    console.log(`⚠️  Please configure EMAIL_USER and EMAIL_PASS in Railway environment variables`);
-  } else {
-    console.log(`⚠️  EMAIL_USER or EMAIL_PASS not found in .env file`);
-    console.log(`⚠️  Please check backend/.env file exists and contains EMAIL_USER and EMAIL_PASS`);
-  }
+  // Silent notice - email service is optional
+  console.log(`ℹ️  Email service disabled(RESEND_API_KEY not configured).Email notifications will be logged to console only.`);
 }
 
 // FIX: 24 unique questions: General stays T1/T2, Technical uses T1_TECH/T2_TECH
@@ -5662,9 +5796,9 @@ mongoose.connection.once('open', async () => {
     // const generalCount = await Question.countDocuments({ questionnaireKey: 'general-v1' });
     // const technicalCount = await Question.countDocuments({ questionnaireKey: 'technical-expert-v1' });
 
-    // console.log(`✅ 24 QUESTION MODE:`);
-    // console.log(`   General: Fixed T1 (${genT1Result.modifiedCount}), T2 (${genT2Result.modifiedCount}). Total: ${generalCount} questions.`);
-    // console.log(`   Technical: T1->T1_TECH (${techT1Result.modifiedCount}), T2->T2_TECH (${techT2Result.modifiedCount}). Total: ${technicalCount} questions.`);
+    // console.log(`✅ 24 QUESTION MODE: `);
+    // console.log(`   General: Fixed T1(${ genT1Result.modifiedCount }), T2(${ genT2Result.modifiedCount }).Total: ${ generalCount } questions.`);
+    // console.log(`   Technical: T1 -> T1_TECH(${ techT1Result.modifiedCount }), T2 -> T2_TECH(${ techT2Result.modifiedCount }).Total: ${ technicalCount } questions.`);
     // console.log(`   Expected: 12 General + 12 Technical = 24 questions.`);
 
   } catch (error) {

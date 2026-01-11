@@ -165,7 +165,6 @@ export function NotificationDetailPanel({
           </div>
           <div>
             <div className="font-medium text-gray-900">{otherUser.name}</div>
-            <div className="text-xs text-gray-500">{project.title}</div>
           </div>
         </div>
         <div className="flex items-center space-x-2">

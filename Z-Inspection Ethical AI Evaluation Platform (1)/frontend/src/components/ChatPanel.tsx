@@ -13,7 +13,6 @@ interface ChatPanelProps {
   inline?: boolean;
   onDeleteConversation?: () => void;
   defaultFullscreen?: boolean;
-  showProjectTitle?: boolean;
   forceScrollOnMount?: boolean;
 }
 
@@ -26,7 +25,6 @@ export function ChatPanel({
   inline = false,
   onDeleteConversation,
   defaultFullscreen = false,
-  showProjectTitle = false,
   forceScrollOnMount = false
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -451,9 +449,6 @@ export function ChatPanel({
             </div>
             <div>
               <div className="font-medium text-gray-900 text-sm">{otherUser.name}</div>
-              {showProjectTitle && (
-                <div className="text-xs text-gray-500">{project.title}</div>
-              )}
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -525,9 +520,6 @@ export function ChatPanel({
           </div>
           <div>
             <div className="font-medium text-gray-900">{otherUser.name}</div>
-            {showProjectTitle && (
-              <div className="text-xs text-gray-500">{project.title}</div>
-            )}
           </div>
         </div>
         <div className="flex items-center space-x-2">
