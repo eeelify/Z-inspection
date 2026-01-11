@@ -1,7 +1,7 @@
 const { Resend } = require('resend');
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend client only if API key is present
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 /**
  * Get the from email address
@@ -17,6 +17,11 @@ function getFromEmail() {
  * @throws {Error} If Resend API call fails
  */
 async function sendVerificationEmail(to, code) {
+  if (!resend || !process.env.RESEND_API_KEY) {
+    console.log('[MAIL] Email service not configured (RESEND_API_KEY missing) - skipping email to:', to);
+    throw new Error('Email service is not configured. Please set RESEND_API_KEY in environment variables.');
+  }
+
   console.log('[MAIL] env present:', { 
     hasKey: !!process.env.RESEND_API_KEY, 
     hasFrom: !!process.env.EMAIL_FROM 
@@ -73,6 +78,11 @@ async function sendVerificationEmail(to, code) {
  * @throws {Error} If Resend API call fails
  */
 async function sendEmail(to, subject, html, text = null) {
+  if (!resend || !process.env.RESEND_API_KEY) {
+    console.log('[MAIL] Email service not configured (RESEND_API_KEY missing) - skipping email to:', to);
+    throw new Error('Email service is not configured. Please set RESEND_API_KEY in environment variables.');
+  }
+
   const from = getFromEmail();
   
   try {

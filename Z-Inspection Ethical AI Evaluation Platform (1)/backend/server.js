@@ -5638,18 +5638,13 @@ app.get('/api/health', (req, res) => {
 // Check if email credentials are loaded (for debugging)
 const emailConfigured = !!(process.env.RESEND_API_KEY);
 const isProduction = process.env.NODE_ENV === 'production';
-console.log(`📧 Email service: ${emailConfigured ? '✅ Configured (Resend)' : '⚠️  Not configured'}`);
+console.log(`📧 Email service: ${emailConfigured ? '✅ Configured (Resend)' : 'ℹ️  Not configured (email features disabled)'}`);
 if (emailConfigured) {
   console.log(`📧 Resend API Key: ${process.env.RESEND_API_KEY ? '***' + process.env.RESEND_API_KEY.slice(-4) : 'NOT SET'}`);
   console.log(`📧 Email From: ${process.env.EMAIL_FROM || 'Z-Inspection <no-reply@resend.dev> (default)'}`);
 } else {
-  if (isProduction) {
-    console.log(`⚠️  RESEND_API_KEY not found in environment variables`);
-    console.log(`⚠️  Please configure RESEND_API_KEY in Railway environment variables`);
-  } else {
-    console.log(`⚠️  RESEND_API_KEY not found in .env file`);
-    console.log(`⚠️  Please check backend/.env file exists and contains RESEND_API_KEY`);
-  }
+  // Silent notice - email service is optional
+  console.log(`ℹ️  Email service disabled (RESEND_API_KEY not configured). Email notifications will be logged to console only.`);
 }
 
 // FIX: 24 unique questions: General stays T1/T2, Technical uses T1_TECH/T2_TECH
