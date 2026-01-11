@@ -15,15 +15,16 @@ let ChartJSNodeCanvas;
 let usePuppeteer = false;
 
 try {
-  // FIXED: chartjs-node-canvas exports ChartJSNodeCanvas as a named export
-  const chartjsModule = require('chartjs-node-canvas');
-  ChartJSNodeCanvas = chartjsModule.ChartJSNodeCanvas || chartjsModule;
-  
-  // Test if it's a constructor
-  if (typeof ChartJSNodeCanvas !== 'function') {
-    throw new Error('ChartJSNodeCanvas is not a constructor');
-  }
-  
+  // NATIVE BINDING FIX: Force Puppeteer
+  // The 'canvas' module requires native bindings that often fail on Windows/Node 22+.
+  // We skip trying to require('chartjs-node-canvas') entirely to prevent crashes.
+  const chartjsModule = null; // DISABLED
+  ChartJSNodeCanvas = null;   // DISABLED
+
+  // Force Puppeteer
+  throw new Error('Force Puppeteer Fallback (Native canvas disabled)');
+
+
   usePuppeteer = false;
   console.log('✅ Using chartjs-node-canvas for chart generation');
 } catch (error) {
@@ -45,7 +46,7 @@ if (usePuppeteer) {
     console.warn('⚠️ chartjs-plugin-datalabels not installed. Data labels will not appear on charts.');
     ChartDataLabels = null;
   }
-  
+
   const chartJSNodeCanvas = new ChartJSNodeCanvas({
     width: 800,
     height: 400,
@@ -62,10 +63,10 @@ if (usePuppeteer) {
     if (!byPrincipleOverall || typeof byPrincipleOverall !== 'object') {
       throw new Error('byPrincipleOverall must be a non-null object');
     }
-    
+
     // Filter out null principles for display (or show as N/A)
     const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
-    
+
     if (principles.length === 0) {
       throw new Error('No valid principles found in byPrincipleOverall');
     }
@@ -73,18 +74,18 @@ if (usePuppeteer) {
       const data = byPrincipleOverall[p];
       // TASK B: If null, return null (will be handled specially in chart)
       if (!data) return null;
-      
-      // NEW FORMAT (Performance-based): use overallPerformance or avg
-      if (typeof data.overallPerformance === 'number') return data.overallPerformance;
-      if (typeof data.avg === 'number') return data.avg;
-      
-      // LEGACY FORMAT (Risk-based): use avgScore or risk
-      if (typeof data.avgScore === 'number') return data.avgScore;
+
+      // NEW FORMAT (Risk-based): use risk
       if (typeof data.risk === 'number') return data.risk;
-      
+      if (typeof data.overallRisk === 'number') return data.overallRisk;
+
+      // LEGACY/FALLBACK: use avg or avgScore (assumed to be risk now)
+      if (typeof data.avg === 'number') return data.avg;
+      if (typeof data.avgScore === 'number') return data.avgScore;
+
       return null;
     });
-    
+
     // Add N/A labels for missing principles
     const labels = principles.map((p, idx) => {
       if (scores[idx] === null) {
@@ -105,13 +106,13 @@ if (usePuppeteer) {
             if (s === null || s === undefined || isNaN(s)) {
               return '#9ca3af'; // Gray for N/A
             }
-            // TASK 7: Validate score range before using
-            if (s < 0 || s > 4) {
-              throw new Error(`INVALID SCORE FOR CHART: Score ${s} is outside valid range [0-4]`);
+            // TASK 7: Validate score range (Cumulative can exceed 4)
+            if (s < 0) {
+              throw new Error(`INVALID SCORE FOR CHART: Score ${s} cannot be negative`);
             }
-            // PERFORMANCE MODE: High score = good (green), Low score = bad (red)
-            const { colorForPerformance } = require('../utils/riskUtils');
-            return colorForPerformance(s);
+            // RISK MODE: Low score = Safe (green), High score = Critical (red)
+            const { colorForScore } = require('../utils/riskScale');
+            return colorForScore(s);
           }),
           borderColor: '#ffffff',
           borderWidth: 2
@@ -122,7 +123,7 @@ if (usePuppeteer) {
         plugins: {
           title: {
             display: true,
-            text: '7 Ethical Principles Performance Overview (0-4 Scale)',
+            text: '7 Ethical Principles Risk Overview (0-4 Scale)',
             font: { size: 16, weight: 'bold' }
           },
           legend: {
@@ -131,7 +132,7 @@ if (usePuppeteer) {
           },
           subtitle: {
             display: true,
-            text: 'Performance Scale: 0=POOR, 1=FAIR, 2=GOOD, 3=VERY GOOD, 4=EXCELLENT (Higher = Better)',
+            text: 'Risk Scale: 0=MINIMAL, 1=LOW, 2=MEDIUM, 3=HIGH, 4=CRITICAL (Lower = Better)',
             font: { size: 11, style: 'italic' },
             padding: { bottom: 10 }
           },
@@ -154,14 +155,14 @@ if (usePuppeteer) {
           }
         },
         scales: {
-            y: {
-              beginAtZero: true,
-              max: 4,
-              title: {
-                display: true,
-                text: 'Score (0-4, 0=MINIMAL risk, 4=CRITICAL risk)'
-              }
+          y: {
+            beginAtZero: true,
+            // max: 4, // REMOVED for Cumulative Risk (Unbounded)
+            title: {
+              display: true,
+              text: 'Cumulative Risk Score (Lower is Safer)'
             }
+          }
         }
       }
     };
@@ -175,22 +176,22 @@ if (usePuppeteer) {
   async function generatePrincipleEvaluatorHeatmap(byPrincipleTable, evaluatorsWithScores) {
     const width = 1000;
     const height = 500;
-    
+
     // Validate inputs
     if (!evaluatorsWithScores || !Array.isArray(evaluatorsWithScores) || evaluatorsWithScores.length === 0) {
       throw new Error('evaluatorsWithScores must be a non-empty array');
     }
-    
+
     // Build matrix data
     const principles = Object.keys(byPrincipleTable || {});
-    
+
     // Safely map evaluator names and userIds
     const evaluatorNames = evaluatorsWithScores.map(e => {
       if (!e) return 'Unknown';
       const userIdStr = e.userId ? (e.userId.toString ? e.userId.toString() : String(e.userId)) : 'unknown';
       return e.name || `${e.role || 'Unknown'} (${userIdStr})`;
     });
-    
+
     // Create datasets for each principle
     const datasets = principles.map((principle, idx) => {
       const data = evaluatorNames.map(name => {
@@ -201,13 +202,24 @@ if (usePuppeteer) {
           return evaluatorName === name;
         });
         if (!evaluator || !evaluator.userId) return null;
-        
+
+        // Match by userId
+        // byPrincipleTable structure: { PRINCIPLE: { evaluators: [ { userId, score (Risk) }, ... ] } }
+        const pData = byPrincipleTable[principle];
+        if (!pData || !pData.evaluators || !Array.isArray(pData.evaluators)) return null;
+
         // Convert userId to string for lookup
         const userIdStr = evaluator.userId.toString ? evaluator.userId.toString() : String(evaluator.userId);
-        const score = byPrincipleTable[principle]?.[userIdStr]?.avg;
-        return score !== undefined && score !== null ? score : null;
+
+        const evalEntry = pData.evaluators.find(e => {
+          const eId = e.userId ? (e.userId.toString ? e.userId.toString() : String(e.userId)) : '';
+          return eId === userIdStr;
+        });
+
+        // score is Risk (0-4)
+        return evalEntry && typeof evalEntry.score === 'number' ? evalEntry.score : null;
       });
-      
+
       return {
         label: principle,
         data: data,
@@ -228,7 +240,7 @@ if (usePuppeteer) {
         plugins: {
           title: {
             display: true,
-            text: 'Role × Principle Heatmap',
+            text: 'Ethical Risk Heatmap (Role × Principle)',
             font: { size: 16, weight: 'bold' }
           },
           legend: {
@@ -242,7 +254,7 @@ if (usePuppeteer) {
             max: 4,
             title: {
               display: true,
-              text: 'Score (0-4)'
+              text: 'Risk Score (0-4)'
             }
           }
         }
@@ -258,10 +270,10 @@ if (usePuppeteer) {
   async function generateEvidenceCoverageChart(evidenceTypeDistribution, tensionsWithEvidence = 0, totalTensions = 0) {
     const width = 600;
     const height = 500;
-    
+
     const types = Object.keys(evidenceTypeDistribution || {});
     const counts = types.map(t => evidenceTypeDistribution[t]);
-    
+
     const typeColors = {
       'Policy': '#3b82f6',
       'Test': '#10b981',
@@ -270,9 +282,9 @@ if (usePuppeteer) {
       'Incident': '#ef4444',
       'Other': '#6b7280'
     };
-    
+
     const colors = types.map(t => typeColors[t] || '#6b7280');
-    
+
     const chartConfig = {
       type: 'doughnut',
       data: {
@@ -312,7 +324,7 @@ if (usePuppeteer) {
         }
       }
     };
-    
+
     return generateChartImage(chartConfig, width, height);
   }
 
@@ -322,19 +334,19 @@ if (usePuppeteer) {
   async function generateTensionSeverityChart(severityDistribution) {
     const width = 600;
     const height = 500;
-    
+
     const severities = ['low', 'medium', 'high', 'critical'];
     const counts = severities.map(s => severityDistribution[s] || severityDistribution[s.toLowerCase()] || 0);
-    
+
     const severityColors = {
       'low': '#10b981',
       'medium': '#f59e0b',
       'high': '#ef4444',
       'critical': '#dc2626'
     };
-    
+
     const colors = severities.map(s => severityColors[s] || '#6b7280');
-    
+
     const chartConfig = {
       type: 'bar',
       data: {
@@ -386,7 +398,7 @@ if (usePuppeteer) {
         }
       }
     };
-    
+
     return generateChartImage(chartConfig, width, height);
   }
 
@@ -396,10 +408,10 @@ if (usePuppeteer) {
   async function generateEvidenceTypeChart(evidenceTypeDistribution) {
     const width = 800;
     const height = 400;
-    
+
     const types = Object.keys(evidenceTypeDistribution || {});
     const counts = types.map(t => evidenceTypeDistribution[t]);
-    
+
     const typeColors = {
       'Policy': '#3b82f6',
       'Test': '#10b981',
@@ -408,9 +420,9 @@ if (usePuppeteer) {
       'Incident': '#ef4444',
       'Other': '#6b7280'
     };
-    
+
     const colors = types.map(t => typeColors[t] || '#6b7280');
-    
+
     const chartConfig = {
       type: 'bar',
       data: {
@@ -462,7 +474,7 @@ if (usePuppeteer) {
         }
       }
     };
-    
+
     return generateChartImage(chartConfig, width, height);
   }
 
@@ -472,18 +484,18 @@ if (usePuppeteer) {
   async function generateTensionReviewStateChart(tensionsSummary) {
     const width = 600;
     const height = 500;
-    
+
     // Include all possible review states, including "Resolved" if present
     const reviewStates = ['Proposed', 'Under Review', 'Accepted', 'Disputed', 'Resolved'];
     const counts = reviewStates.map(state => {
       // Try both normalized and original state keys
       const stateKey = state.toLowerCase().replace(/\s+/g, '');
       const stateKeyOriginal = state; // Also try original case
-      return tensionsSummary.countsByReviewState?.[stateKey] || 
-             tensionsSummary.countsByReviewState?.[stateKeyOriginal] || 
-             tensionsSummary.countsByReviewState?.[state.toLowerCase()] || 0;
+      return tensionsSummary.countsByReviewState?.[stateKey] ||
+        tensionsSummary.countsByReviewState?.[stateKeyOriginal] ||
+        tensionsSummary.countsByReviewState?.[state.toLowerCase()] || 0;
     });
-    
+
     const chartConfig = {
       type: 'doughnut',
       data: {
@@ -525,7 +537,7 @@ if (usePuppeteer) {
         }
       }
     };
-    
+
     return generateChartImage(chartConfig, width, height);
   }
 
@@ -538,7 +550,7 @@ if (usePuppeteer) {
       if (!chartConfig || !chartConfig.data || !chartConfig.data.labels) {
         throw new Error('Invalid chartConfig: missing data or labels');
       }
-      
+
       // Validate data arrays - ensure no null values that could cause toString() errors
       if (chartConfig.data.datasets) {
         chartConfig.data.datasets.forEach((dataset, idx) => {
@@ -549,7 +561,7 @@ if (usePuppeteer) {
           dataset.data = dataset.data.map(v => (v === null || v === undefined || isNaN(v)) ? 0 : v);
         });
       }
-      
+
       let canvas = chartJSNodeCanvas;
       if (width !== 800 || height !== 400) {
         canvas = new ChartJSNodeCanvas({
@@ -559,7 +571,7 @@ if (usePuppeteer) {
           plugins: ChartDataLabels ? [ChartDataLabels] : []
         });
       }
-      
+
       const buffer = await canvas.renderToBuffer(chartConfig);
       return buffer;
     } catch (error) {
@@ -672,7 +684,7 @@ if (usePuppeteer) {
         principleCount: scoring?.byPrincipleOverall ? Object.keys(scoring.byPrincipleOverall).length : 0,
         principleKeys: scoring?.byPrincipleOverall ? Object.keys(scoring.byPrincipleOverall) : []
       });
-      
+
       if (scoring?.byPrincipleOverall) {
         // Log first principle's data structure
         const firstPrinciple = Object.keys(scoring.byPrincipleOverall)[0];
@@ -688,26 +700,26 @@ if (usePuppeteer) {
           });
         }
       }
-      
+
       if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
         // Filter out null principles
         const nonNullPrinciples = Object.keys(scoring.byPrincipleOverall).filter(p => scoring.byPrincipleOverall[p] !== null);
-        
+
         if (nonNullPrinciples.length === 0) {
           console.log('⚠️ All principles are null, cannot generate chart');
           throw new Error('All principle data is null');
         }
-        
+
         console.log(`📊 Generating principleBarChart with ${nonNullPrinciples.length} non-null principles...`);
         const pngBuffer = await generatePrincipleBarChart(scoring.byPrincipleOverall);
-        
+
         if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
           charts.principleBarChart = createChartResult({
             chartId: 'principleBarChart',
             type: CHART_TYPES.BAR,
             status: CHART_STATUS.READY,
             title: 'Ethical Principles Risk Overview',
-            subtitle: 'Performance scores by principle (0-4 scale)',
+            subtitle: 'Risk scores by principle (0-4 scale)',
             pngBuffer,
             meta: {
               source: {
@@ -715,7 +727,7 @@ if (usePuppeteer) {
                 projectId,
                 questionnaireKey
               },
-              scale: { min: 0, max: 4, meaning: 'Higher = better performance' }
+              scale: { min: 0, max: 4, meaning: 'Lower = safer (0=No Risk, 4=Critical)' }
             },
             data: scoring.byPrincipleOverall
           });
@@ -753,16 +765,16 @@ if (usePuppeteer) {
 
     // Step 3: Attempt to generate principleEvaluatorHeatmap
     try {
-      if (scoring?.byPrincipleTable && 
-          Object.keys(scoring.byPrincipleTable).length > 0 &&
-          evaluators?.withScores && 
-          evaluators.withScores.length > 0) {
+      if (scoring?.byPrincipleTable &&
+        Object.keys(scoring.byPrincipleTable).length > 0 &&
+        evaluators?.withScores &&
+        evaluators.withScores.length > 0) {
         console.log('📊 Generating principleEvaluatorHeatmap...');
         const pngBuffer = await generatePrincipleEvaluatorHeatmap(
           scoring.byPrincipleTable,
           evaluators.withScores
         );
-        
+
         if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
           charts.principleEvaluatorHeatmap = createChartResult({
             chartId: 'principleEvaluatorHeatmap',
@@ -778,7 +790,7 @@ if (usePuppeteer) {
                 questionnaireKey
               },
               evaluatorCount: evaluators.withScores.length,
-              scale: { min: 0, max: 4, meaning: 'Higher = better performance' }
+              scale: { min: 0, max: 4, meaning: 'Lower = safer (0=No Risk, 4=Critical)' }
             },
             data: {
               byPrincipleTable: scoring.byPrincipleTable,
@@ -905,7 +917,7 @@ if (usePuppeteer) {
     // Step 5: Validate contract compliance
     const { validateChartContract } = require('./chartContract');
     const validation = validateChartContract(charts);
-    
+
     if (!validation.valid) {
       console.error('❌ Chart contract validation failed:', validation);
       throw new Error(`Chart contract violation: ${validation.missing.concat(validation.errors).join(', ')}`);

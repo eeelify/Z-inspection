@@ -23,7 +23,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<string>('admin');
+  const [role, setRole] = useState<string>('ethical-expert');
   const [loading, setLoading] = useState(false);
 
   // Step state for registration flow
@@ -43,15 +43,15 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     }
 
     setError(null);
-      setLoading(true);
-      try {
-        await onLogin(email, password, role);
-      } catch (error) {
-        console.error('Login error:', error);
+    setLoading(true);
+    try {
+      await onLogin(email, password, role);
+    } catch (error) {
+      console.error('Login error:', error);
       setError('Login failed. Please check your information.');
-      } finally {
-        setLoading(false);
-      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Registration - Step 1: Send code
@@ -60,12 +60,12 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
     if (!name || !email || !password || !role) {
       setError('Please fill in all fields.');
-        return;
-      }
-      
+      return;
+    }
+
     setError(null);
     setLoading(true);
-      try {
+    try {
       const response = await fetch(api('/api/auth/request-code'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,18 +102,18 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     setLoading(true);
     try {
       const response = await fetch(api('/api/auth/verify-code-and-register'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email,
           code,
           name,
           password,
           role
-          })
-        });
+        })
+      });
 
-        if (response.ok) {
+      if (response.ok) {
         const data = await response.json();
         setSuccess('Registration completed successfully! You can now sign in.');
         // Clear form and return to login screen
@@ -126,11 +126,11 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           setCode('');
           setSuccess(null);
         }, 2000);
-        } else {
+      } else {
         const data = await response.json().catch(() => ({ message: 'An error occurred.' }));
         setError(data.message || 'Registration failed. Please check your information.');
-        }
-      } catch (error) {
+      }
+    } catch (error) {
       console.error('Registration error:', error);
       setError("Could not connect to server. Please make sure the backend is running.");
     } finally {
@@ -179,52 +179,52 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </div>
           )}
 
-            {isLogin ? (
-              // LOGIN FORM
-              <form onSubmit={handleLoginSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm mb-2 text-gray-700 font-semibold">Email</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
-                    placeholder="Enter your email"
-                    required
-                  />
-                </div>
+          {isLogin ? (
+            // LOGIN FORM
+            <form onSubmit={handleLoginSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm mb-2 text-gray-700 font-semibold">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm mb-2 text-gray-700 font-semibold">Password</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
-                    placeholder="Enter your password"
-                    required
-                  />
-                </div>
+              <div>
+                <label className="block text-sm mb-2 text-gray-700 font-semibold">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm mb-2 text-gray-700 font-semibold">Role</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
-                    style={{
-                      color: roleColors[role as keyof typeof roleColors] || '#111827'
-                    }}
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="ethical-expert">Ethical Expert</option>
-                    <option value="medical-expert">Medical Expert</option>
-                    <option value="use-case-owner">Use Case Owner</option>
-                    <option value="education-expert">Education Expert</option>
-                    <option value="technical-expert">Technical Expert</option>
-                    <option value="legal-expert">Legal Expert</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm mb-2 text-gray-700 font-semibold">Role</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+                  style={{
+                    color: roleColors[role as keyof typeof roleColors] || '#111827'
+                  }}
+                >
+                  <option value="admin">Admin</option>
+                  <option value="ethical-expert">Ethical Expert</option>
+                  <option value="medical-expert">Medical Expert</option>
+                  <option value="use-case-owner">Use Case Owner</option>
+                  <option value="education-expert">Education Expert</option>
+                  <option value="technical-expert">Technical Expert</option>
+                  <option value="legal-expert">Legal Expert</option>
+                </select>
+              </div>
 
               <button
                 type="submit"
@@ -252,58 +252,58 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 />
               </div>
 
-            <div>
-              <label className="block text-sm mb-2 text-gray-700 font-semibold">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
-                placeholder="Enter your email"
-                required
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-2 text-gray-700 font-semibold">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-2 text-gray-700 font-semibold">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
-                placeholder="Enter your password"
-                required
-              />
-            </div>
+              <div>
+                <label className="block text-sm mb-2 text-gray-700 font-semibold">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm mb-2 text-gray-700 font-semibold">Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+              <div>
+                <label className="block text-sm mb-2 text-gray-700 font-semibold">Role</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full px-4 h-12 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 box-border"
+                  style={{
+                    color: roleColors[role as keyof typeof roleColors] || '#111827'
+                  }}
+                >
+                  {/* Admin option removed - only existing admins can login as admin */}
+                  <option value="ethical-expert">Ethical Expert</option>
+                  <option value="medical-expert">Medical Expert</option>
+                  <option value="use-case-owner">Use Case Owner</option>
+                  <option value="education-expert">Education Expert</option>
+                  <option value="technical-expert">Technical Expert</option>
+                  <option value="legal-expert">Legal Expert</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 px-4 rounded-lg text-white transition-colors hover:opacity-90 cursor-pointer font-medium text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
-                  color: roleColors[role as keyof typeof roleColors] || '#111827'
+                  backgroundColor: roleColors[role as keyof typeof roleColors] || '#1F2937'
                 }}
               >
-                <option value="admin">Admin</option>
-                <option value="ethical-expert">Ethical Expert</option>
-                <option value="medical-expert">Medical Expert</option>
-                <option value="use-case-owner">Use Case Owner</option>
-                <option value="education-expert">Education Expert</option>
-                <option value="technical-expert">Technical Expert</option>
-                <option value="legal-expert">Legal Expert</option>
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 rounded-lg text-white transition-colors hover:opacity-90 cursor-pointer font-medium text-base disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: roleColors[role as keyof typeof roleColors] || '#1F2937'
-              }}
-            >
                 {loading ? 'Loading...' : 'Continue / Send Code'}
               </button>
             </form>
@@ -352,8 +352,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 className="w-full py-2.5 px-4 text-gray-600 hover:text-gray-800 text-base"
               >
                 ← Go back
-            </button>
-          </form>
+              </button>
+            </form>
           )}
 
           <div className="mt-6 text-center">

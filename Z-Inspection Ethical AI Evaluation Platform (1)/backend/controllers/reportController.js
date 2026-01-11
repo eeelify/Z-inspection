@@ -532,7 +532,10 @@ exports.generateReport = async (req, res) => {
         console.error('   reportMetrics.scoring keys:', Object.keys(reportMetrics.scoring || {}));
       }
 
-      // Call the unified chart generation function with Chart Contract
+      // PRESENTATION REFACTOR: Chart generation disabled.
+      // Charts replaced with deterministic tables for audit integrity and stability.
+      // Puppeteer dependency removed from report generation flow.
+      /*
       const chartGenerationResult = await chartGenerationService.generateAllCharts({
         projectId,
         questionnaireKey: null, // Include all questionnaires
@@ -541,11 +544,14 @@ exports.generateReport = async (req, res) => {
         tensions: tensionsSummary,
         coverage: coverageData
       });
-
       chartResults = chartGenerationResult.charts;
       chartErrors = chartGenerationResult.chartErrors;
+      */
 
-      console.log(`✅ Chart Contract system generated ${Object.keys(chartResults).length} chart(s)`);
+      // Return empty chart results - HTML template now uses tables instead
+      chartResults = {};
+      chartErrors = [];
+      console.log(`✅ Chart generation BYPASSED: Using table-based presentation for PDF stability`);
 
       // Log chart status
       Object.entries(chartResults).forEach(([chartId, chart]) => {
@@ -637,7 +643,10 @@ exports.generateReport = async (req, res) => {
 
     // ============================================================
     // STEP 2.6: PREFLIGHT VALIDATION (Chart Contract Compliance)
+    // DISABLED: Charts replaced with tables. Chart contract no longer enforced.
     // ============================================================
+    console.log('✅ Chart contract validation BYPASSED: Using table-based presentation');
+    /*
     console.log('🔍 Running preflight validation with Chart Contract...');
     const { validateReportPreflight } = require('../utils/reportPreflightValidator');
     const { getProjectEvaluators } = require('../services/reportMetricsService');
@@ -667,6 +676,7 @@ exports.generateReport = async (req, res) => {
     }
 
     console.log('✅ Preflight validation passed');
+    */
 
     // SAFETY ASSERTION: Verify risk scale correctness
     const { validateRiskScaleNotInverted } = require('../utils/riskScale');
@@ -1096,6 +1106,12 @@ exports.getAllReports = async (req, res) => {
     }
 
     const query = {};
+
+    // Explicitly do NOT filter by user for admins (as per Clean Patch requirements)
+    if (roleCategory === 'admin') {
+      console.log('🔓 Admin detected for getAllReports - listing all reports system-wide');
+    }
+
     if (projectId) {
       query.projectId = isValidObjectId(projectId)
         ? new mongoose.Types.ObjectId(projectId)
@@ -1106,6 +1122,7 @@ exports.getAllReports = async (req, res) => {
     }
 
     const reports = await Report.find(query)
+      .select('-pdfData -htmlContent -reportMetrics -geminiNarrative') // Exclude heavy fields for list view
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
@@ -2016,6 +2033,9 @@ exports.generateReportAtomic = async (req, res) => {
       evidenceMetrics: analytics.evidenceMetrics || null
     };
 
+    // PRESENTATION REFACTOR: Chart generation disabled.
+    // Charts replaced with deterministic tables for audit integrity.
+    /*
     const chartGenerationResult = await chartGenerationService.generateAllCharts({
       projectId,
       questionnaireKey: null,
@@ -2024,10 +2044,12 @@ exports.generateReportAtomic = async (req, res) => {
       tensions: tensionsSummary,
       coverage: coverageData
     });
-
     const chartResults = chartGenerationResult.charts;
+    */
 
-    console.log(`✅ Generated ${Object.keys(chartResults).length} chart(s)`);
+    // Return empty chart results - HTML template uses tables instead
+    const chartResults = {};
+    console.log(`✅ Chart generation BYPASSED: Using table-based presentation`);
 
     // ============================================================
     // STEP 4: Convert charts to data URIs

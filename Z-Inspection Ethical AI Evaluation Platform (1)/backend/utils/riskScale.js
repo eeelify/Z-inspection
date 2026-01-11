@@ -26,7 +26,7 @@ function clampScore(score) {
   if (score === null || score === undefined || isNaN(score)) {
     return null;
   }
-  
+
   if (score < 0) return 0;
   if (score > 4) return 4;
   return score;
@@ -42,13 +42,13 @@ function classifyRisk(score) {
   if (score === null || score === undefined || isNaN(score)) {
     return "N/A";
   }
-  
+
   // Validate and clamp range
   const clamped = clampScore(score);
   if (clamped === null) {
     return "N/A";
   }
-  
+
   // CORRECT SCALE: Higher score = Higher risk
   // Canonical thresholds (aligned with riskUtils):
   // < 0.5: Minimal
@@ -108,7 +108,7 @@ function riskLabelEN(score) {
  */
 function getRiskLabel(score, format = 'label', language = 'en') {
   const classification = classifyRisk(score);
-  
+
   // Short format (e.g., "MINIMAL", "LOW", "MEDIUM", "HIGH", "CRITICAL")
   if (format === 'short') {
     const shortLabels = {
@@ -121,12 +121,12 @@ function getRiskLabel(score, format = 'label', language = 'en') {
     };
     return shortLabels[classification] || "UNKNOWN";
   }
-  
+
   // Classification format (e.g., "MINIMAL_RISK", "LOW_RISK", etc.)
   if (format === 'classification') {
     return classification;
   }
-  
+
   // Label format (default) - full descriptive label
   if (language === 'tr') {
     return riskLabelTR(score);
@@ -145,10 +145,10 @@ function validateRiskScaleNotInverted(score, interpretedRisk) {
   if (score === null || score === undefined || isNaN(score)) {
     return; // Skip validation for invalid scores
   }
-  
+
   const correctRisk = classifyRisk(score);
   const interpretedUpper = String(interpretedRisk || '').toUpperCase();
-  
+
   // Check for inversion: score < 1 should NEVER be HIGH or CRITICAL
   if (score < 1 && (interpretedUpper.includes('HIGH') || interpretedUpper.includes('CRITICAL') || interpretedUpper.includes('MAX'))) {
     throw new Error(
@@ -156,7 +156,7 @@ function validateRiskScaleNotInverted(score, interpretedRisk) {
       `(score < 1 = MINIMAL/LOW risk, never HIGH/CRITICAL)`
     );
   }
-  
+
   // Check for inversion: score >= 3.5 should NEVER be MINIMAL or LOW
   if (score >= 3.5 && (interpretedUpper.includes('MINIMAL') || interpretedUpper.includes('LOW'))) {
     throw new Error(
@@ -175,12 +175,12 @@ function colorForScore(score) {
   if (score === null || score === undefined || isNaN(score)) {
     return "#9ca3af"; // Gray for N/A or unknown
   }
-  
+
   const clamped = clampScore(score);
   if (clamped === null) {
     return "#9ca3af"; // Gray
   }
-  
+
   // CORRECT SCALE: 0 = green (safe), 4 = red (critical)
   // Use canonical thresholds for consistent colors
   if (clamped < 0.5) return "#10b981";   // Green - MINIMAL
@@ -190,13 +190,105 @@ function colorForScore(score) {
   return "#ef4444";                      // Red - CRITICAL
 }
 
+/**
+ * CUMULATIVE RISK CLASSIFICATION (NORMALIZED)
+ * 
+ * For cumulative/aggregated risk values (SUM of finalRiskContribution),
+ * we NORMALIZE by question count before applying bounded thresholds.
+ * 
+ * This prevents inflation where principles with many questions always
+ * appear as CRITICAL even when individual answers are low-risk.
+ * 
+ * @param {number} cumulativeScore - Sum of finalRiskContribution values
+ * @param {number} questionCount - Number of questions contributing to this sum
+ * @returns {string} Risk classification
+ */
+function classifyCumulativeRisk(cumulativeScore, questionCount) {
+  if (cumulativeScore === null || cumulativeScore === undefined || isNaN(cumulativeScore)) {
+    return "N/A";
+  }
+  if (!questionCount || questionCount <= 0) {
+    return "N/A";
+  }
+
+  // Normalize: average risk per question
+  const normalizedRisk = cumulativeScore / questionCount;
+
+  // Apply standard 0-4 thresholds to normalized value
+  if (normalizedRisk >= 3.5) return "CRITICAL_RISK";
+  if (normalizedRisk >= 2.5) return "HIGH_RISK";
+  if (normalizedRisk >= 1.5) return "MEDIUM_RISK";
+  if (normalizedRisk >= 0.5) return "LOW_RISK";
+  return "MINIMAL_RISK";
+}
+
+/**
+ * Get risk label for cumulative risk (normalized by question count)
+ * @param {number} cumulativeScore - Sum of finalRiskContribution values
+ * @param {number} questionCount - Number of questions
+ * @param {string} format - 'label' (full), 'short', or 'class' (CSS)
+ * @param {string} lang - 'en' or 'tr'
+ * @returns {string} Human-readable label
+ */
+function getCumulativeRiskLabel(cumulativeScore, questionCount, format = 'label', lang = 'en') {
+  const classification = classifyCumulativeRisk(cumulativeScore, questionCount);
+
+  const labelsEN = {
+    "MINIMAL_RISK": "Minimal Risk",
+    "LOW_RISK": "Low Risk",
+    "MEDIUM_RISK": "Medium Risk",
+    "HIGH_RISK": "High Risk",
+    "CRITICAL_RISK": "Critical Risk",
+    "N/A": "Not Evaluated"
+  };
+
+  const shortLabelsEN = {
+    "MINIMAL_RISK": "MINIMAL",
+    "LOW_RISK": "LOW",
+    "MEDIUM_RISK": "MEDIUM",
+    "HIGH_RISK": "HIGH",
+    "CRITICAL_RISK": "CRITICAL",
+    "N/A": "N/A"
+  };
+
+  if (format === 'short') {
+    return shortLabelsEN[classification] || "N/A";
+  }
+  if (format === 'class') {
+    return classification.toLowerCase().replace('_', '-');
+  }
+  return labelsEN[classification] || "Unknown";
+}
+
+/**
+ * Get color for cumulative risk (normalized)
+ * @param {number} cumulativeScore - Sum of finalRiskContribution values
+ * @param {number} questionCount - Number of questions
+ * @returns {string} Hex color code
+ */
+function colorForCumulativeRisk(cumulativeScore, questionCount) {
+  if (cumulativeScore === null || cumulativeScore === undefined || !questionCount || questionCount <= 0) {
+    return "#9ca3af"; // Gray
+  }
+
+  const normalizedRisk = cumulativeScore / questionCount;
+
+  if (normalizedRisk < 0.5) return "#10b981";   // Green - MINIMAL
+  if (normalizedRisk < 1.5) return "#84cc16";   // Light green - LOW
+  if (normalizedRisk < 2.5) return "#fbbf24";   // Yellow/Amber - MEDIUM
+  if (normalizedRisk < 3.5) return "#f97316";   // Orange - HIGH
+  return "#ef4444";                             // Red - CRITICAL
+}
+
 module.exports = {
   clampScore,
   classifyRisk,
   riskLabelTR,
   riskLabelEN,
-  getRiskLabel, // New unified function
+  getRiskLabel,
   validateRiskScaleNotInverted,
-  colorForScore
+  colorForScore,
+  classifyCumulativeRisk,
+  getCumulativeRiskLabel,
+  colorForCumulativeRisk
 };
-

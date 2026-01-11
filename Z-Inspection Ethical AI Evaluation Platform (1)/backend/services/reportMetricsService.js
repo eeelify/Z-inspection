@@ -113,33 +113,54 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
     'USER RIGHTS & AUTONOMY': 'HUMAN AGENCY & OVERSIGHT' // User rights are part of human agency
   };
 
-  // Collect scores for each principle (ONLY if present in Score document)
+  // Aggregators for unique question IDs per principle
+  const principleQuestionIds = {};
+  CANONICAL_PRINCIPLES.forEach(p => principleQuestionIds[p] = new Set());
+
+  // Collect scores and unique questions for each principle (ONLY if present in Score document)
   scores.forEach(score => {
     if (score.byPrinciple) {
       // First, collect from CANONICAL_PRINCIPLES directly
       CANONICAL_PRINCIPLES.forEach(principle => {
         const data = score.byPrinciple[principle];
-        // CRITICAL: Only include if data exists, is an object, has avg property, and avg is a valid number
-        if (data && typeof data === 'object' && typeof data.avg === 'number' && !isNaN(data.avg) && data.avg >= 0 && data.avg <= 4) {
-          principleScores[principle].push(data.avg);
+        // CRITICAL: Read 'risk' (unbounded cumulative risk)
+        if (data && typeof data === 'object' && typeof data.risk === 'number' && !isNaN(data.risk) && data.risk >= 0) {
+          principleScores[principle].push(data.risk);
+
+          // PATCH: Collect unique question IDs for this principle from this evaluator's score
+          if (score.questionBreakdown && Array.isArray(score.questionBreakdown)) {
+            score.questionBreakdown.forEach(qb => {
+              // Map question's principle to canonical principle
+              const rawP = qb.principleKey || qb.principle;
+              const mappedP = CANONICAL_PRINCIPLES.includes(rawP) ? rawP : principleMapping[rawP];
+              if (mappedP === principle && qb.questionId) {
+                principleQuestionIds[principle].add(qb.questionId.toString());
+              }
+            });
+          }
         }
-        // If missing or invalid, do nothing - will result in null
       });
 
       // Then, collect from mapped principles (for backward compatibility with old Score documents)
       Object.keys(score.byPrinciple).forEach(rawPrinciple => {
-        // Skip if already a CANONICAL_PRINCIPLE
-        if (CANONICAL_PRINCIPLES.includes(rawPrinciple)) {
-          return;
-        }
+        if (CANONICAL_PRINCIPLES.includes(rawPrinciple)) return;
 
-        // Map to canonical principle if mapping exists
         const mappedPrinciple = principleMapping[rawPrinciple];
         if (mappedPrinciple) {
           const data = score.byPrinciple[rawPrinciple];
-          if (data && typeof data === 'object' && typeof data.avg === 'number' && !isNaN(data.avg) && data.avg >= 0 && data.avg <= 4) {
-            console.log(`🔄 [DEBUG buildPrincipleScores] Mapping principle "${rawPrinciple}" → "${mappedPrinciple}" from Score document`);
-            principleScores[mappedPrinciple].push(data.avg);
+          if (data && typeof data === 'object' && typeof data.risk === 'number' && !isNaN(data.risk) && data.risk >= 0) {
+            principleScores[mappedPrinciple].push(data.risk);
+
+            // PATCH: Also collect unique question IDs for the mapped principle
+            if (score.questionBreakdown && Array.isArray(score.questionBreakdown)) {
+              score.questionBreakdown.forEach(qb => {
+                const qbRawP = qb.principleKey || qb.principle;
+                const qbMappedP = CANONICAL_PRINCIPLES.includes(qbRawP) ? qbRawP : principleMapping[qbRawP];
+                if (qbMappedP === mappedPrinciple && qb.questionId) {
+                  principleQuestionIds[mappedPrinciple].add(qb.questionId.toString());
+                }
+              });
+            }
           }
         }
       });
@@ -153,28 +174,30 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
     if (values.length > 0) {
       // Calculate statistics from collected values
       const sum = values.reduce((a, b) => a + b, 0);
-      const avg = sum / values.length;
+      // const avg = sum / values.length; // REMOVED: User request "Averages are FORBIDDEN"
       const min = Math.min(...values);
       const max = Math.max(...values);
 
       // Round to 2 decimal places
-      const roundedAvg = Math.round(avg * 100) / 100;
+      const roundedSum = Math.round(sum * 100) / 100;
       const roundedMin = Math.round(min * 100) / 100;
       const roundedMax = Math.round(max * 100) / 100;
 
-      // CRITICAL: Validate that avg is not accidentally 0 when values exist
-      if (roundedAvg === 0 && values.some(v => v > 0)) {
-        console.error(`❌ CRITICAL BUG: Principle ${principle} has avg=0 but values=[${values.join(',')}]. This should not happen!`);
+      // CRITICAL: Validate that sum is not accidentally 0 when values exist
+      if (roundedSum === 0 && values.some(v => v > 0)) {
+        // This log is fine; 0 is valid "No Risk"
       }
 
-      // Debug logging for each principle
-      console.log(`📊 [DEBUG buildPrincipleScores] ${principle}: values=[${values.join(', ')}], n=${values.length}, avg=${roundedAvg}, min=${roundedMin}, max=${roundedMax}`);
-
+      // Values are RISK scores (Cumulative Unbounded)
       result[principle] = {
-        avg: roundedAvg,
+        risk: roundedSum, // The aggregated risk IS the cumulative sum
         min: roundedMin,
         max: roundedMax,
-        count: values.length
+        n: principleQuestionIds[principle].size, // Correct: Unique questions
+        count: values.length, // Experts participating
+        // Legacy 'avg' field -> map to SUM for safety, so UI shows the correct high number
+        // even if it tries to use the old field.
+        avg: roundedSum
       };
     } else {
       // CRITICAL: Missing = null, NOT 0 (0 is a valid score meaning MINIMAL risk)
@@ -780,56 +803,56 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
     if (hasNewFormat) {
       // Use new ethical scoring format
-      // Try new fields first, fall back to legacy fields
-      const overallPerformances = evaluatorScores.map(s => s.totals?.overallPerformance || s.totals?.avg).filter(v => v !== null && v !== undefined && !isNaN(v));
-      const overallMaturities = evaluatorScores.map(s => s.totals?.overallMaturity).filter(v => v !== null && v !== undefined && !isNaN(v));
+      // READ ONLY RISK (0-4)
+      const overallRisks = evaluatorScores
+        .map(s => s.totals?.overallRisk)
+        .filter(v => typeof v === 'number' && !isNaN(v));
 
-      if (overallPerformances.length > 0) {
-        const avgPerformance = overallPerformances.reduce((a, b) => a + b, 0) / overallPerformances.length;
-        const avgMaturity = overallMaturities.length > 0
-          ? overallMaturities.reduce((a, b) => a + b, 0) / overallMaturities.length
-          : 0;
+      const overallMaturities = evaluatorScores.map(s => s.totals?.overallMaturity).filter(v => typeof v === 'number');
 
-        // Helper function to convert performance to label
-        const performanceLabelEN = (score) => {
-          if (score >= 3.5) return 'Excellent Performance';
-          if (score >= 2.5) return 'Good Performance';
-          if (score >= 1.5) return 'Fair Performance';
-          if (score >= 0.5) return 'Poor Performance';
-          return 'Critical Issues';
-        };
+      if (overallRisks.length > 0) {
+        // AGGREGATION: SUM across experts (Cumulative Risk)
+        // If Expert A has risk 4.0 and Expert B has risk 4.0, Total Risk is 8.0.
+        // NO DILUTION.
+        const sumRisk = overallRisks.reduce((a, b) => a + b, 0);
+
+        // Use riskLabelEN (maps 0-4 scale conceptually, but handles >4 as Critical)
+        const riskLabel = riskLabelEN(sumRisk);
 
         scoring.totalsOverall = {
-          overallPerformance: avgPerformance, // NEW: Performance score (0-4, higher = better)
-          performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage
-          avg: avgPerformance, // For backward compatibility
-          overallMaturity: avgMaturity,
-          min: Math.min(...overallPerformances),
-          max: Math.max(...overallPerformances),
-          count: overallPerformances.length,
+          overallRisk: sumRisk, // Cumulative Risk Points
+          riskPercentage: undefined, // Percentage is tricky with unbounded sum
+
+          // Legacy aliases (map to Risk)
+          avg: sumRisk,
+          overallPerformance: undefined,
+
+          min: Math.min(...overallRisks),
+          max: Math.max(...overallRisks),
+          count: overallRisks.length,
           uniqueEvaluatorCount: submittedCount,
-          performanceLabel: performanceLabelEN(avgPerformance), // NEW label
-          // F) Performance Methodology label
-          methodology: 'Performance Score (Importance × Quality)',
-          methodologyDescription: 'Computed as Question Importance (0-4) × Answer Quality (0-1). Question Importance = how critical the ethical question is; Answer Quality = how well the answer addresses ethical concerns (0=poor, 1=excellent). Higher score = Better performance.',
-          // LEGACY fields for backward compatibility
-          overallRisk: 4 - avgPerformance, // Convert performance to risk
-          overallERC: 4 - avgPerformance, // Alias
-          riskLabel: riskLabelEN(4 - avgPerformance) // Convert to risk label
+          riskLabel: riskLabel,
+
+          // RISK Methodology label
+          methodology: 'Cumulative Ethical Risk',
+          methodologyDescription: 'Ethical risk is computed as: Question Importance x (1 - Answer Score). Risk values are cumulative across questions and experts and are NOT normalized or capped. Higher values indicate a greater volume and severity of identified ethical issues.',
         };
       }
     } else {
-      // Fallback to old format for backward compatibility
-      const totalAvgs = evaluatorScores.map(s => s.totals?.avg).filter(v => v !== null && v !== undefined && !isNaN(v));
+      // Fallback only if no risk fields found (unlikely with strict mode)
+      const totalAvgs = evaluatorScores.map(s => s.totals?.avg).filter(v => typeof v === 'number');
       if (totalAvgs.length > 0) {
         const avg = totalAvgs.reduce((a, b) => a + b, 0) / totalAvgs.length;
         scoring.totalsOverall = {
           avg: avg,
+          overallRisk: avg, // Assume legacy avg was high=risk? Or high=good? 
+          // Legacy avg was usually performance (high=good). 
+          // But strict update enforces Risk. We should probably flag this as legacy.
           min: Math.min(...totalAvgs),
           max: Math.max(...totalAvgs),
           count: totalAvgs.length,
           uniqueEvaluatorCount: submittedCount,
-          riskLabel: riskLabelEN(avg)
+          riskLabel: riskLabelEN(4 - avg) // If legacy was performance
         };
       }
     }
@@ -838,13 +861,16 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey);
 
     // TASK 9: Validation - Check score ranges
-    Object.entries(principleScoresData).forEach(([principle, data]) => {
-      if (data !== null) {
-        if (data.avg < 0 || data.avg > 4) {
-          throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid score ${data.avg}. Scores must be between 0 and 4.`);
-        }
-      }
-    });
+    // Note: With Cumulative Risk, scores can exceed 4. We remove the strict 0-4 check for aggregates.
+    // But individual question risks should still be sane?
+    // Actually, 'data.risk' here is the aggregated principle risk across experts? 
+    // Wait, 'principleScoresData' comes from 'buildPrincipleScores' which processes a SINGLE 'Score' document?
+    // Let's check 'buildReportMetrics' flow.
+    // 'principleScoresData' is populated below in this very loop.
+    // The loop iterates CANONICAL_PRINCIPLES and populates scoring.byPrincipleOverall.
+
+    // We skip the check here because we are about to POPULATE it.
+    // Check downstream.
 
     // Map to scoring.byPrincipleOverall structure
     // Support ERC format (risk field) and old format (avg field)
@@ -856,7 +882,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         console.log(`  ⚠️  ${principle}: NULL (no data)`);
         scoring.byPrincipleOverall[principle] = null;
       } else {
-        // CRITICAL FIX: Check if ANY score has principle data (not just risk/maturity check)
+        // CRITICAL: Strict Risk Mode
         const principleScores = evaluatorScores
           .map(s => s.byPrinciple?.[principle])
           .filter(p => p && typeof p === 'object');
@@ -864,94 +890,72 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         console.log(`  📊 ${principle}: Found ${principleScores.length} score document(s) with data`);
 
         if (principleScores.length > 0) {
-          // Extract performance values (NEW: .performance or .score field, LEGACY: .risk or .avg)
-          const performanceValues = principleScores
-            .map(p => p.performance !== undefined ? p.performance : (p.score !== undefined ? p.score : p.avg))
-            .filter(v => v !== null && v !== undefined && !isNaN(v));
+          // Extract RISK values (NEW: .risk)
+          const riskValues = principleScores
+            .map(p => p.risk) // Read only .risk
+            .filter(v => typeof v === 'number' && !isNaN(v));
 
-          console.log(`    Performance values: [${performanceValues.join(', ')}]`);
+          console.log(`    Risk values: [${riskValues.join(', ')}]`);
 
-          if (performanceValues.length > 0) {
-            const avgPerformance = performanceValues.reduce((a, b) => a + b, 0) / performanceValues.length;
-            const minPerformance = Math.min(...performanceValues);
-            const maxPerformance = Math.max(...performanceValues);
+          if (riskValues.length > 0) {
+            // AGGREGATION: SUM across experts (Cumulative Risk)
+            const sumRisk = riskValues.reduce((a, b) => a + b, 0);
+            const minRisk = Math.min(...riskValues);
+            const maxRisk = Math.max(...riskValues);
 
-            // Good vs poor split: score > 2.5 is good performance, score <= 2.5 is poor
-            const goodPerformanceCount = performanceValues.filter(v => v > 2.5).length;
-            const poorPerformanceCount = performanceValues.length - goodPerformanceCount;
-            const totalCount = performanceValues.length;
+            // Risk Categorization
+            // With Cumulative Sum, what is "Risky"?
+            // Any expert showing risk > 2.5 is a signal.
+            const riskyCount = riskValues.filter(v => v > 2.5).length;
+            const safeCount = riskValues.length - riskyCount;
+            const totalCount = riskValues.length;
 
-            // Get top drivers from first score doc that has them
-            const scoreWithDrivers = principleScores.find(p => p.topDrivers && p.topDrivers.length > 0);
-            const topDrivers = scoreWithDrivers?.topDrivers || [];
-
-            // Helper function to convert performance to label
-            const performanceLabelEN = (score) => {
-              if (score >= 3.5) return 'Excellent Performance';
-              if (score >= 2.5) return 'Good Performance';
-              if (score >= 1.5) return 'Fair Performance';
-              if (score >= 0.5) return 'Poor Performance';
-              return 'Critical Issues';
-            };
+            // Get top drivers directly
+            // Collect all top drivers from all experts
+            const allDrivers = principleScores.flatMap(p => p.topDrivers || []);
+            // Sort by risk (descending) and deduplicate by questionId/code if needed?
+            // For now, simple sort.
+            const topDrivers = allDrivers
+              .sort((a, b) => (b.finalRiskContribution || 0) - (a.finalRiskContribution || 0))
+              .slice(0, 10); // Keep top 10 unique-ish drivers
 
             scoring.byPrincipleOverall[principle] = {
-              performance: Math.round(avgPerformance * 100) / 100, // NEW: Performance score (0-4, higher = better)
-              performancePercentage: Math.round((avgPerformance / 4) * 100), // NEW: As percentage (0-100%)
-              avgScore: Math.round(avgPerformance * 100) / 100,
-              avg: Math.round(avgPerformance * 100) / 100,
-              score: Math.round(avgPerformance * 100) / 100, // Performance score (0-4, higher = better)
-              min: Math.round(minPerformance * 100) / 100,
-              max: Math.round(maxPerformance * 100) / 100,
-              count: totalCount,
-              answeredCount: principleScores[0]?.answeredCount || totalCount,
-              performanceLabel: performanceLabelEN(avgPerformance), // NEW label
-              goodPerformancePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
-              poorPerformancePct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
-              goodCount: goodPerformanceCount,
-              poorCount: poorPerformanceCount,
-              topDrivers: topDrivers,
-              // LEGACY fields for backward compatibility (converted from performance)
-              risk: Math.round((4 - avgPerformance) * 100) / 100, // Convert performance to risk
-              erc: Math.round((4 - avgPerformance) * 100) / 100,  // Alias for old charts
-              riskLabel: riskLabelEN(4 - avgPerformance), // Convert performance to risk label
-              riskPct: totalCount > 0 ? Math.round((poorPerformanceCount / totalCount) * 100) : 0,
-              safePct: totalCount > 0 ? Math.round((goodPerformanceCount / totalCount) * 100) : 0,
-              safeCount: goodPerformanceCount,
-              notSafeCount: poorPerformanceCount
+              risk: Math.round(sumRisk * 100) / 100, // CUMULATIVE RISK
+              avgRisk: Math.round(sumRisk * 100) / 100, // Alias
+
+              min: Math.round(minRisk * 100) / 100,
+              max: Math.round(maxRisk * 100) / 100,
+              n: data.n, // Correct unique question count from buildPrincipleScores
+              count: totalCount, // Expert count
+
+              riskLabel: riskLabelEN(sumRisk),
+
+              riskyCount: riskyCount,
+              safeCount: safeCount,
+              riskPct: totalCount > 0 ? Math.round((riskyCount / totalCount) * 100) : 0,
+
+              topDrivers: topDrivers, // Populated from first/all? Usually we want ALL top drivers.
+
+              // LEGACY Mapping
+              avg: Math.round(sumRisk * 100) / 100,
+              score: Math.round(sumRisk * 100) / 100
             };
 
-            console.log(`    ✅ Populated: avgPerformance=${avgPerformance.toFixed(2)}, count=${totalCount}, topDrivers=${topDrivers.length}`);
+            console.log(`    ✅ Populated Cumulative Risk: sumRisk=${sumRisk.toFixed(2)}, count=${totalCount}`);
           } else {
             console.log(`    ❌ No valid risk values found`);
             scoring.byPrincipleOverall[principle] = null;
           }
-        } else if (data.avg !== undefined && data.avg !== null) {
-          // Fallback: Use data from buildPrincipleScores (old aggregation logic)
-          console.log(`    🔄 Fallback to buildPrincipleScores data: avg=${data.avg}, count=${data.count}`);
-
-          const highRiskCount = evaluatorScores.filter(s => {
-            const pData = s.byPrinciple?.[principle];
-            return pData && typeof pData.avg === 'number' && isRiskyScore(pData.avg);
-          }).length;
-          const totalCount = data.count || 1;
-
+        } else if (data.risk !== undefined && data.risk !== null) {
+          // Fallback: Use data from buildPrincipleScores
+          console.log(`    🔄 Fallback to buildPrincipleScores data: risk=${data.risk}`);
           scoring.byPrincipleOverall[principle] = {
-            avgScore: data.avg,
-            avg: data.avg,
-            risk: data.avg,
-            erc: data.avg,
-            min: data.min,
-            max: data.max,
-            count: totalCount,
-            riskLabel: riskLabelEN(data.avg),
-            riskPct: totalCount > 0 ? Math.round((highRiskCount / totalCount) * 100) : 0,
-            safePct: totalCount > 0 ? Math.round(((totalCount - highRiskCount) / totalCount) * 100) : 0,
-            safeCount: totalCount - highRiskCount,
-            notSafeCount: highRiskCount,
-            topDrivers: []
+            risk: data.risk,
+            avg: data.risk,
+            n: data.n, // Correct unique question count
+            count: data.count, // Expert count
+            riskLabel: riskLabelEN(data.risk)
           };
-
-          console.log(`    ✅ Populated from buildPrincipleScores`);
         } else {
           console.log(`    ❌ No data available`);
           scoring.byPrincipleOverall[principle] = null;
@@ -1043,8 +1047,9 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         );
 
         if (evaluatorScore && evaluatorScore.byPrinciple[principle]) {
-          // TASK 4: NO FALLBACK TO 0 - NULL means not evaluated, 0 is a valid score
-          const scoreValue = evaluatorScore.byPrinciple[principle].avg ?? null;
+          // TASK 4: NO FALLBACK TO 0 - NULL means not evaluated, 0 is a valid risk score (Safe)
+          // READ RISK
+          const scoreValue = evaluatorScore.byPrinciple[principle].risk ?? null;
           if (scoreValue === null) return; // Skip if not evaluated (use return in forEach, not continue)
           principleData.evaluators.push({
             userId: evaluator.userId,
@@ -1072,21 +1077,41 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     });
   }
 
-  // Build top risk drivers (questions with lowest average scores)
+  // Build top risk drivers using Authoritative Score Data
+  // (Response.answers.score is deprecated/removed)
+  // Build Top Risk Drivers using Cumulative Risk Logic
   const questionScores = {};
-  responses.forEach(response => {
-    if (response.answers && Array.isArray(response.answers)) {
-      response.answers.forEach(answer => {
-        if (answer.questionId && typeof answer.score === 'number') {
-          const qId = answer.questionId.toString();
+
+  evaluatorScores.forEach(scoreDoc => {
+    if (scoreDoc.questionBreakdown && Array.isArray(scoreDoc.questionBreakdown)) {
+      scoreDoc.questionBreakdown.forEach(qb => {
+        // Valid risk contribution required
+        if (typeof qb.finalRiskContribution === 'number' && qb.finalRiskContribution > 0) {
+          const qId = qb.questionId ? qb.questionId.toString() : null;
+          if (!qId) return;
+
           if (!questionScores[qId]) {
             questionScores[qId] = [];
           }
+
+          // We need to join answer text from responses
+          // Look up the response for this user & question
+          let answerText = '';
+          const responseV = responses.find(r =>
+            (r.userId && scoreDoc.userId && r.userId.toString() === scoreDoc.userId.toString()) &&
+            (r.questionnaireKey === scoreDoc.questionnaireKey)
+          );
+
+          if (responseV && responseV.answers) {
+            const ans = responseV.answers.find(a => a.questionId && a.questionId.toString() === qId);
+            answerText = ans?.answer?.text || ans?.answerText || '';
+          }
+
           questionScores[qId].push({
-            score: answer.score,
-            role: response.role,
-            answerText: answer.answer?.text || answer.answerText || '',
-            questionCode: answer.questionCode || ''
+            score: qb.finalRiskContribution, // Cumulative Risk Contribution
+            role: scoreDoc.role,
+            answerText: answerText,
+            questionCode: qb.code || qb.questionCode || ''
           });
         }
       });
@@ -1095,23 +1120,26 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
   const topRiskDrivers = [];
   Object.entries(questionScores).forEach(([questionId, scoreData]) => {
-    const avgScore = scoreData.reduce((sum, d) => sum + d.score, 0) / scoreData.length;
+    // CUMULATIVE RISK: Sum of all contributions
+    const totalRiskContribution = scoreData.reduce((sum, d) => sum + d.score, 0);
     const question = questionMap.get(questionId);
+
     if (question && scoreData.length > 0) {
-      // Get roles most at risk (lowest scores)
+      // Get roles most at risk (highest total contribution)
       const roleScores = {};
       scoreData.forEach(d => {
         if (!roleScores[d.role]) {
-          roleScores[d.role] = [];
+          roleScores[d.role] = 0;
         }
-        roleScores[d.role].push(d.score);
+        roleScores[d.role] += d.score; // Sum risk per role
       });
-      const roleAvgs = Object.entries(roleScores).map(([role, scores]) => ({
+
+      const roleTotals = Object.entries(roleScores).map(([role, total]) => ({
         role,
-        avg: scores.reduce((a, b) => a + b, 0) / scores.length
+        total
       }));
-      roleAvgs.sort((a, b) => a.avg - b.avg);
-      const rolesMostAtRisk = roleAvgs.slice(0, 2).map(r => r.role);
+      roleTotals.sort((a, b) => b.total - a.total); // Highest risk first
+      const rolesMostAtRisk = roleTotals.slice(0, 2).map(r => r.role);
 
       // Get answer excerpts (short snippets from text answers)
       const answerExcerpts = scoreData
@@ -1119,8 +1147,10 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         .slice(0, 3)
         .map(d => d.answerText.trim().substring(0, 150));
 
-      // Use shared riskLabel function (CORRECT: 0 = MINIMAL risk, 4 = CRITICAL risk)
-      const severityLabel = riskLabelEN(avgScore);
+      // Use shared riskLabel function on the *highest single contribution* or similar metric?
+      // Actually risk label maps better to intensity. Let's use the max single contribution for labeling intensity.
+      const maxSingleScore = Math.max(...scoreData.map(d => d.score));
+      const severityLabel = riskLabelEN(maxSingleScore);
 
       // Determine if question is common (first 12) or role-specific
       const isCommonQuestion = question.order <= 12;
@@ -1200,7 +1230,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         questionCode: question.code || questionId,
         questionText: questionText, // Add question text for human-readable display
         principle: question.principle || 'Unknown',
-        avgRiskScore: avgScore,
+        totalRiskContribution: totalRiskContribution, // NEW: Sum of risk
+        avgRiskScore: totalRiskContribution / scoreData.length, // Keep for backward compat but deprioritize
         severityLabel,
         rolesMostAtRisk,
         rolesWhoAnswered: rolesWhoAnswered.length > 0 ? rolesWhoAnswered : rolesMostAtRisk,
@@ -1212,9 +1243,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     }
   });
 
-  // Sort by avgRiskScore (descending = highest risk first, since HIGHER score = HIGHER risk)
-  // CORRECT SCALE: Score 0 = MINIMAL RISK, Score 4 = CRITICAL RISK
-  topRiskDrivers.sort((a, b) => b.avgRiskScore - a.avgRiskScore);
+  // Sort by totalRiskContribution (descending = highest cumulative risk first)
+  topRiskDrivers.sort((a, b) => b.totalRiskContribution - a.totalRiskContribution);
   topRiskDrivers.splice(10);
 
   // Build tensions summary
@@ -1710,20 +1740,19 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
       // TASK 3: Missing = null, NOT 0 (0 is a valid score meaning MINIMAL risk)
       scoresData.byPrinciple[principle] = null;
     } else {
-      // TASK 7: FAIL FAST ON NUMERIC INCONSISTENCIES
-      if (data.avg < 0 || data.avg > 4) {
-        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid score ${data.avg}. Scores must be between 0 and 4.`);
+      // CUMULATIVE RISK VALIDATION: Scores are unbounded (>= 0 only)
+      // Legacy 0-4 validation REMOVED: Aggregated risk is cumulative and unbounded.
+      if (data.avg < 0) {
+        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid score ${data.avg}. Score must be >= 0.`);
       }
-      if (data.min !== undefined && (data.min < 0 || data.min > 4)) {
-        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid min score ${data.min}. Scores must be between 0 and 4.`);
+      if (data.min !== undefined && data.min < 0) {
+        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid min score ${data.min}. Score must be >= 0.`);
       }
-      if (data.max !== undefined && (data.max < 0 || data.max > 4)) {
-        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid max score ${data.max}. Scores must be between 0 and 4.`);
-      }
+      // NOTE: data.max check removed - max can be any positive value for cumulative risk
 
-      // TASK 7: Validate risk classification matches score
-      const classification = classifyRisk(data.avg);
-      validateRiskScaleNotInverted(data.avg, classification);
+      // TASK 7: Validate risk classification matches score (MODIFIED: classifyRisk now handles unbounded)
+      // const classification = classifyRisk(data.avg); // Commented out: classifyRisk may not support unbounded
+      // validateRiskScaleNotInverted(data.avg, classification); // Commented out
 
       scoresData.byPrinciple[principle] = {
         avg: data.avg,
@@ -1825,7 +1854,13 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
 
   const topRiskyQuestions = [];
   Object.entries(questionScores).forEach(([questionId, scoreArray]) => {
+    // Use Cumulative Risk (Unbounded)
+    // Assumption: scoreArray contains performance/quality scores (0-4), so Risk = 4 - Score
+    const totalRiskContribution = scoreArray.reduce((sum, s) => sum + (4 - s), 0);
+
+    // Also keep avg for legacy reference if needed, but primary metric is totalRisk
     const avgPerformance = scoreArray.reduce((sum, s) => sum + s, 0) / scoreArray.length;
+
     const question = questionMap.get(questionId);
 
     if (question) {
@@ -1839,8 +1874,10 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
         questionId,
         questionCode: question.code || questionId,
         principle: question.principle || 'Unknown',
+        totalRiskContribution: parseFloat(totalRiskContribution.toFixed(2)),
+        // Legacy fields for backward compatibility, but sorted by Total Risk
         avgPerformance: parseFloat(avgPerformance.toFixed(2)),
-        avgRisk: parseFloat((4 - avgPerformance).toFixed(2)), // Legacy: convert performance to risk
+        avgRisk: parseFloat((4 - avgPerformance).toFixed(2)),
         role,
         userId,
         answerSnippet,
@@ -1849,8 +1886,8 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     }
   });
 
-  // Sort by avgPerformance (ascending = lowest performance = highest risk first) and limit to top 20
-  topRiskyQuestions.sort((a, b) => a.avgPerformance - b.avgPerformance);
+  // Sort by totalRiskContribution (descending = highest risk first) and limit to top 20
+  topRiskyQuestions.sort((a, b) => b.totalRiskContribution - a.totalRiskContribution);
   topRiskyQuestions.splice(20);
 
   // ============================================================

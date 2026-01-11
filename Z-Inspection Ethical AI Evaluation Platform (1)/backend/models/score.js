@@ -21,6 +21,10 @@ const PrincipleScoreSchema = new mongoose.Schema({
     riskImportance: Number, // 0-4 (question importance/criticality)
     answerSeverity: Number, // 0-1 (risk severity indicated by answer)
     computedERC: Number, // 0-4 (riskImportance × answerSeverity)
+    // STRICT ETHICAL MODEL (Canonical Fields)
+    finalRiskContribution: Number, // importance × (1 - answerScore)
+    answerScore: Number, // 0-1
+    importance: Number, // 1-4
     // Legacy RPN fields (for backward compatibility)
     riskScore: Number, // 0-4 (question importance) - alias for riskImportance
     answerRisk: Number, // 0-4 (risk indicated by answer) - legacy
@@ -38,35 +42,35 @@ const QuestionScoreSchema = new mongoose.Schema({
 }, { _id: false });
 
 const ScoreSchema = new mongoose.Schema({
-  projectId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Project', 
+  projectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
     required: true,
-    index: true 
+    index: true
   },
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: true,
-    index: true 
+    index: true
   },
-  role: { 
-    type: String, 
+  role: {
+    type: String,
     required: true,
-    index: true 
+    index: true
   },
-  questionnaireKey: { 
-    type: String, 
+  questionnaireKey: {
+    type: String,
     required: true,
-    index: true 
+    index: true
   },
-  computedAt: { 
-    type: Date, 
+  computedAt: {
+    type: Date,
     default: Date.now,
-    index: true 
+    index: true
   },
-  scoringModelVersion: { 
-    type: String, 
+  scoringModelVersion: {
+    type: String,
     default: 'erc_v1' // ERC model version (erc_v1) or legacy (rpn_v1, aq_rw_v1)
   },
   totals: {
@@ -100,6 +104,10 @@ const ScoreSchema = new mongoose.Schema({
     riskImportance: Number, // 0-4 (question importance)
     answerSeverity: Number, // 0-1 (answer severity)
     computedERC: Number, // 0-4 (riskImportance × answerSeverity)
+    // STRICT ETHICAL MODEL (Canonical Fields)
+    finalRiskContribution: Number, // importance × (1 - answerScore)
+    answerScore: Number, // 0-1
+    importance: Number, // 1-4
     answerType: String,
     mappingMissing: Boolean,
     source: String, // Source of answerSeverity (expert_provided, optionSeverityMap, label_inference, etc.)

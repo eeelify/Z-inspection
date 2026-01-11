@@ -19,7 +19,7 @@ interface GeneralQuestion {
   questionEn: string;
   questionTr: string;
   type: 'multiple-choice' | 'text';
-  options?: string[];
+  options?: Array<string | { key: string; label: string }>;
   required?: boolean;
 }
 
@@ -55,7 +55,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   // Convert backend question format to frontend format
   const convertQuestion = (q: any): GeneralQuestion => {
     const questionId = q._id?.toString() || q.code;
-    let options: string[] | undefined = undefined;
+    let options: Array<string | { key: string; label: string }> | undefined = undefined;
     
     if (q.answerType === 'single_choice' && q.options && Array.isArray(q.options)) {
       options = q.options.map((opt: any) => {
@@ -63,8 +63,10 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         if (typeof opt === 'string') {
           return opt;
         }
-        // Prefer English label, fallback to Turkish, then key
-        return opt.label?.en || opt.label?.tr || opt.label || opt.key || String(opt);
+        // Store both key and label for proper matching
+        const label = opt.label?.en || opt.label?.tr || opt.label || opt.key || String(opt);
+        const key = opt.key || label;
+        return { key, label };
       });
     }
 
@@ -175,9 +177,13 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
 
     const loadAnswers = async () => {
       try {
+        const projectId = project.id || (project as any)._id;
+        const userId = currentUser.id || (currentUser as any)._id;
+        
         const response = await fetch(
-          api(`/api/general-questions?projectId=${project.id || (project as any)._id}&userId=${currentUser.id || (currentUser as any)._id}`)
+          api(`/api/general-questions?projectId=${projectId}&userId=${userId}`)
         );
+        
         if (response.ok) {
           const data = await response.json();
           // Load from principles structure if available, otherwise from flat structure
@@ -364,7 +370,6 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
       }
       
       const result = await response.json();
-      console.log('Successfully saved:', result);
       return true;
     } catch (error: any) {
       console.error('Error saving general questions:', error);
@@ -669,10 +674,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
               <div className="space-y-3 max-w-2xl">
                 {currentQuestion.options?.map((option, idx) => {
                   const questionKey = getQuestionKey(currentQuestion);
-                  const optionValue = typeof option === 'string' ? option : option;
-                  const optionLabel = typeof option === 'string' ? option : option;
+                  const optionKey = typeof option === 'string' ? option : option.key;
+                  const optionLabel = typeof option === 'string' ? option : option.label;
                   const answerValue = answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''];
-                  const isSelected = answerValue === optionValue || answerValue === optionLabel;
+                  // Check both key and label for flexibility
+                  const isSelected = answerValue === optionKey || answerValue === optionLabel;
                   return (
                     <label
                       key={idx}
@@ -694,7 +700,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                       <input
                         type="radio"
                         name={getQuestionKey(currentQuestion)}
-                        value={optionValue}
+                        value={optionKey}
                         checked={isSelected}
                         onChange={(e) => {
                           const questionKey = getQuestionKey(currentQuestion);

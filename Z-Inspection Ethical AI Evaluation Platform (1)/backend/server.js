@@ -75,11 +75,13 @@ const cleanMongoUri = MONGO_URI.replace(/&appName=[^&]*/i, '');
 mongoose
   .connect(cleanMongoUri, {
     maxPoolSize: 10, // Maintain up to 10 socket connections
-    serverSelectionTimeoutMS: 10000, // Keep trying to send operations for 10 seconds
-    socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-    connectTimeoutMS: 10000, // Give up initial connection after 10 seconds
+    serverSelectionTimeoutMS: 60000, // Keep trying to send operations for 60 seconds (increased)
+    socketTimeoutMS: 120000, // Close sockets after 120 seconds of inactivity (increased)
+    connectTimeoutMS: 60000, // Give up initial connection after 60 seconds (increased)
     retryWrites: true,
-    w: 'majority'
+    w: 'majority',
+    heartbeatFrequencyMS: 10000, // Check connection every 10 seconds
+    family: 4 // Use IPv4, skip trying IPv6
   })
   .then(() => {
     console.log('✅ MongoDB Atlas Bağlantısı Başarılı');
@@ -127,7 +129,7 @@ const ProjectSchema = new mongoose.Schema({
   assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   useCase: { type: String },
   createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Admin who created this project
-  inspectionContext: { 
+  inspectionContext: {
     requester: String,
     inspectionReason: String,
     relevantFor: String,
@@ -273,18 +275,18 @@ const TensionSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project' },
   principle1: String,
   principle2: String,
-  claimStatement: String, 
-  description: String,    
-  severity: String, 
+  claimStatement: String,
+  description: String,
+  severity: String,
   status: { type: String, default: 'ongoing' },
   createdBy: String,
   createdAt: { type: Date, default: Date.now },
-  
+
   votes: [{
     userId: String,
     voteType: { type: String, enum: ['agree', 'disagree'] }
   }],
-  
+
   comments: [{
     text: String,
     authorId: String,
@@ -395,27 +397,27 @@ const ReportSchema = new mongoose.Schema({
     hasHTMLReport: { type: Boolean, default: false }
   },
   version: { type: Number, default: 1 },
-  
+
   // CRITICAL: Latest flag - only ONE report per project can have latest = true
   latest: { type: Boolean, default: false, index: true },
-  
+
   // File paths for PDF and Word (relative to uploads directory)
   pdfPath: { type: String, default: null },
   wordPath: { type: String, default: null },
-  
+
   // File sizes (for UI display)
   pdfSize: { type: Number, default: null }, // bytes
   wordSize: { type: Number, default: null }, // bytes
-  
+
   // HTML content (for PDF/Word generation)
   htmlContent: { type: String, default: null },
-  
+
   // Computed metrics (for caching)
   computedMetrics: { type: mongoose.Schema.Types.Mixed, default: null },
-  
+
   // Scoring data (for HTML report generation and display)
   scoring: { type: mongoose.Schema.Types.Mixed, default: null },
-  
+
   // New workflow: sections-based report editing
   sections: [{
     principle: String,
@@ -423,7 +425,7 @@ const ReportSchema = new mongoose.Schema({
     expertEdit: String,
     comments: [ExpertCommentSchema]
   }],
-  
+
   // Error details (if generation failed)
   errorDetails: {
     message: String,
@@ -440,7 +442,7 @@ ReportSchema.index({ projectId: 1, latest: 1 }); // For "get latest report" quer
 ReportSchema.index({ projectId: 1, version: 1 }, { unique: true }); // Version uniqueness per project
 
 // Static method: Get the latest report for a project
-ReportSchema.statics.getLatestReport = async function(projectId) {
+ReportSchema.statics.getLatestReport = async function (projectId) {
   return this.findOne({
     projectId,
     latest: true,
@@ -449,7 +451,7 @@ ReportSchema.statics.getLatestReport = async function(projectId) {
 };
 
 // Static method: Mark a report as latest (and unmark all others)
-ReportSchema.statics.markAsLatest = async function(reportId, projectId) {
+ReportSchema.statics.markAsLatest = async function (reportId, projectId) {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -479,7 +481,7 @@ ReportSchema.statics.markAsLatest = async function(reportId, projectId) {
 };
 
 // Instance method: Validate that both PDF and Word exist
-ReportSchema.methods.validateFiles = function() {
+ReportSchema.methods.validateFiles = function () {
   if (!this.pdfPath || !this.wordPath) {
     throw new Error(
       `Report ${this._id} is incomplete: ` +
@@ -520,7 +522,7 @@ app.get('/api/use-case-questions', async (req, res) => {
     if (questionsCache && (now - questionsCacheTime) < CACHE_DURATION) {
       return res.json(questionsCache);
     }
-    
+
     // Fetch from database - only active questions by default
     const questions = await UseCaseQuestion.find({ isActive: { $ne: false } }).sort({ order: 1 }).lean();
     questionsCache = questions;
@@ -577,12 +579,12 @@ app.get('/api/use-cases', async (req, res) => {
   try {
     const { ownerId } = req.query;
     let query = UseCase.find();
-    
+
     // Filter by ownerId if provided (for performance)
     if (ownerId) {
       query = query.where('ownerId').equals(ownerId);
     }
-    
+
     const useCases = await query
       .select('-answers -extendedInfo -supportingFiles.data') // Don't fetch file data for list
       .lean()
@@ -642,7 +644,7 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
   try {
     const { assignedExperts = [], adminNotes = '' } = req.body;
     const useCaseId = req.params.id;
-    
+
     // Validate and filter assigned experts
     let validAssignedExperts = [];
     if (assignedExperts && Array.isArray(assignedExperts) && assignedExperts.length > 0) {
@@ -653,7 +655,7 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
           return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : null;
         })
         .filter(Boolean);
-      
+
       // Verify these are actual expert users (not admins)
       if (validAssignedExperts.length > 0) {
         const experts = await User.find({
@@ -663,10 +665,10 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
         validAssignedExperts = experts.map(e => e._id);
       }
     }
-    
+
     // Set status based on assignment count
     const newStatus = validAssignedExperts.length > 0 ? 'ASSIGNED' : 'UNASSIGNED';
-    
+
     // Update the use case
     const updated = await UseCase.findByIdAndUpdate(
       useCaseId,
@@ -674,53 +676,53 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: 'Not found' });
-    
+
     // Update all projects linked to this use case: sync assigned experts with project.assignedUsers
     // Also create/remove ProjectAssignment records so experts can see/hide the projects
     try {
       const ProjectAssignment = require('./models/projectAssignment');
       const { calculateProjectProgress } = require('./services/evaluationService');
       const linkedProjects = await Project.find({ useCase: useCaseId });
-      
+
       // Prepare the list of users to assign: use case owner + assigned experts
       const usersToAssign = new Set();
-      
+
       // Add use case owner if exists
       if (updated.ownerId) {
         usersToAssign.add(updated.ownerId.toString());
       }
-      
+
       // Add all assigned experts
       validAssignedExperts.forEach(expertId => {
         usersToAssign.add(expertId.toString());
       });
-      
+
       const usersToAssignArray = Array.from(usersToAssign).map(id => new mongoose.Types.ObjectId(id));
-      
+
       for (const project of linkedProjects) {
         if (!project.assignedUsers) {
           project.assignedUsers = [];
         }
-        
+
         // Get current assigned user IDs as strings for comparison
         const currentAssigned = project.assignedUsers.map((id) => id.toString());
         const newUserIds = usersToAssignArray.map((id) => id.toString());
-        
+
         // Find users to add and remove
         const usersToAdd = newUserIds.filter(id => !currentAssigned.includes(id));
         const usersToRemove = currentAssigned.filter(id => !newUserIds.includes(id));
-        
+
         // Update project.assignedUsers to match the new assignment list exactly (owner + experts)
         project.assignedUsers = usersToAssignArray;
         await project.save();
-        
+
         // Create or update ProjectAssignment records for newly added experts (not owner)
         for (const expertId of validAssignedExperts) {
           try {
             // Get user to determine role
             const expertUser = await User.findById(expertId).select('role').lean();
             if (!expertUser || expertUser.role === 'admin') continue;
-            
+
             // Create or update ProjectAssignment
             await ProjectAssignment.findOneAndUpdate(
               { projectId: project._id, userId: expertId },
@@ -739,14 +741,14 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
             // Continue with other experts even if one fails
           }
         }
-        
+
         // Remove ProjectAssignment records for experts that were removed
         for (const userIdStr of usersToRemove) {
           try {
             // Only remove if it's an expert (not the owner)
             const isOwner = updated.ownerId && updated.ownerId.toString() === userIdStr;
             if (isOwner) continue; // Don't remove owner's assignment
-            
+
             if (!isValidObjectId(userIdStr)) continue;
             const userIdObj = new mongoose.Types.ObjectId(userIdStr);
             await ProjectAssignment.deleteOne({ projectId: project._id, userId: userIdObj });
@@ -755,7 +757,7 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
             // Continue with other removals even if one fails
           }
         }
-        
+
         // Recalculate project progress after assignment changes
         try {
           await calculateProjectProgress(project._id);
@@ -768,7 +770,7 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
       console.error('Error updating linked projects:', projectUpdateError);
       // Don't fail the assignment if project update fails, but log it
     }
-    
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -877,8 +879,8 @@ app.delete('/api/use-cases/:id/supporting-files', async (req, res) => {
 // Tensions - OLUŞTURMA (İlk evidence ile birlikte)
 app.post('/api/tensions', async (req, res) => {
   try {
-    const { 
-      projectId, principle1, principle2, claimStatement, description, 
+    const {
+      projectId, principle1, principle2, claimStatement, description,
       evidenceDescription, evidenceType, evidenceFileName, evidenceFileData,
       severity, status, createdBy,
       impact, mitigation
@@ -898,7 +900,7 @@ app.post('/api/tensions', async (req, res) => {
     }
 
     const tensionData = {
-      projectId, principle1, principle2, claimStatement, description, 
+      projectId, principle1, principle2, claimStatement, description,
       severity, status, createdBy,
       evidences: initialEvidences,
       comments: []
@@ -1052,10 +1054,10 @@ app.post('/api/tensions/:id/comment', async (req, res) => {
     const { text, authorId, authorName } = req.body;
     const tension = await Tension.findById(req.params.id);
     if (!tension) return res.status(404).send('Not found');
-    
+
     if (!tension.comments) tension.comments = [];
     tension.comments.push({ text, authorId, authorName, date: new Date() });
-    
+
     await tension.save();
     res.json(tension.comments);
   } catch (err) {
@@ -1071,7 +1073,7 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
     if (!tension) return res.status(404).send('Not found');
 
     if (!tension.evidences) tension.evidences = [];
-    
+
     // Build evidence object - only include type if it's a non-empty string
     const evidenceObj = {
       title,
@@ -1082,7 +1084,7 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
       uploadedAt: new Date(),
       comments: []
     };
-    
+
     // Only add type if it's a valid string
     if (type && typeof type === 'string' && type.trim().length > 0) {
       evidenceObj.type = type.trim();
@@ -1092,9 +1094,9 @@ app.post('/api/tensions/:id/evidence', async (req, res) => {
 
     await tension.save();
     res.json(tension.evidences);
-  } catch (err) { 
+  } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message }); 
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1124,7 +1126,7 @@ app.post('/api/tensions/:tensionId/evidence/:evidenceId/comments', async (req, r
 
     // Find evidence by index (evidenceId is the array index as string)
     const evidenceIndex = parseInt(evidenceId, 10);
-    
+
     if (isNaN(evidenceIndex) || evidenceIndex < 0 || evidenceIndex >= tension.evidences.length) {
       return res.status(404).json({ error: 'Evidence not found' });
     }
@@ -1179,30 +1181,30 @@ app.get('/api/project-assignments', async (req, res) => {
 
     // OPTIMIZATION: Batch fetch all data at once instead of querying in a loop
     const projectIds = assignments.map(a => a.projectId);
-    
+
     // 1. Fetch all projects in one query
     const projects = await Project.find({ _id: { $in: projectIds } })
       .select('_id useCase')
       .lean();
     const projectMap = new Map(projects.map(p => [String(p._id), p]));
-    
+
     // 2. Fetch all use cases in one query
     const useCaseIds = projects.map(p => p.useCase).filter(Boolean);
-    const useCases = useCaseIds.length > 0 
+    const useCases = useCaseIds.length > 0
       ? await mongoose.model('UseCase').find({ _id: { $in: useCaseIds } })
-          .select('_id ownerId')
-          .lean()
+        .select('_id ownerId')
+        .lean()
       : [];
     const useCaseMap = new Map(useCases.map(uc => [String(uc._id), uc]));
-    
+
     // 3. Fetch all expert assignments for all projects in one query
-    const allProjectAssignments = await ProjectAssignment.find({ 
+    const allProjectAssignments = await ProjectAssignment.find({
       projectId: { $in: projectIds },
       status: { $in: ['assigned', 'in_progress', 'submitted'] }
     })
-    .select('projectId userId evolutionCompletedAt')
-    .lean();
-    
+      .select('projectId userId evolutionCompletedAt')
+      .lean();
+
     // Group assignments by project
     const assignmentsByProject = new Map();
     for (const assignment of allProjectAssignments) {
@@ -1212,22 +1214,22 @@ app.get('/api/project-assignments', async (req, res) => {
       }
       assignmentsByProject.get(projId).push(assignment);
     }
-    
+
     // 4. Process each user assignment
     const assignmentsWithStatus = assignments.map(a => {
       let allExpertsCompleted = false;
-      
+
       try {
         const projectId = String(a.projectId);
         const project = projectMap.get(projectId);
         const projectAssignments = assignmentsByProject.get(projectId) || [];
-        
+
         // Get expert IDs (excluding admins and use case owner)
         let expertAssignments = projectAssignments.filter(pa => {
           // TODO: Filter out admins if needed (would need user role data)
           return true;
         });
-        
+
         // Exclude use case owner
         if (project?.useCase) {
           const useCase = useCaseMap.get(String(project.useCase));
@@ -1238,7 +1240,7 @@ app.get('/api/project-assignments', async (req, res) => {
             );
           }
         }
-        
+
         // Check if all experts have completed
         if (expertAssignments.length > 0) {
           allExpertsCompleted = expertAssignments.every(
@@ -1248,7 +1250,7 @@ app.get('/api/project-assignments', async (req, res) => {
       } catch (error) {
         console.error(`Error checking allExpertsCompleted for project ${a.projectId}:`, error);
       }
-      
+
       return {
         ...a,
         id: String(a._id),
@@ -1302,11 +1304,11 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     // Check tension votes (skip for use case owners - they are not experts)
     if (!isUseCaseOwner) {
       const allTensions = await Tension.find({ projectId: projectIdObj }).select('votes createdBy').lean();
-      
+
       // Exclude tensions created by the user (they can't vote on their own tensions)
       const tensionsToVoteOn = allTensions.filter((t) => String(t.createdBy) !== userIdStr);
       totalTensions = tensionsToVoteOn.length;
-      
+
       votedTensions = tensionsToVoteOn.filter((t) => {
         const votes = Array.isArray(t.votes) ? t.votes : [];
         return votes.some((v) => String(v.userId) === userIdStr);
@@ -1325,7 +1327,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     // Check if all questions are answered
     const Response = require('./models/response');
     const Question = require('./models/question');
-    
+
     // Get assignment (will be created below if missing)
     const ProjectAssignment = require('./models/projectAssignment');
     let assignmentForCheck = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
@@ -1358,7 +1360,8 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
       else if (role === 'technical-expert') assignedQuestionnaireKeys.push('technical-expert-v1');
       else if (role === 'legal-expert') assignedQuestionnaireKeys.push('legal-expert-v1');
       else if (role === 'education-expert') assignedQuestionnaireKeys.push('education-expert-v1');
-      assignedQuestionnaireKeys.push('general-v1'); // Always include general
+      // assignedQuestionnaireKeys.push('general-v1'); // REMOVED: Do not force general-v1. Strict assignment only.
+      if (assignedQuestionnaireKeys.length === 0) assignedQuestionnaireKeys.push('general-v1'); // Only default to general if NOTHING else matched
     }
 
     // Check which questionnaires actually have responses in the database
@@ -1367,33 +1370,20 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey').lean();
-    
+
     const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
-    
+
     let questionnairesToCount = assignedQuestionnaireKeys.slice();
     const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
-    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key => 
+    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key =>
       key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
     );
-    
+
     // If both general-v1 and role-specific responses exist, count both
     // If only role-specific exists and has 30+ questions, it likely includes general questions
-    if (!hasGeneralResponse && hasRoleSpecificResponse) {
-      const roleSpecificKey = assignedQuestionnaireKeys.find(key => 
-        key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
-      );
-      
-      if (roleSpecificKey) {
-        const roleSpecificCount = await Question.countDocuments({ questionnaireKey: roleSpecificKey });
-        if (roleSpecificCount >= 30) {
-          questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
-          console.log(`📊 Finish evolution: Only role-specific response exists (${roleSpecificKey}, ${roleSpecificCount} questions), excluding general-v1 from count`);
-        }
-      }
-    } else if (hasGeneralResponse && hasRoleSpecificResponse) {
-      console.log(`📊 Finish evolution: Both general-v1 and role-specific responses exist, counting both`);
-    }
-    
+    // Logic removed: We no longer auto-exclude general-v1 based on question count.
+    // Strict questionnaire scoping applies.
+
     // Get all assigned questions
     const allAssignedQuestions = await Question.find({
       questionnaireKey: { $in: questionnairesToCount }
@@ -1406,7 +1396,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey answers').lean();
-    
+
     console.log(`📊 Finish evolution: Fetched ${responses.length} response(s) for questionnaires: ${responses.map(r => r.questionnaireKey).join(', ')}`);
 
     // Check custom questions from Evaluation
@@ -1436,17 +1426,17 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
 
     // Check all assigned questions are answered
     const unansweredQuestions = [];
-    
+
     for (const question of allAssignedQuestions) {
       const questionCode = question.code;
       const questionId = question._id.toString();
-      
+
       // Find response for this question
       let isAnswered = false;
       for (const response of responses) {
         if (response.answers && Array.isArray(response.answers)) {
-          const answer = response.answers.find((a) => 
-            a.questionCode === questionCode || 
+          const answer = response.answers.find((a) =>
+            a.questionCode === questionCode ||
             a.questionId?.toString() === questionId ||
             String(a.questionId) === questionId
           );
@@ -1456,7 +1446,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           }
         }
       }
-      
+
       // Also check Evaluation answers for custom questions or legacy answers
       if (!isAnswered && evaluation?.answers) {
         const evalAnswer = evaluation.answers[questionId] || evaluation.answers[questionCode];
@@ -1468,7 +1458,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           }
         }
       }
-      
+
       if (!isAnswered && question.required !== false) {
         unansweredQuestions.push(questionCode || questionId);
       }
@@ -1478,7 +1468,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     for (const customQuestion of customQuestions) {
       const customQuestionId = customQuestion.id;
       if (!customQuestionId) continue;
-      
+
       let isAnswered = false;
       if (evaluation?.answers) {
         const customAnswer = evaluation.answers[customQuestionId];
@@ -1490,7 +1480,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           }
         }
       }
-      
+
       if (!isAnswered && customQuestion.required !== false) {
         unansweredQuestions.push(`custom_${customQuestionId}`);
       }
@@ -1508,9 +1498,9 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
 
     // Check if ALL assigned experts have completed their evaluations (progress = 100%)
     const { getAssignedExperts } = require('./services/notificationService');
-    
+
     let assignedExpertIds = await getAssignedExperts(projectIdObj);
-    
+
     // Exclude the use case owner from expert progress check (they are not an expert)
     if (project.useCase) {
       const UseCase = mongoose.model('UseCase');
@@ -1520,11 +1510,11 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
         assignedExpertIds = assignedExpertIds.filter(expertId => String(expertId) !== ownerIdStr);
       }
     }
-    
+
     if (assignedExpertIds.length > 0) {
       // Check progress for all assigned experts using the same logic as /api/user-progress
       const expertProgresses = [];
-      
+
       for (const expertId of assignedExpertIds) {
         // Get assignment for this expert
         const expertAssignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: expertId });
@@ -1532,13 +1522,17 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           expertProgresses.push({ userId: expertId, progress: 0 });
           continue;
         }
-        
+
         // Get assigned questionnaires (same logic as /api/user-progress)
         let assignedQuestionnaireKeys = Array.isArray(expertAssignment.questionnaires) ? expertAssignment.questionnaires.slice() : [];
-        if (!assignedQuestionnaireKeys.includes('general-v1')) {
-          assignedQuestionnaireKeys.unshift('general-v1');
-        }
-        
+        /**
+         * CRITICAL FIX: Do NOT auto-include 'general-v1'.
+         * 
+         * if (!assignedQuestionnaireKeys.includes('general-v1')) {
+         *   assignedQuestionnaireKeys.unshift('general-v1');
+         * }
+         */
+
         // If questionnaires are empty, derive from role
         if (assignedQuestionnaireKeys.length === 0) {
           const role = String(expertAssignment.role || '').toLowerCase();
@@ -1552,47 +1546,37 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           const roleKey = roleMap[role] || null;
           assignedQuestionnaireKeys = roleKey ? ['general-v1', roleKey] : ['general-v1'];
         }
-        
+
         // Check which questionnaires actually have responses in the database
         const existingResponses = await Response.find({
           projectId: projectIdObj,
           userId: expertId,
           questionnaireKey: { $in: assignedQuestionnaireKeys }
         }).select('questionnaireKey').lean();
-        
+
         const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
-        
+
         let questionnairesToCount = assignedQuestionnaireKeys.slice();
         const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
-        const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key => 
+        const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key =>
           key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
         );
-        
+
         // If both general-v1 and role-specific responses exist, count both
         // If only role-specific exists and has 30+ questions, it likely includes general questions
-        if (!hasGeneralResponse && hasRoleSpecificResponse) {
-          const roleSpecificKey = assignedQuestionnaireKeys.find(key => 
-            key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
-          );
-          
-          if (roleSpecificKey) {
-            const roleSpecificCount = await Question.countDocuments({ questionnaireKey: roleSpecificKey });
-            if (roleSpecificCount >= 30) {
-              questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
-            }
-          }
-        }
-        
+        // If both general-v1 and role-specific responses exist, count both
+        // Logic removed: We no longer auto-exclude general-v1 based on question count.
+
         // Count total questions (all questionnaires including role-specific)
         const totalQuestions = await Question.countDocuments({
           questionnaireKey: { $in: questionnairesToCount }
         });
-        
+
         if (totalQuestions === 0) {
           expertProgresses.push({ userId: expertId, progress: 0 });
           continue;
         }
-        
+
         // Get all responses for this expert across all assigned questionnaires
         // questionnairesToCount is only for question count, but we need to fetch all responses
         const responses = await Response.find({
@@ -1600,9 +1584,9 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           userId: expertId,
           questionnaireKey: { $in: assignedQuestionnaireKeys }
         }).select('questionnaireKey answers').lean();
-        
+
         console.log(`📊 Expert ${expertId}: Fetched ${responses.length} response(s) for questionnaires: ${responses.map(r => r.questionnaireKey).join(', ')}`);
-        
+
         // Count answered questions (same logic as /api/user-progress)
         const answeredKeys = new Set();
         for (const r of (responses || [])) {
@@ -1613,7 +1597,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
             const codeKey = a?.questionCode !== undefined && a?.questionCode !== null ? String(a.questionCode).trim() : '';
             const key = idKey.length > 0 ? idKey : (codeKey.length > 0 ? `${qKey}:${codeKey}` : '');
             if (!key || answeredKeys.has(key)) continue;
-            
+
             let hasAnswer = false;
             if (a?.answer) {
               if (a.answer.choiceKey !== null && a.answer.choiceKey !== undefined && a.answer.choiceKey !== '') hasAnswer = true;
@@ -1623,21 +1607,21 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
             } else if (a.choiceKey || (a.text && String(a.text).trim().length > 0) || a.numeric !== undefined || (Array.isArray(a.multiChoiceKeys) && a.multiChoiceKeys.length > 0)) {
               hasAnswer = true;
             }
-            
+
             if (hasAnswer) answeredKeys.add(key);
           }
         }
-        
+
         // Also check custom questions from Evaluation
         const expertEvaluation = await Evaluation.findOne({
           projectId: projectIdObj,
           userId: expertId
         }).select('customQuestions answers').lean();
-        
+
         const customQuestions = expertEvaluation?.customQuestions || [];
         let customQuestionsTotal = 0;
         let customQuestionsAnswered = 0;
-        
+
         for (const customQuestion of customQuestions) {
           if (customQuestion.required !== false) {
             customQuestionsTotal++;
@@ -1654,29 +1638,29 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
             }
           }
         }
-        
+
         // Total = regular questions + custom questions
         const totalWithCustom = totalQuestions + customQuestionsTotal;
         const answeredWithCustom = answeredKeys.size + customQuestionsAnswered;
         const progress = totalWithCustom > 0 ? Math.round((answeredWithCustom / totalWithCustom) * 100) : 0;
-        
+
         expertProgresses.push({
           userId: expertId,
           progress: Math.max(0, Math.min(100, progress))
         });
       }
-      
+
       // Check if all experts have 100% progress
       const allExpertsCompleted = expertProgresses.every(ep => ep.progress >= 100);
       if (!allExpertsCompleted) {
         const incompleteExperts = expertProgresses.filter(ep => ep.progress < 100);
         const incompleteCount = incompleteExperts.length;
         const totalExperts = expertProgresses.length;
-        
+
         // Get expert names for better error message
         const expertUsers = await User.find({ _id: { $in: assignedExpertIds } }).select('name email role').lean();
         const expertNames = expertUsers.map(u => u.name || u.email).join(', ');
-        
+
         return res.status(400).json({
           error: 'WAITING_FOR_OTHER_EXPERTS',
           message: 'Not all experts have completed their evaluations',
@@ -1700,7 +1684,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     const projectTensions = await Tension.find({ projectId: projectIdObj }).lean();
     if (projectTensions.length > 0) {
       let assignedExpertIds = await getAssignedExperts(projectIdObj);
-      
+
       // Exclude the use case owner from tension voting check (they are not an expert)
       if (project.useCase) {
         const UseCase = mongoose.model('UseCase');
@@ -1710,24 +1694,24 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
           assignedExpertIds = assignedExpertIds.filter(expertId => String(expertId) !== ownerIdStr);
         }
       }
-      
+
       const assignedExpertIdsStr = assignedExpertIds.map(id => id.toString());
-      
+
       for (const tension of projectTensions) {
         const tensionVotes = tension.votes || [];
         const votedUserIds = tensionVotes.map(v => String(v.userId));
         const tensionCreatorId = String(tension.createdBy);
-        
+
         // Check if all assigned experts have voted on this tension
         // CRITICAL FIX: Skip the creator of the tension (they cannot/should not vote on their own)
-        const missingVotes = assignedExpertIdsStr.filter(expertId => 
+        const missingVotes = assignedExpertIdsStr.filter(expertId =>
           expertId !== tensionCreatorId && !votedUserIds.includes(expertId)
         );
-        
+
         if (missingVotes.length > 0) {
           const expertUsers = await User.find({ _id: { $in: missingVotes.map(id => new mongoose.Types.ObjectId(id)) } }).select('name email').lean();
           const expertNames = expertUsers.map(u => u.name || u.email).join(', ');
-          
+
           return res.status(400).json({
             error: 'NOT_ALL_TENSIONS_VOTED',
             message: 'Not all experts have voted on all tensions',
@@ -1786,7 +1770,7 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
     // Check if ALL experts have now completed their evolution
     let allExpertsCompleted = false;
     let assignedExpertsForCheck = await getAssignedExperts(projectIdObj);
-    
+
     // Exclude use case owner from this check too
     if (project.useCase) {
       const UseCase = mongoose.model('UseCase');
@@ -1796,15 +1780,15 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
         assignedExpertsForCheck = assignedExpertsForCheck.filter(expertId => String(expertId) !== ownerIdStr);
       }
     }
-    
+
     if (assignedExpertsForCheck.length > 0) {
       const allAssignments = await ProjectAssignment.find({
         projectId: projectIdObj,
         userId: { $in: assignedExpertsForCheck }
       }).select('evolutionCompletedAt').lean();
-      
+
       allExpertsCompleted = allAssignments.length === assignedExpertsForCheck.length &&
-                           allAssignments.every(a => a.evolutionCompletedAt);
+        allAssignments.every(a => a.evolutionCompletedAt);
     }
 
     // Notify ALL admins (case-insensitive match)
@@ -1847,15 +1831,15 @@ app.post('/api/projects/:projectId/finish-evolution', async (req, res) => {
 app.post('/api/evaluations', async (req, res) => {
   try {
     const { projectId, userId, stage, answers, questionPriorities, riskScores, riskLevel, generalRisks, status } = req.body;
-    
+
     // Convert IDs to ObjectId if needed
-    const projectIdObj = isValidObjectId(projectId) 
-      ? new mongoose.Types.ObjectId(projectId) 
+    const projectIdObj = isValidObjectId(projectId)
+      ? new mongoose.Types.ObjectId(projectId)
       : projectId;
-    const userIdObj = isValidObjectId(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
+    const userIdObj = isValidObjectId(userId)
+      ? new mongoose.Types.ObjectId(userId)
       : userId;
-    
+
     // Save to old Evaluation collection (for backward compatibility)
     // IMPORTANT: Use $set to avoid wiping fields like customQuestions on subsequent saves
     const evaluation = await Evaluation.findOneAndUpdate(
@@ -1888,11 +1872,11 @@ app.post('/api/evaluations', async (req, res) => {
         const ProjectAssignment = require('./models/projectAssignment');
         const Question = require('./models/question');
         const Questionnaire = require('./models/questionnaire');
-        
+
         // Get user role
         const user = await User.findById(userIdObj);
         const role = user?.role || 'unknown';
-        
+
         // Determine role-specific questionnaire key
         let roleQuestionnaireKey = 'general-v1';
         if (role === 'ethical-expert') roleQuestionnaireKey = 'ethical-expert-v1';
@@ -1900,17 +1884,17 @@ app.post('/api/evaluations', async (req, res) => {
         else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
         else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
         else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
-        
+
         // Create or get assignment
         let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
         if (!assignment) {
           const { createAssignment } = require('./services/evaluationService');
-          const questionnaires = role !== 'any' && roleQuestionnaireKey !== 'general-v1' 
+          const questionnaires = role !== 'any' && roleQuestionnaireKey !== 'general-v1'
             ? ['general-v1', roleQuestionnaireKey]
             : ['general-v1'];
           assignment = await createAssignment(projectIdObj, userIdObj, role, questionnaires);
         }
-        
+
         // Get all questions to determine which questionnaire they belong to
         const allGeneralQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code _id').lean();
         const generalCodes = new Set(allGeneralQuestions.map(q => q.code).filter(Boolean));
@@ -1922,8 +1906,8 @@ app.post('/api/evaluations', async (req, res) => {
           generalQuestionMap.set(q._id.toString(), q);
           if (q._id) generalQuestionMap.set(String(q._id), q);
         });
-        
-        const allRoleQuestions = roleQuestionnaireKey !== 'general-v1' 
+
+        const allRoleQuestions = roleQuestionnaireKey !== 'general-v1'
           ? await Question.find({ questionnaireKey: roleQuestionnaireKey }).select('code _id').lean()
           : [];
         const roleCodes = new Set(allRoleQuestions.map(q => q.code).filter(Boolean));
@@ -1935,25 +1919,25 @@ app.post('/api/evaluations', async (req, res) => {
           roleQuestionMap.set(q._id.toString(), q);
           if (q._id) roleQuestionMap.set(String(q._id), q);
         });
-        
+
         // Separate answers by questionnaire
         // Use Maps to track processed questions by code to avoid duplicates
         const generalAnswersMap = {};
         const roleSpecificAnswersMap = {};
         const processedQuestionCodes = new Set(); // Track processed questions to avoid duplicates
-        
+
         console.log(`📝 Processing ${Object.keys(answers).length} answers for project ${projectId}, user ${userId}, role ${role}`);
         console.log(`📝 Answer keys (first 20): ${Object.keys(answers).slice(0, 20).join(', ')}${Object.keys(answers).length > 20 ? '...' : ''}`);
         console.log(`📝 General codes count: ${generalCodes.size}, Role codes count: ${roleCodes.size}`);
         console.log(`📝 Sample general codes: ${Array.from(generalCodes).slice(0, 5).join(', ')}`);
         console.log(`📝 Sample role codes: ${Array.from(roleCodes).slice(0, 5).join(', ')}`);
-        
+
         for (const [questionKey, answerValue] of Object.entries(answers)) {
           console.log(`🔍 Processing answer key: "${questionKey}", value: ${typeof answerValue === 'string' ? answerValue.substring(0, 30) : answerValue}`);
-          
+
           // Try to find question using the map first (faster)
           let question = generalQuestionMap.get(questionKey) || roleQuestionMap.get(questionKey);
-          
+
           // If not found in map, try database lookup with multiple formats
           if (!question) {
             // Try as ObjectId first
@@ -1963,28 +1947,28 @@ app.post('/api/evaluations', async (req, res) => {
             }
             query.$or.push({ _id: questionKey });
             query.$or.push({ code: questionKey });
-            
+
             question = await Question.findOne(query).lean();
-            
+
             if (question) {
               console.log(`🔍 Found question via DB lookup: "${questionKey}" -> code: "${question.code}", questionnaire: "${question.questionnaireKey}"`);
             } else {
               console.warn(`⚠️ Question not found in DB for key: "${questionKey}"`);
             }
           }
-          
+
           if (question) {
             const questionCode = question.code; // Use code as the canonical identifier
-            
+
             // Skip if we've already processed this question code (avoid duplicates from ObjectId + code keys)
             if (processedQuestionCodes.has(questionCode)) {
               console.log(`⏭️ Skipping duplicate answer for question code "${questionCode}" (already processed)`);
               continue;
             }
             processedQuestionCodes.add(questionCode);
-            
+
             console.log(`✅ Found question "${questionKey}" -> code: "${questionCode}", questionnaire: "${question.questionnaireKey}", role: ${role}, expected roleQuestionnaireKey: ${roleQuestionnaireKey}`);
-            
+
             if (question.questionnaireKey === 'general-v1') {
               // Use questionCode as key for consistency
               generalAnswersMap[questionCode] = answerValue;
@@ -2035,16 +2019,16 @@ app.post('/api/evaluations', async (req, res) => {
             }
           }
         }
-        
+
         console.log(`📊 Separated answers: ${Object.keys(generalAnswersMap).length} general, ${Object.keys(roleSpecificAnswersMap).length} role-specific`);
         console.log(`📊 General answer codes: ${Object.keys(generalAnswersMap).slice(0, 10).join(', ')}${Object.keys(generalAnswersMap).length > 10 ? '...' : ''}`);
         console.log(`📊 Role-specific answer codes: ${Object.keys(roleSpecificAnswersMap).slice(0, 10).join(', ')}${Object.keys(roleSpecificAnswersMap).length > 10 ? '...' : ''}`);
         console.log(`📊 Role: ${role}, roleQuestionnaireKey: ${roleQuestionnaireKey}`);
-        
+
         // Prepare response saving tasks (parallel execution)
         const saveTasks = [];
         const { ensureAllQuestionsPresent, validateSubmission } = require('./services/evaluationService');
-        
+
         // Save general-v1 responses
         if (Object.keys(generalAnswersMap).length > 0 || Object.keys(answers).length > 0) {
           saveTasks.push(async () => {
@@ -2054,140 +2038,150 @@ app.post('/api/evaluations', async (req, res) => {
                 console.warn('⚠️ general-v1 questionnaire not found');
                 return;
               }
-              
+
               console.log(`🔄 Ensuring all questions present for general-v1...`);
               await ensureAllQuestionsPresent(projectIdObj, userIdObj, 'general-v1');
               console.log(`✅ All questions ensured for general-v1`);
-            
-            const generalResponseAnswers = [];
-            const generalQuestions = await Question.find({ questionnaireKey: 'general-v1' })
-              .select('_id code answerType options')
-              .lean();
-            
-            for (const [questionKey, answerValue] of Object.entries(generalAnswersMap)) {
-              // questionKey is now questionCode (from the map above)
-              let question = generalQuestions.find(q => 
-                q.code === questionKey
-              );
-              
-              if (!question) {
-                // Try to find by code
-                question = await Question.findOne({
-                  $or: [
-                    { code: questionKey },
-                    { questionnaireKey: 'general-v1', code: questionKey }
-                  ]
-                }).lean();
-              }
-              
-              if (!question) {
-                console.warn(`⚠️ General question with code ${questionKey} not found in database, skipping`);
-                continue;
-              }
-              
-              const questionCode = question.code; // Use code as canonical identifier
-              console.log(`💾 Saving general answer: questionCode=${questionCode}, answerValue=${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
-              
-              // Get risk score from riskScores if available, otherwise use priority
-              // Try multiple key formats: questionCode, questionKey, question._id, question.id
-              let score = 2; // Default
-              if (riskScores) {
-                const riskScore = riskScores[questionCode] ?? 
-                                  riskScores[questionKey] ?? 
-                                  riskScores[question._id?.toString()] ?? 
-                                  riskScores[String(question._id)] ?? 
-                                  undefined;
-                if (riskScore !== undefined && (riskScore === 0 || riskScore === 1 || riskScore === 2 || riskScore === 3 || riskScore === 4)) {
-                  score = riskScore;
-                  console.log(`📊 Using risk score ${score} for question ${questionCode} from riskScores`);
-                }
-              }
-              if (score === 2 && questionPriorities) {
-                const priority = questionPriorities[questionCode] ?? 
-                                 questionPriorities[questionKey] ?? 
-                                 questionPriorities[question._id?.toString()] ?? 
-                                 questionPriorities[String(question._id)] ?? 
-                                 undefined;
-                if (priority) {
-                  if (priority === 'low') score = 3;
-                  else if (priority === 'medium') score = 2;
-                  else if (priority === 'high') score = 1;
-                  console.log(`📊 Using priority ${priority} (score ${score}) for question ${questionCode}`);
-                }
-              }
-              
-              // Format answer
-              let answerFormat = {};
-              if (question.answerType === 'single_choice') {
-                const option = question.options?.find(opt => 
-                  opt.label?.en === answerValue || opt.label?.tr === answerValue || opt.key === answerValue
+
+              const generalResponseAnswers = [];
+              const generalQuestions = await Question.find({ questionnaireKey: 'general-v1' })
+                .select('_id code answerType options')
+                .lean();
+
+              for (const [questionKey, answerValue] of Object.entries(generalAnswersMap)) {
+                // questionKey is now questionCode (from the map above)
+                let question = generalQuestions.find(q =>
+                  q.code === questionKey
                 );
-                answerFormat.choiceKey = option ? option.key : answerValue;
-                if (option?.score !== undefined) score = option.score;
-              } else if (question.answerType === 'open_text') {
-                answerFormat.text = answerValue;
-              } else if (question.answerType === 'multi_choice') {
-                answerFormat.multiChoiceKeys = Array.isArray(answerValue) ? answerValue : [answerValue];
-              }
-              
-              generalResponseAnswers.push({
-                questionId: question._id,
-                questionCode: questionCode, // Use the canonical code
-                answer: answerFormat,
-                score: score,
-                notes: null,
-                evidence: []
-              });
-            }
-            
-            if (generalResponseAnswers.length > 0) {
-              const existingResponse = await Response.findOne({
-                projectId: projectIdObj,
-                userId: userIdObj,
-                questionnaireKey: 'general-v1'
-              });
-              
-              if (existingResponse) {
-                const answerMap = new Map(generalResponseAnswers.map(a => [a.questionCode, a]));
-                // Get existing codes BEFORE updating answers
-                const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
-                
-                // Update existing answers
-                existingResponse.answers = existingResponse.answers.map(existingAnswer => {
-                  const updatedAnswer = answerMap.get(existingAnswer.questionCode);
-                  return updatedAnswer || existingAnswer;
-                });
-                
-                // Add new answers that don't exist yet
-                generalResponseAnswers.forEach(newAnswer => {
-                  if (!existingCodes.has(newAnswer.questionCode)) {
-                    existingResponse.answers.push(newAnswer);
+
+                if (!question) {
+                  // Try to find by code
+                  question = await Question.findOne({
+                    $or: [
+                      { code: questionKey },
+                      { questionnaireKey: 'general-v1', code: questionKey }
+                    ]
+                  }).lean();
+                }
+
+                if (!question) {
+                  console.warn(`⚠️ General question with code ${questionKey} not found in database, skipping`);
+                  continue;
+                }
+
+                const questionCode = question.code; // Use code as canonical identifier
+                console.log(`💾 Saving general answer: questionCode=${questionCode}, answerValue=${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
+
+                // Get risk score from riskScores if available, otherwise use priority
+                // Try multiple key formats: questionCode, questionKey, question._id, question.id
+                let score = 2; // Default
+                if (riskScores) {
+                  const riskScore = riskScores[questionCode] ??
+                    riskScores[questionKey] ??
+                    riskScores[question._id?.toString()] ??
+                    riskScores[String(question._id)] ??
+                    undefined;
+                  if (riskScore !== undefined && (riskScore === 0 || riskScore === 1 || riskScore === 2 || riskScore === 3 || riskScore === 4)) {
+                    score = riskScore;
+                    console.log(`📊 Using risk score ${score} for question ${questionCode} from riskScores`);
                   }
+                }
+                if (score === 2 && questionPriorities) {
+                  const priority = questionPriorities[questionCode] ??
+                    questionPriorities[questionKey] ??
+                    questionPriorities[question._id?.toString()] ??
+                    questionPriorities[String(question._id)] ??
+                    undefined;
+                  if (priority) {
+                    if (priority === 'low') score = 3;
+                    else if (priority === 'medium') score = 2;
+                    else if (priority === 'high') score = 1;
+                    console.log(`📊 Using priority ${priority} (score ${score}) for question ${questionCode}`);
+                  }
+                }
+
+                // Normalization for MCQ objects
+                let normalizedValue = answerValue;
+                if (answerValue && typeof answerValue === 'object' && !Array.isArray(answerValue)) {
+                  if (answerValue.choiceKey) normalizedValue = answerValue.choiceKey;
+                  else if (answerValue.text) normalizedValue = answerValue.text;
+                }
+
+                // Format answer
+                let answerFormat = {};
+                if (question.answerType === 'single_choice') {
+                  const option = question.options?.find(opt =>
+                    opt.label?.en === normalizedValue || opt.label?.tr === normalizedValue || opt.key === normalizedValue
+                  );
+                  answerFormat.choiceKey = option ? option.key : normalizedValue;
+                  if (option?.score !== undefined) score = option.score;
+                } else if (question.answerType === 'open_text') {
+                  answerFormat.text = normalizedValue;
+                } else if (question.answerType === 'multi_choice') {
+                  const rawArray = Array.isArray(normalizedValue) ? normalizedValue : [normalizedValue];
+                  answerFormat.multiChoiceKeys = rawArray.map(v =>
+                    (v && typeof v === 'object' && v.choiceKey) ? v.choiceKey : v
+                  );
+                }
+
+                generalResponseAnswers.push({
+                  questionId: question._id,
+                  questionCode: questionCode, // Use the canonical code
+                  answer: answerFormat,
+                  score: score,
+                  notes: null,
+                  evidence: []
                 });
-                
-                existingResponse.status = status === 'completed' ? 'submitted' : 'draft';
-                existingResponse.submittedAt = status === 'completed' ? new Date() : null;
-                existingResponse.updatedAt = new Date();
-                await existingResponse.save();
-                console.log(`✅ Updated general-v1 response with ${generalResponseAnswers.length} answered questions`);
-              } else {
-                await Response.create({
-                  projectId: projectIdObj,
-                  assignmentId: assignment._id,
-                  userId: userIdObj,
-                  role: role,
-                  questionnaireKey: 'general-v1',
-                  questionnaireVersion: generalQuestionnaire.version,
-                  answers: generalResponseAnswers,
-                  status: status === 'completed' ? 'submitted' : 'draft',
-                  submittedAt: status === 'completed' ? new Date() : null,
-                  updatedAt: new Date()
-                });
-                console.log(`✅ Created general-v1 response with ${generalResponseAnswers.length} answered questions`);
               }
-            } else {
-              console.warn(`⚠️ No general answers to save (generalResponseAnswers.length = ${generalResponseAnswers.length})`);
-            }
+
+              if (generalResponseAnswers.length > 0) {
+                const existingResponse = await Response.findOne({
+                  projectId: projectIdObj,
+                  userId: userIdObj,
+                  questionnaireKey: 'general-v1'
+                });
+
+                if (existingResponse) {
+                  const answerMap = new Map(generalResponseAnswers.map(a => [a.questionCode, a]));
+                  // Get existing codes BEFORE updating answers
+                  const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+
+                  // Update existing answers
+                  existingResponse.answers = existingResponse.answers.map(existingAnswer => {
+                    const updatedAnswer = answerMap.get(existingAnswer.questionCode);
+                    return updatedAnswer || existingAnswer;
+                  });
+
+                  // Add new answers that don't exist yet
+                  generalResponseAnswers.forEach(newAnswer => {
+                    if (!existingCodes.has(newAnswer.questionCode)) {
+                      existingResponse.answers.push(newAnswer);
+                    }
+                  });
+
+                  existingResponse.status = status === 'completed' ? 'submitted' : 'draft';
+                  existingResponse.submittedAt = status === 'completed' ? new Date() : null;
+                  existingResponse.updatedAt = new Date();
+                  await existingResponse.save();
+                  console.log(`✅ Updated general-v1 response with ${generalResponseAnswers.length} answered questions`);
+                } else {
+                  await Response.create({
+                    projectId: projectIdObj,
+                    assignmentId: assignment._id,
+                    userId: userIdObj,
+                    role: role,
+                    questionnaireKey: 'general-v1',
+                    questionnaireVersion: generalQuestionnaire.version,
+                    answers: generalResponseAnswers,
+                    status: status === 'completed' ? 'submitted' : 'draft',
+                    submittedAt: status === 'completed' ? new Date() : null,
+                    updatedAt: new Date()
+                  });
+                  console.log(`✅ Created general-v1 response with ${generalResponseAnswers.length} answered questions`);
+                }
+              } else {
+                console.warn(`⚠️ No general answers to save (generalResponseAnswers.length = ${generalResponseAnswers.length})`);
+              }
             } catch (error) {
               console.error(`❌ Error saving general-v1 responses:`, error);
               console.error(`❌ Error stack:`, error.stack);
@@ -2195,7 +2189,7 @@ app.post('/api/evaluations', async (req, res) => {
             }
           });
         }
-        
+
         // Save role-specific responses
         console.log(`🔍 Checking role-specific responses: roleQuestionnaireKey=${roleQuestionnaireKey}, roleSpecificAnswersMap.length=${Object.keys(roleSpecificAnswersMap).length}`);
         console.log(`🔍 roleSpecificAnswersMap keys: ${Object.keys(roleSpecificAnswersMap).slice(0, 20).join(', ')}${Object.keys(roleSpecificAnswersMap).length > 20 ? '...' : ''}`);
@@ -2215,148 +2209,158 @@ app.post('/api/evaluations', async (req, res) => {
                 });
                 console.log(`✅ Created questionnaire: ${roleQuestionnaireKey}`);
               }
-              
+
               console.log(`🔄 Ensuring all questions present for ${roleQuestionnaireKey}...`);
               await ensureAllQuestionsPresent(projectIdObj, userIdObj, roleQuestionnaireKey);
               console.log(`✅ All questions ensured for ${roleQuestionnaireKey}`);
-            
-            const roleResponseAnswers = [];
-            const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
-              .select('_id code answerType options')
-              .lean();
-            
-            for (const [questionKey, answerValue] of Object.entries(roleSpecificAnswersMap)) {
-              // questionKey is now questionCode (from the map above)
-              let question = roleQuestions.find(q => 
-                q.code === questionKey
-              );
-              
-              if (!question) {
-                question = await Question.findOne({
-                  $or: [
-                    { code: questionKey },
-                    { questionnaireKey: roleQuestionnaireKey, code: questionKey }
-                  ]
-                }).lean();
-              }
-              
-              if (!question) {
-                console.warn(`⚠️ Role-specific question with code ${questionKey} not found in database, skipping`);
-                continue;
-              }
-              
-              const questionCode = question.code; // Use code as canonical identifier
-              console.log(`💾 Saving role-specific answer: questionCode=${questionCode}, answerValue=${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
-              
-              // Get risk score from riskScores if available, otherwise use priority
-              // Try multiple key formats: questionCode, questionKey, question._id, question.id
-              let score = 2; // Default
-              if (riskScores) {
-                const riskScore = riskScores[questionCode] ?? 
-                                  riskScores[questionKey] ?? 
-                                  riskScores[question._id?.toString()] ?? 
-                                  riskScores[String(question._id)] ?? 
-                                  undefined;
-                if (riskScore !== undefined && (riskScore === 0 || riskScore === 1 || riskScore === 2 || riskScore === 3 || riskScore === 4)) {
-                  score = riskScore;
-                  console.log(`📊 Using risk score ${score} for question ${questionCode} from riskScores`);
-                }
-              }
-              if (score === 2 && questionPriorities) {
-                const priority = questionPriorities[questionCode] ?? 
-                                 questionPriorities[questionKey] ?? 
-                                 questionPriorities[question._id?.toString()] ?? 
-                                 questionPriorities[String(question._id)] ?? 
-                                 undefined;
-                if (priority) {
-                  if (priority === 'low') score = 3;
-                  else if (priority === 'medium') score = 2;
-                  else if (priority === 'high') score = 1;
-                  console.log(`📊 Using priority ${priority} (score ${score}) for question ${questionCode}`);
-                }
-              }
-              
-              // Format answer
-              let answerFormat = {};
-              if (question.answerType === 'single_choice') {
-                const option = question.options?.find(opt => 
-                  opt.label?.en === answerValue || opt.label?.tr === answerValue || opt.key === answerValue
+
+              const roleResponseAnswers = [];
+              const roleQuestions = await Question.find({ questionnaireKey: roleQuestionnaireKey })
+                .select('_id code answerType options')
+                .lean();
+
+              for (const [questionKey, answerValue] of Object.entries(roleSpecificAnswersMap)) {
+                // questionKey is now questionCode (from the map above)
+                let question = roleQuestions.find(q =>
+                  q.code === questionKey
                 );
-                answerFormat.choiceKey = option ? option.key : answerValue;
-                if (option?.score !== undefined) score = option.score;
-              } else if (question.answerType === 'open_text') {
-                answerFormat.text = answerValue;
-              } else if (question.answerType === 'multi_choice') {
-                answerFormat.multiChoiceKeys = Array.isArray(answerValue) ? answerValue : [answerValue];
-              }
-              
-              roleResponseAnswers.push({
-                questionId: question._id,
-                questionCode: question.code,
-                answer: answerFormat,
-                score: score,
-                notes: null,
-                evidence: []
-              });
-            }
-            
-            if (roleResponseAnswers.length > 0) {
-              console.log(`💾 Saving ${roleResponseAnswers.length} role-specific answers to ${roleQuestionnaireKey} response...`);
-              const existingResponse = await Response.findOne({
-                projectId: projectIdObj,
-                userId: userIdObj,
-                questionnaireKey: roleQuestionnaireKey
-              });
-              
-              if (existingResponse) {
-                console.log(`📝 Found existing response for ${roleQuestionnaireKey}, updating...`);
-                const answerMap = new Map(roleResponseAnswers.map(a => [a.questionCode, a]));
-                // Get existing codes BEFORE updating answers
-                const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
-                console.log(`📝 Existing response has ${existingResponse.answers.length} answers, adding/updating ${roleResponseAnswers.length} answers`);
-                
-                // Update existing answers
-                existingResponse.answers = existingResponse.answers.map(existingAnswer => {
-                  const updatedAnswer = answerMap.get(existingAnswer.questionCode);
-                  return updatedAnswer || existingAnswer;
-                });
-                
-                // Add new answers that don't exist yet
-                let addedCount = 0;
-                roleResponseAnswers.forEach(newAnswer => {
-                  if (!existingCodes.has(newAnswer.questionCode)) {
-                    existingResponse.answers.push(newAnswer);
-                    addedCount++;
+
+                if (!question) {
+                  question = await Question.findOne({
+                    $or: [
+                      { code: questionKey },
+                      { questionnaireKey: roleQuestionnaireKey, code: questionKey }
+                    ]
+                  }).lean();
+                }
+
+                if (!question) {
+                  console.warn(`⚠️ Role-specific question with code ${questionKey} not found in database, skipping`);
+                  continue;
+                }
+
+                const questionCode = question.code; // Use code as canonical identifier
+                console.log(`💾 Saving role-specific answer: questionCode=${questionCode}, answerValue=${typeof answerValue === 'string' ? answerValue.substring(0, 50) : answerValue}`);
+
+                // Get risk score from riskScores if available, otherwise use priority
+                // Try multiple key formats: questionCode, questionKey, question._id, question.id
+                let score = 2; // Default
+                if (riskScores) {
+                  const riskScore = riskScores[questionCode] ??
+                    riskScores[questionKey] ??
+                    riskScores[question._id?.toString()] ??
+                    riskScores[String(question._id)] ??
+                    undefined;
+                  if (riskScore !== undefined && (riskScore === 0 || riskScore === 1 || riskScore === 2 || riskScore === 3 || riskScore === 4)) {
+                    score = riskScore;
+                    console.log(`📊 Using risk score ${score} for question ${questionCode} from riskScores`);
                   }
+                }
+                if (score === 2 && questionPriorities) {
+                  const priority = questionPriorities[questionCode] ??
+                    questionPriorities[questionKey] ??
+                    questionPriorities[question._id?.toString()] ??
+                    questionPriorities[String(question._id)] ??
+                    undefined;
+                  if (priority) {
+                    if (priority === 'low') score = 3;
+                    else if (priority === 'medium') score = 2;
+                    else if (priority === 'high') score = 1;
+                    console.log(`📊 Using priority ${priority} (score ${score}) for question ${questionCode}`);
+                  }
+                }
+
+                // Normalization for MCQ objects
+                let normalizedValue = answerValue;
+                if (answerValue && typeof answerValue === 'object' && !Array.isArray(answerValue)) {
+                  if (answerValue.choiceKey) normalizedValue = answerValue.choiceKey;
+                  else if (answerValue.text) normalizedValue = answerValue.text;
+                }
+
+                // Format answer
+                let answerFormat = {};
+                if (question.answerType === 'single_choice') {
+                  const option = question.options?.find(opt =>
+                    opt.label?.en === normalizedValue || opt.label?.tr === normalizedValue || opt.key === normalizedValue
+                  );
+                  answerFormat.choiceKey = option ? option.key : normalizedValue;
+                  if (option?.score !== undefined) score = option.score;
+                } else if (question.answerType === 'open_text') {
+                  answerFormat.text = normalizedValue;
+                } else if (question.answerType === 'multi_choice') {
+                  const rawArray = Array.isArray(normalizedValue) ? normalizedValue : [normalizedValue];
+                  answerFormat.multiChoiceKeys = rawArray.map(v =>
+                    (v && typeof v === 'object' && v.choiceKey) ? v.choiceKey : v
+                  );
+                }
+
+                roleResponseAnswers.push({
+                  questionId: question._id,
+                  questionCode: question.code,
+                  answer: answerFormat,
+                  score: score,
+                  notes: null,
+                  evidence: []
                 });
-                console.log(`📝 Added ${addedCount} new answers, updated ${roleResponseAnswers.length - addedCount} existing answers`);
-                
-                existingResponse.status = status === 'completed' ? 'submitted' : 'draft';
-                existingResponse.submittedAt = status === 'completed' ? new Date() : null;
-                existingResponse.updatedAt = new Date();
-                await existingResponse.save();
-                console.log(`✅ Updated ${roleQuestionnaireKey} response with ${existingResponse.answers.length} total answered questions (${roleResponseAnswers.length} in this batch)`);
-              } else {
-                console.log(`📝 No existing response found for ${roleQuestionnaireKey}, creating new one...`);
-                const finalRoleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
-                const newResponse = await Response.create({
-                  projectId: projectIdObj,
-                  assignmentId: assignment._id,
-                  userId: userIdObj,
-                  role: role,
-                  questionnaireKey: roleQuestionnaireKey,
-                  questionnaireVersion: finalRoleQuestionnaire?.version || 1,
-                  answers: roleResponseAnswers,
-                  status: status === 'completed' ? 'submitted' : 'draft',
-                  submittedAt: status === 'completed' ? new Date() : null,
-                  updatedAt: new Date()
-                });
-                console.log(`✅ Created ${roleQuestionnaireKey} response with ID ${newResponse._id} and ${roleResponseAnswers.length} answered questions`);
               }
-            } else {
-              console.warn(`⚠️ No role-specific answers to save (roleResponseAnswers.length = ${roleResponseAnswers.length})`);
-              console.warn(`⚠️ roleSpecificAnswersMap had ${Object.keys(roleSpecificAnswersMap).length} keys but no answers were processed`);
-            }
+
+              if (roleResponseAnswers.length > 0) {
+                console.log(`💾 Saving ${roleResponseAnswers.length} role-specific answers to ${roleQuestionnaireKey} response...`);
+                const existingResponse = await Response.findOne({
+                  projectId: projectIdObj,
+                  userId: userIdObj,
+                  questionnaireKey: roleQuestionnaireKey
+                });
+
+                if (existingResponse) {
+                  console.log(`📝 Found existing response for ${roleQuestionnaireKey}, updating...`);
+                  const answerMap = new Map(roleResponseAnswers.map(a => [a.questionCode, a]));
+                  // Get existing codes BEFORE updating answers
+                  const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
+                  console.log(`📝 Existing response has ${existingResponse.answers.length} answers, adding/updating ${roleResponseAnswers.length} answers`);
+
+                  // Update existing answers
+                  existingResponse.answers = existingResponse.answers.map(existingAnswer => {
+                    const updatedAnswer = answerMap.get(existingAnswer.questionCode);
+                    return updatedAnswer || existingAnswer;
+                  });
+
+                  // Add new answers that don't exist yet
+                  let addedCount = 0;
+                  roleResponseAnswers.forEach(newAnswer => {
+                    if (!existingCodes.has(newAnswer.questionCode)) {
+                      existingResponse.answers.push(newAnswer);
+                      addedCount++;
+                    }
+                  });
+                  console.log(`📝 Added ${addedCount} new answers, updated ${roleResponseAnswers.length - addedCount} existing answers`);
+
+                  existingResponse.status = status === 'completed' ? 'submitted' : 'draft';
+                  existingResponse.submittedAt = status === 'completed' ? new Date() : null;
+                  existingResponse.updatedAt = new Date();
+                  await existingResponse.save();
+                  console.log(`✅ Updated ${roleQuestionnaireKey} response with ${existingResponse.answers.length} total answered questions (${roleResponseAnswers.length} in this batch)`);
+                } else {
+                  console.log(`📝 No existing response found for ${roleQuestionnaireKey}, creating new one...`);
+                  const finalRoleQuestionnaire = await Questionnaire.findOne({ key: roleQuestionnaireKey, isActive: true });
+                  const newResponse = await Response.create({
+                    projectId: projectIdObj,
+                    assignmentId: assignment._id,
+                    userId: userIdObj,
+                    role: role,
+                    questionnaireKey: roleQuestionnaireKey,
+                    questionnaireVersion: finalRoleQuestionnaire?.version || 1,
+                    answers: roleResponseAnswers,
+                    status: status === 'completed' ? 'submitted' : 'draft',
+                    submittedAt: status === 'completed' ? new Date() : null,
+                    updatedAt: new Date()
+                  });
+                  console.log(`✅ Created ${roleQuestionnaireKey} response with ID ${newResponse._id} and ${roleResponseAnswers.length} answered questions`);
+                }
+              } else {
+                console.warn(`⚠️ No role-specific answers to save (roleResponseAnswers.length = ${roleResponseAnswers.length})`);
+                console.warn(`⚠️ roleSpecificAnswersMap had ${Object.keys(roleSpecificAnswersMap).length} keys but no answers were processed`);
+              }
             } catch (error) {
               console.error(`❌ Error saving ${roleQuestionnaireKey} responses:`, error);
               console.error(`❌ Error stack:`, error.stack);
@@ -2364,7 +2368,7 @@ app.post('/api/evaluations', async (req, res) => {
             }
           });
         }
-        
+
         // Execute all save tasks in parallel
         if (saveTasks.length > 0) {
           console.log(`🚀 Executing ${saveTasks.length} save task(s) to Response collection...`);
@@ -2383,7 +2387,7 @@ app.post('/api/evaluations', async (req, res) => {
           // Check if answers are only custom questions (which are saved to Evaluation collection, not Response)
           const customAnswerKeys = Object.keys(answers).filter(key => String(key).startsWith('custom_'));
           const nonCustomAnswers = Object.keys(answers).filter(key => !String(key).startsWith('custom_'));
-          
+
           if (nonCustomAnswers.length > 0) {
             // We have non-custom answers but no save tasks - this is a problem
             console.error(`❌ CRITICAL: ${nonCustomAnswers.length} non-custom answer(s) exist but no save tasks were created!`);
@@ -2395,7 +2399,7 @@ app.post('/api/evaluations', async (req, res) => {
             console.log(`ℹ️ Only custom questions found (${customAnswerKeys.length}), these are saved to Evaluation collection`);
           }
         }
-        
+
         // Validate submissions if completed
         if (status === 'completed') {
           try {
@@ -2413,14 +2417,14 @@ app.post('/api/evaluations', async (req, res) => {
         console.error('❌ CRITICAL: Error saving to new responses collection:', newSystemError);
         console.error('❌ Error stack:', newSystemError.stack);
         // Return error response to frontend so user knows save failed
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'Failed to save answers to database',
           details: newSystemError.message,
           savedToEvaluation: true // Old system still saved
         });
       }
     }
-    
+
     res.json(evaluation);
   } catch (err) {
     console.error('❌ Error in /api/evaluations:', err);
@@ -2496,16 +2500,16 @@ app.post('/api/evaluations/custom-questions', async (req, res) => {
       const { getAllAdmins, createNotifications } = require('./services/notificationService');
       const user = await User.findById(userIdObj).select('name email role').lean();
       const project = await Project.findById(projectIdObj).select('title').lean();
-      
+
       const admins = await getAllAdmins();
       if (admins.length > 0 && user && project) {
         const userName = user.name || user.email || 'Expert';
         const userRole = user.role || 'expert';
         const projectTitle = project.title || 'Project';
         const questionText = doc.text.length > 100 ? doc.text.substring(0, 100) + '...' : doc.text;
-        
+
         const dedupeKey = `custom_question_${projectIdObj}_${userIdObj}_${doc.id}_${Date.now()}`;
-        
+
         const payload = {
           projectId: projectIdObj,
           entityType: 'custom_question',
@@ -2550,20 +2554,20 @@ app.get('/api/general-questions/test', (req, res) => {
 app.post('/api/general-questions', async (req, res) => {
   try {
     const { projectId, userId, userRole, answers, risks, principles } = req.body;
-    
+
     // Convert string IDs to ObjectId if needed
-    const projectIdObj = isValidObjectId(projectId) 
-      ? new mongoose.Types.ObjectId(projectId) 
+    const projectIdObj = isValidObjectId(projectId)
+      ? new mongoose.Types.ObjectId(projectId)
       : projectId;
-    const userIdObj = isValidObjectId(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
+    const userIdObj = isValidObjectId(userId)
+      ? new mongoose.Types.ObjectId(userId)
       : userId;
-    
+
     // Organize answers and risks by principle if provided
     let principlesData = {};
     let flatAnswers = answers || {};
     let flatRisks = risks || {};
-    
+
     // If principles are provided, extract flat answers and risks from principles
     if (principles) {
       principlesData = { principles };
@@ -2577,23 +2581,23 @@ app.post('/api/general-questions', async (req, res) => {
         }
       });
     }
-    
+
     if (!principles && answers && risks) {
       // Legacy: organize flat answers/risks by principle
       // Get question codes from MongoDB to map them to principles dynamically
       const Question = require('./models/question');
       const allQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code principle').lean();
-      
+
       // Build principle map from database
       const principleMap = {};
       allQuestions.forEach(q => {
         principleMap[q.code] = q.principle;
       });
-      
+
       // Also include legacy hardcoded mappings for backward compatibility
       const legacyMap = {
         'T1': 'TRANSPARENCY', 'T2': 'TRANSPARENCY', 'T9': 'TRANSPARENCY', 'T10': 'TRANSPARENCY', 'T11': 'TRANSPARENCY',
-        'H1': 'HUMAN AGENCY & OVERSIGHT', 'H2': 'HUMAN AGENCY & OVERSIGHT', 'H6': 'HUMAN AGENCY & OVERSIGHT', 
+        'H1': 'HUMAN AGENCY & OVERSIGHT', 'H2': 'HUMAN AGENCY & OVERSIGHT', 'H6': 'HUMAN AGENCY & OVERSIGHT',
         'H10': 'HUMAN AGENCY & OVERSIGHT', 'H11': 'HUMAN AGENCY & OVERSIGHT', 'H12': 'HUMAN AGENCY & OVERSIGHT',
         'H13': 'HUMAN AGENCY & OVERSIGHT', 'H14': 'HUMAN AGENCY & OVERSIGHT', 'H15': 'HUMAN AGENCY & OVERSIGHT',
         'H16': 'HUMAN AGENCY & OVERSIGHT', 'H17': 'HUMAN AGENCY & OVERSIGHT',
@@ -2611,10 +2615,10 @@ app.post('/api/general-questions', async (req, res) => {
         'A1': 'ACCOUNTABILITY', 'A2': 'ACCOUNTABILITY', 'A5': 'ACCOUNTABILITY', 'A11': 'ACCOUNTABILITY',
         'A12': 'ACCOUNTABILITY', 'A13': 'ACCOUNTABILITY', 'A14': 'ACCOUNTABILITY', 'A15': 'ACCOUNTABILITY'
       };
-      
+
       // Merge database map with legacy map (database takes precedence)
       Object.assign(principleMap, legacyMap);
-      
+
       principlesData = {
         principles: {
           TRANSPARENCY: { answers: {}, risks: {} },
@@ -2626,12 +2630,12 @@ app.post('/api/general-questions', async (req, res) => {
           ACCOUNTABILITY: { answers: {}, risks: {} }
         }
       };
-      
+
       // Organize by principle - handle both question codes and question IDs
       Object.keys(answers).forEach(qId => {
         // Try to find principle by code first, then by looking up the question
         let principle = principleMap[qId];
-        
+
         // If not found in map, try to find question by ID or code
         if (!principle) {
           const question = allQuestions.find(q => q.code === qId || q._id.toString() === qId);
@@ -2640,7 +2644,7 @@ app.post('/api/general-questions', async (req, res) => {
             principleMap[qId] = principle; // Cache it
           }
         }
-        
+
         if (principle && principlesData.principles[principle]) {
           principlesData.principles[principle].answers[qId] = answers[qId];
         } else {
@@ -2648,10 +2652,10 @@ app.post('/api/general-questions', async (req, res) => {
           console.warn(`⚠️ Principle not found for question code: ${qId}, saving to flat structure`);
         }
       });
-      
+
       Object.keys(risks).forEach(qId => {
         let principle = principleMap[qId];
-        
+
         // If not found in map, try to find question by ID or code
         if (!principle) {
           const question = allQuestions.find(q => q.code === qId || q._id.toString() === qId);
@@ -2660,13 +2664,13 @@ app.post('/api/general-questions', async (req, res) => {
             principleMap[qId] = principle; // Cache it
           }
         }
-        
+
         if (principle && principlesData.principles[principle]) {
           principlesData.principles[principle].risks[qId] = risks[qId];
         }
       });
     }
-    
+
     const generalAnswers = await GeneralQuestionsAnswers.findOneAndUpdate(
       { projectId: projectIdObj, userId: userIdObj },
       {
@@ -2680,7 +2684,7 @@ app.post('/api/general-questions', async (req, res) => {
       },
       { new: true, upsert: true, runValidators: true }
     );
-    
+
     // Also save to responses collection (new system)
     try {
       const Response = require('./models/response');
@@ -2688,7 +2692,7 @@ app.post('/api/general-questions', async (req, res) => {
       const Question = require('./models/question');
       const Questionnaire = require('./models/questionnaire');
       const { ensureAllQuestionsPresent } = require('./services/evaluationService');
-      
+
       // Get or create assignment
       let assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
       if (!assignment) {
@@ -2700,19 +2704,19 @@ app.post('/api/general-questions', async (req, res) => {
         else if (role === 'technical-expert') questionnaireKey = 'technical-expert-v1';
         else if (role === 'legal-expert') questionnaireKey = 'legal-expert-v1';
         else if (role === 'education-expert') questionnaireKey = 'education-expert-v1';
-        
-        const questionnaires = role !== 'any' && questionnaireKey !== 'general-v1' 
+
+        const questionnaires = role !== 'any' && questionnaireKey !== 'general-v1'
           ? ['general-v1', questionnaireKey]
           : ['general-v1'];
         assignment = await createAssignment(projectIdObj, userIdObj, role, questionnaires);
       }
-      
+
       // Separate answers by questionnaire
       const generalAnswersMap = {};
       const roleSpecificAnswersMap = {};
       const roleSpecificRisksMap = {};
       const generalRisksMap = {};
-      
+
       // Determine role-specific questionnaire key
       const role = userRole || 'unknown';
       let roleQuestionnaireKey = 'general-v1';
@@ -2721,16 +2725,16 @@ app.post('/api/general-questions', async (req, res) => {
       else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
       else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
       else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
-      
+
       // Get all questions to determine which questionnaire they belong to
       const allGeneralQuestions = await Question.find({ questionnaireKey: 'general-v1' }).select('code').lean();
       const generalCodes = new Set(allGeneralQuestions.map(q => q.code));
-      
-      const allRoleQuestions = roleQuestionnaireKey !== 'general-v1' 
+
+      const allRoleQuestions = roleQuestionnaireKey !== 'general-v1'
         ? await Question.find({ questionnaireKey: roleQuestionnaireKey }).select('code').lean()
         : [];
       const roleCodes = new Set(allRoleQuestions.map(q => q.code));
-      
+
       // Separate answers and risks by questionnaire
       if (flatAnswers) {
         Object.keys(flatAnswers).forEach(qId => {
@@ -2741,7 +2745,7 @@ app.post('/api/general-questions', async (req, res) => {
           }
         });
       }
-      
+
       if (flatRisks) {
         Object.keys(flatRisks).forEach(qId => {
           if (generalCodes.has(qId)) {
@@ -2751,10 +2755,10 @@ app.post('/api/general-questions', async (req, res) => {
           }
         });
       }
-      
+
       // Prepare response saving tasks (parallel execution)
       const saveTasks = [];
-      
+
       // Prepare general-v1 response
       if (Object.keys(generalAnswersMap).length > 0 || Object.keys(generalRisksMap).length > 0) {
         saveTasks.push(async () => {
@@ -2765,41 +2769,41 @@ app.post('/api/general-questions', async (req, res) => {
               .select('_id code answerType options')
               .lean();
             const generalQuestionMap = new Map(generalQuestions.map(q => [q.code, q]));
-            
+
             const generalResponseAnswers = [];
-            
+
             for (const [qId, answerValue] of Object.entries(generalAnswersMap)) {
               const question = generalQuestionMap.get(qId);
               if (question) {
                 let score = 0;
                 let answerFormat = {};
-                
+
                 if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
                   // Try exact match first
                   let option = question.options?.find(o => o.key === answerValue);
-                  
+
                   // If not found, try case-insensitive and normalize spaces/underscores
                   if (!option) {
                     const normalizedAnswerValue = answerValue.toLowerCase().replace(/\s+/g, '_');
                     option = question.options?.find(o => {
                       const normalizedOptKey = o.key.toLowerCase().replace(/\s+/g, '_');
-                      return normalizedOptKey === normalizedAnswerValue || 
-                             o.label?.en?.toLowerCase() === answerValue.toLowerCase() ||
-                             o.label?.tr?.toLowerCase() === answerValue.toLowerCase();
+                      return normalizedOptKey === normalizedAnswerValue ||
+                        o.label?.en?.toLowerCase() === answerValue.toLowerCase() ||
+                        o.label?.tr?.toLowerCase() === answerValue.toLowerCase();
                     });
-                    
+
                     if (option) {
                       console.log(`⚠️ [DEBUG /api/general-questions] Question ${qId}: Found option using normalized matching. Original: "${answerValue}" → Matched: "${option.key}"`);
                     }
                   }
-                  
+
                   // CRITICAL DEBUG: Log option matching
                   if (!option) {
                     console.error(`❌ [ERROR /api/general-questions] Question ${qId}: No matching option found for answerValue="${answerValue}". Available options: ${question.options?.map(o => `${o.key}(${o.label?.en || o.label?.tr || 'no label'})`).join(', ') || 'none'}`);
                   } else {
                     console.log(`✅ [DEBUG /api/general-questions] Question ${qId}: Found option key="${option.key}", score=${option.score}, answerValue="${answerValue}"`);
                   }
-                  
+
                   // For single_choice: Use risk score if provided (user's manual override), otherwise use option's score
                   const riskScore = generalRisksMap[qId];
                   if (riskScore !== undefined && riskScore !== null && typeof riskScore === 'number' && riskScore >= 0 && riskScore <= 4) {
@@ -2814,7 +2818,7 @@ app.post('/api/general-questions', async (req, res) => {
                   score = generalRisksMap[qId] !== undefined ? generalRisksMap[qId] : 0;
                   answerFormat = { text: answerValue };
                 }
-                
+
                 generalResponseAnswers.push({
                   questionId: question._id,
                   questionCode: question.code,
@@ -2825,37 +2829,37 @@ app.post('/api/general-questions', async (req, res) => {
                 });
               }
             }
-            
+
             // Ensure all questions are present (merge with existing or create new)
             // ensureAllQuestionsPresent is already required at the top of the try block (line 1378)
             await ensureAllQuestionsPresent(projectIdObj, userIdObj, 'general-v1');
-            
+
             // Now update with answered questions
             const existingResponse = await Response.findOne({
               projectId: projectIdObj,
               userId: userIdObj,
               questionnaireKey: 'general-v1'
             });
-            
+
             if (existingResponse) {
               // Merge answered questions with existing response
               const answerMap = new Map(generalResponseAnswers.map(a => [a.questionCode, a]));
               // Get existing codes BEFORE updating answers
               const existingCodes = new Set(existingResponse.answers.map(a => a.questionCode));
-              
+
               // Update existing answers
               existingResponse.answers = existingResponse.answers.map(existingAnswer => {
                 const updatedAnswer = answerMap.get(existingAnswer.questionCode);
                 return updatedAnswer || existingAnswer; // Use updated answer if available, otherwise keep existing
               });
-              
+
               // Add any new answers that weren't in existing response
               generalResponseAnswers.forEach(newAnswer => {
                 if (!existingCodes.has(newAnswer.questionCode)) {
                   existingResponse.answers.push(newAnswer);
                 }
               });
-              
+
               existingResponse.status = 'draft';
               existingResponse.updatedAt = new Date();
               await existingResponse.save();
@@ -2875,7 +2879,7 @@ app.post('/api/general-questions', async (req, res) => {
               });
               console.log(`✅ Created general response with ${generalResponseAnswers.length} answered questions`);
             }
-            
+
             // Compute scores async (non-blocking)
             setImmediate(async () => {
               try {
@@ -2889,7 +2893,7 @@ app.post('/api/general-questions', async (req, res) => {
           }
         });
       }
-      
+
       // Prepare role-specific response
       if (roleQuestionnaireKey !== 'general-v1' && (Object.keys(roleSpecificAnswersMap).length > 0 || Object.keys(roleSpecificRisksMap).length > 0)) {
         saveTasks.push(async () => {
@@ -2902,41 +2906,41 @@ app.post('/api/general-questions', async (req, res) => {
                 .select('_id code answerType options')
                 .lean();
               const roleQuestionMap = new Map(roleQuestions.map(q => [q.code, q]));
-              
+
               const roleResponseAnswers = [];
-              
+
               for (const [qId, answerValue] of Object.entries(roleSpecificAnswersMap)) {
                 const question = roleQuestionMap.get(qId);
                 if (question) {
                   let score = 0;
                   let answerFormat = {};
-                  
+
                   if (question.answerType === 'single_choice' && typeof answerValue === 'string') {
                     // Try exact match first
                     let option = question.options?.find(o => o.key === answerValue);
-                    
+
                     // If not found, try case-insensitive and normalize spaces/underscores
                     if (!option) {
                       const normalizedAnswerValue = answerValue.toLowerCase().replace(/\s+/g, '_');
                       option = question.options?.find(o => {
                         const normalizedOptKey = o.key.toLowerCase().replace(/\s+/g, '_');
-                        return normalizedOptKey === normalizedAnswerValue || 
-                               o.label?.en?.toLowerCase() === answerValue.toLowerCase() ||
-                               o.label?.tr?.toLowerCase() === answerValue.toLowerCase();
+                        return normalizedOptKey === normalizedAnswerValue ||
+                          o.label?.en?.toLowerCase() === answerValue.toLowerCase() ||
+                          o.label?.tr?.toLowerCase() === answerValue.toLowerCase();
                       });
-                      
+
                       if (option) {
                         console.log(`⚠️ [DEBUG /api/general-questions] Question ${qId}: Found option using normalized matching. Original: "${answerValue}" → Matched: "${option.key}"`);
                       }
                     }
-                    
+
                     // CRITICAL DEBUG: Log option matching
                     if (!option) {
                       console.error(`❌ [ERROR /api/general-questions] Question ${qId}: No matching option found for answerValue="${answerValue}". Available options: ${question.options?.map(o => `${o.key}(${o.label?.en || o.label?.tr || 'no label'})`).join(', ') || 'none'}`);
                     } else {
                       console.log(`✅ [DEBUG /api/general-questions] Question ${qId}: Found option key="${option.key}", score=${option.score}, answerValue="${answerValue}"`);
                     }
-                    
+
                     // For single_choice: Use risk score if provided (user's manual override), otherwise use option's score
                     const riskScore = roleSpecificRisksMap[qId];
                     if (riskScore !== undefined && riskScore !== null && typeof riskScore === 'number' && riskScore >= 0 && riskScore <= 4) {
@@ -2951,7 +2955,7 @@ app.post('/api/general-questions', async (req, res) => {
                     score = roleSpecificRisksMap[qId] !== undefined ? roleSpecificRisksMap[qId] : 0;
                     answerFormat = { text: answerValue };
                   }
-                  
+
                   roleResponseAnswers.push({
                     questionId: question._id,
                     questionCode: question.code,
@@ -2962,71 +2966,71 @@ app.post('/api/general-questions', async (req, res) => {
                   });
                 }
               }
-              
+
               // Ensure all questions are present (merge with existing or create new)
               console.log(`🔄 Ensuring all questions present for ${roleQuestionnaireKey}...`);
               await ensureAllQuestionsPresent(projectIdObj, userIdObj, roleQuestionnaireKey);
               console.log(`✅ All questions ensured for ${roleQuestionnaireKey}`);
-            
-            // Now update with answered questions
-            const existingRoleResponse = await Response.findOne({
-              projectId: projectIdObj,
-              userId: userIdObj,
-              questionnaireKey: roleQuestionnaireKey
-            });
-            
-            if (existingRoleResponse) {
-              // Merge answered questions with existing response
-              const roleAnswerMap = new Map(roleResponseAnswers.map(a => [a.questionCode, a]));
-              // Get existing codes BEFORE updating answers
-              const existingRoleCodes = new Set(existingRoleResponse.answers.map(a => a.questionCode));
-              
-              // Update existing answers
-              existingRoleResponse.answers = existingRoleResponse.answers.map(existingAnswer => {
-                const updatedAnswer = roleAnswerMap.get(existingAnswer.questionCode);
-                return updatedAnswer || existingAnswer; // Use updated answer if available, otherwise keep existing
+
+              // Now update with answered questions
+              const existingRoleResponse = await Response.findOne({
+                projectId: projectIdObj,
+                userId: userIdObj,
+                questionnaireKey: roleQuestionnaireKey
               });
-              
-              // Add any new answers that weren't in existing response
-              roleResponseAnswers.forEach(newAnswer => {
-                if (!existingRoleCodes.has(newAnswer.questionCode)) {
-                  existingRoleResponse.answers.push(newAnswer);
+
+              if (existingRoleResponse) {
+                // Merge answered questions with existing response
+                const roleAnswerMap = new Map(roleResponseAnswers.map(a => [a.questionCode, a]));
+                // Get existing codes BEFORE updating answers
+                const existingRoleCodes = new Set(existingRoleResponse.answers.map(a => a.questionCode));
+
+                // Update existing answers
+                existingRoleResponse.answers = existingRoleResponse.answers.map(existingAnswer => {
+                  const updatedAnswer = roleAnswerMap.get(existingAnswer.questionCode);
+                  return updatedAnswer || existingAnswer; // Use updated answer if available, otherwise keep existing
+                });
+
+                // Add any new answers that weren't in existing response
+                roleResponseAnswers.forEach(newAnswer => {
+                  if (!existingRoleCodes.has(newAnswer.questionCode)) {
+                    existingRoleResponse.answers.push(newAnswer);
+                  }
+                });
+
+                existingRoleResponse.status = 'draft';
+                existingRoleResponse.updatedAt = new Date();
+                await existingRoleResponse.save();
+                console.log(`✅ Updated ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
+              } else {
+                // Create new response (shouldn't happen if ensureAllQuestionsPresent worked)
+                await Response.create({
+                  projectId: projectIdObj,
+                  assignmentId: assignment._id,
+                  userId: userIdObj,
+                  role: role,
+                  questionnaireKey: roleQuestionnaireKey,
+                  questionnaireVersion: roleQuestionnaire.version,
+                  answers: roleResponseAnswers,
+                  status: 'draft',
+                  updatedAt: new Date()
+                });
+                console.log(`✅ Created ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
+              }
+
+              // Compute scores async (non-blocking)
+              setImmediate(async () => {
+                try {
+                  const { computeScores } = require('./services/evaluationService');
+                  await computeScores(projectIdObj, userIdObj, roleQuestionnaireKey);
+                  console.log(`✅ Computed scores for ${roleQuestionnaireKey}`);
+                } catch (scoreError) {
+                  console.error(`⚠️ Error computing scores for ${roleQuestionnaireKey}:`, scoreError.message);
                 }
               });
-              
-              existingRoleResponse.status = 'draft';
-              existingRoleResponse.updatedAt = new Date();
-              await existingRoleResponse.save();
-              console.log(`✅ Updated ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
             } else {
-              // Create new response (shouldn't happen if ensureAllQuestionsPresent worked)
-              await Response.create({
-                projectId: projectIdObj,
-                assignmentId: assignment._id,
-                userId: userIdObj,
-                role: role,
-                questionnaireKey: roleQuestionnaireKey,
-                questionnaireVersion: roleQuestionnaire.version,
-                answers: roleResponseAnswers,
-                status: 'draft',
-                updatedAt: new Date()
-              });
-              console.log(`✅ Created ${roleQuestionnaireKey} response with ${roleResponseAnswers.length} answered questions`);
+              console.warn(`⚠️ Role questionnaire ${roleQuestionnaireKey} not found`);
             }
-            
-            // Compute scores async (non-blocking)
-            setImmediate(async () => {
-              try {
-                const { computeScores } = require('./services/evaluationService');
-                await computeScores(projectIdObj, userIdObj, roleQuestionnaireKey);
-                console.log(`✅ Computed scores for ${roleQuestionnaireKey}`);
-              } catch (scoreError) {
-                console.error(`⚠️ Error computing scores for ${roleQuestionnaireKey}:`, scoreError.message);
-              }
-            });
-          } else {
-            console.warn(`⚠️ Role questionnaire ${roleQuestionnaireKey} not found`);
-          }
           } catch (error) {
             console.error(`⚠️ Error saving role-specific response for ${roleQuestionnaireKey}:`, error.message);
             console.error(`⚠️ Error stack:`, error.stack);
@@ -3034,7 +3038,7 @@ app.post('/api/general-questions', async (req, res) => {
           }
         });
       }
-      
+
       // Execute all save tasks in parallel
       if (saveTasks.length > 0) {
         await Promise.all(saveTasks.map(task => task()));
@@ -3043,7 +3047,7 @@ app.post('/api/general-questions', async (req, res) => {
       // Log error but don't fail the request - old system still works
       console.error('⚠️ Error saving to responses collection (non-critical):', responseError.message);
     }
-    
+
     res.json(generalAnswers);
   } catch (err) {
     console.error('Error saving general questions:', err);
@@ -3054,19 +3058,19 @@ app.post('/api/general-questions', async (req, res) => {
 app.get('/api/general-questions', async (req, res) => {
   try {
     const { projectId, userId } = req.query;
-    
+
     // Convert string IDs to ObjectId if needed
-    const projectIdObj = isValidObjectId(projectId) 
-      ? new mongoose.Types.ObjectId(projectId) 
+    const projectIdObj = isValidObjectId(projectId)
+      ? new mongoose.Types.ObjectId(projectId)
       : projectId;
-    const userIdObj = isValidObjectId(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
+    const userIdObj = isValidObjectId(userId)
+      ? new mongoose.Types.ObjectId(userId)
       : userId;
-    
+
     // Get user role to determine which questionnaires to fetch
     const user = await User.findById(userIdObj).select('role').lean();
     const role = user?.role || 'any';
-    
+
     // Determine role-specific questionnaire key
     let roleQuestionnaireKey = 'general-v1';
     if (role === 'ethical-expert') roleQuestionnaireKey = 'ethical-expert-v1';
@@ -3074,22 +3078,22 @@ app.get('/api/general-questions', async (req, res) => {
     else if (role === 'technical-expert') roleQuestionnaireKey = 'technical-expert-v1';
     else if (role === 'legal-expert') roleQuestionnaireKey = 'legal-expert-v1';
     else if (role === 'education-expert') roleQuestionnaireKey = 'education-expert-v1';
-    
+
     // Get questionnaires to fetch (general-v1 + role-specific if applicable)
-    const questionnairesToFetch = role !== 'any' && roleQuestionnaireKey !== 'general-v1' 
+    const questionnairesToFetch = role !== 'any' && roleQuestionnaireKey !== 'general-v1'
       ? ['general-v1', roleQuestionnaireKey]
       : ['general-v1'];
-    
+
     // Fetch from old GeneralQuestionsAnswers collection (for backward compatibility)
-    const generalAnswers = await GeneralQuestionsAnswers.findOne({ 
-      projectId: projectIdObj, 
-      userId: userIdObj 
+    const generalAnswers = await GeneralQuestionsAnswers.findOne({
+      projectId: projectIdObj,
+      userId: userIdObj
     });
-    
+
     // Fetch from new Response collection for all relevant questionnaires
     const Response = require('./models/response');
     const Question = require('./models/question');
-    
+
     // OPTIMIZATION: Don't populate - use questionCode directly from Response (already stored)
     const responses = await Response.find({
       projectId: projectIdObj,
@@ -3098,12 +3102,12 @@ app.get('/api/general-questions', async (req, res) => {
     })
       .select('questionnaireKey answers.questionCode answers.answer answers.score')
       .lean();
-    
+
     // Merge answers from Response collection
     const mergedAnswers = {};
     const mergedRisks = {};
     const mergedPrinciples = {};
-    
+
     // First, add answers from old collection (for backward compatibility)
     if (generalAnswers) {
       if (generalAnswers.principles) {
@@ -3116,22 +3120,22 @@ app.get('/api/general-questions', async (req, res) => {
         Object.assign(mergedRisks, generalAnswers.risks);
       }
     }
-    
+
     // OPTIMIZATION: Collect question codes to fetch principles in one query (only if needed)
     const questionCodes = new Set();
     const answerEntries = [];
-    
+
     for (const response of responses) {
       if (!response.answers || !Array.isArray(response.answers)) continue;
-      
+
       for (const answerEntry of response.answers) {
         if (!answerEntry.questionCode) continue;
-        
+
         questionCodes.add(answerEntry.questionCode);
         answerEntries.push({ answerEntry, questionnaireKey: response.questionnaireKey });
       }
     }
-    
+
     // OPTIMIZATION: Fetch questions only for principle organization (if needed)
     const questionsMap = new Map();
     if (questionCodes.size > 0) {
@@ -3141,19 +3145,19 @@ app.get('/api/general-questions', async (req, res) => {
       })
         .select('code principle')
         .lean();
-      
+
       for (const question of questions) {
         questionsMap.set(question.code, question);
       }
     }
-    
+
     // Then, add/override with answers from Response collection (new architecture)
     for (const { answerEntry, questionnaireKey } of answerEntries) {
       // Use questionCode directly (already stored in Response - no populate needed)
       const questionCode = answerEntry.questionCode;
-      
+
       if (!questionCode) continue;
-      
+
       // Extract answer value
       let answerValue = null;
       if (answerEntry.answer) {
@@ -3162,17 +3166,17 @@ app.get('/api/general-questions', async (req, res) => {
         } else if (answerEntry.answer.choiceKey) {
           answerValue = answerEntry.answer.choiceKey;
         } else if (answerEntry.answer.multiChoiceKeys) {
-          answerValue = Array.isArray(answerEntry.answer.multiChoiceKeys) 
+          answerValue = Array.isArray(answerEntry.answer.multiChoiceKeys)
             ? answerEntry.answer.multiChoiceKeys.join(', ')
             : answerEntry.answer.multiChoiceKeys;
         }
       }
-      
+
       // Store answer by code
       if (answerValue) {
         mergedAnswers[questionCode] = answerValue;
       }
-      
+
       // Extract risk score
       if (answerEntry.score !== undefined && answerEntry.score !== null) {
         const riskScore = typeof answerEntry.score === 'number' ? answerEntry.score : parseInt(answerEntry.score);
@@ -3180,7 +3184,7 @@ app.get('/api/general-questions', async (req, res) => {
           mergedRisks[questionCode] = riskScore;
         }
       }
-      
+
       // Organize by principle if we have question data
       const question = questionsMap.get(questionCode);
       if (question && question.principle) {
@@ -3198,7 +3202,7 @@ app.get('/api/general-questions', async (req, res) => {
         }
       }
     }
-    
+
     // Return the merged result
     const result = {
       _id: generalAnswers?._id || null,
@@ -3210,7 +3214,7 @@ app.get('/api/general-questions', async (req, res) => {
       risks: mergedRisks,     // Keep for backward compatibility
       updatedAt: generalAnswers?.updatedAt || new Date()
     };
-    
+
     res.json(result);
   } catch (err) {
     console.error('Error loading general questions:', err);
@@ -3252,10 +3256,15 @@ app.get('/api/user-progress', async (req, res) => {
 
     // Prefer assigned questionnaires from assignment; keep it cheap (no DB probing).
     let assignedQuestionnaireKeys = Array.isArray(assignment.questionnaires) ? assignment.questionnaires.slice() : [];
-    
-    if (!assignedQuestionnaireKeys.includes('general-v1')) {
-      assignedQuestionnaireKeys.unshift('general-v1');
-    }
+
+    /**
+     * CRITICAL FIX: Do NOT auto-include 'general-v1' if not assigned.
+     * Progress must reflect exactly what is assigned to the user.
+     * 
+     * if (!assignedQuestionnaireKeys.includes('general-v1')) {
+     *   assignedQuestionnaireKeys.unshift('general-v1');
+     * }
+     */
 
     // If questionnaires are empty, derive from role (best-effort).
     if (assignedQuestionnaireKeys.length === 0 || (assignedQuestionnaireKeys.length === 1 && assignedQuestionnaireKeys[0] === 'general-v1')) {
@@ -3281,35 +3290,26 @@ app.get('/api/user-progress', async (req, res) => {
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey').lean();
-    
+
     const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
-    
+
     let questionnairesToCount = assignedQuestionnaireKeys.slice();
     const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
-    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key => 
+    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key =>
       key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
     );
-    
+
     // If both general-v1 and role-specific responses exist, count both (no duplicate exclusion)
     // If only role-specific exists and has 30+ questions, it likely includes general questions
+    // If both general-v1 and role-specific responses exist, count both (no duplicate exclusion)
     if (!hasGeneralResponse && hasRoleSpecificResponse) {
-      const roleSpecificKey = assignedQuestionnaireKeys.find(key => 
-        key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
-      );
-      
-      if (roleSpecificKey) {
-        const roleSpecificCount = await Question.countDocuments({ questionnaireKey: roleSpecificKey });
-        // If role-specific has 30+ questions and no general response exists, it likely includes general questions
-        if (roleSpecificCount >= 30) {
-          questionnairesToCount = questionnairesToCount.filter(key => key !== 'general-v1');
-          console.log(`📊 Only role-specific response exists (${roleSpecificKey}, ${roleSpecificCount} questions), excluding general-v1 from count`);
-        }
-      }
+      // Logic removed: We no longer auto-exclude general-v1 based on question count.
+      // We strictly follow assigned questionnaires.
     } else if (hasGeneralResponse && hasRoleSpecificResponse) {
       // Both exist - count both (this is the normal case)
       console.log(`📊 Both general-v1 and role-specific responses exist, counting both`);
     }
-    
+
     const totalQuestions = await Question.countDocuments({
       questionnaireKey: { $in: questionnairesToCount }
     });
@@ -3357,11 +3357,11 @@ app.get('/api/user-progress', async (req, res) => {
       projectId: projectIdObj,
       userId: userIdObj
     }).select('customQuestions answers').lean();
-    
+
     const customQuestions = evaluation?.customQuestions || [];
     let customQuestionsTotal = 0;
     let customQuestionsAnswered = 0;
-    
+
     for (const customQuestion of customQuestions) {
       if (customQuestion.required !== false) {
         customQuestionsTotal++;
@@ -3378,7 +3378,7 @@ app.get('/api/user-progress', async (req, res) => {
         }
       }
     }
-    
+
     // Total = regular questions + custom questions
     const totalWithCustom = totalQuestions + customQuestionsTotal;
     const answeredWithCustom = answeredKeys.size + customQuestionsAnswered;
@@ -3414,10 +3414,10 @@ app.get('/api/user-progress/debug', async (req, res) => {
     const Question = require('./models/question');
     const ProjectAssignment = require('./models/projectAssignment');
     // User model is already defined at the top of the file
-    
+
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    
+
     console.log(`🔍 Progress request: projectId=${projectId}, userId=${userId}`);
 
     // Get user's assignment to determine questionnaires
@@ -3432,12 +3432,12 @@ app.get('/api/user-progress/debug', async (req, res) => {
     // Get assigned questionnaire keys from assignment (use what's actually assigned)
     // Also ensure general-v1 is included if not already present
     let assignedQuestionnaireKeys = assignment.questionnaires || [];
-    
+
     // If no questionnaires assigned, try to determine from role
     if (assignedQuestionnaireKeys.length === 0) {
       const user = await User.findById(userIdObj);
       const role = user?.role || 'unknown';
-      
+
       // Map role to questionnaire key (support both formats: ethical-v1 and ethical-expert-v1)
       // Try both formats to match what's actually in the database
       let roleQuestionnaireKey = null;
@@ -3463,7 +3463,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
         const educationExpertV1 = await Question.findOne({ questionnaireKey: 'education-expert-v1' });
         roleQuestionnaireKey = educationV1 ? 'education-v1' : (educationExpertV1 ? 'education-expert-v1' : 'education-expert-v1');
       }
-      
+
       if (roleQuestionnaireKey) {
         assignedQuestionnaireKeys = ['general-v1', roleQuestionnaireKey];
       } else {
@@ -3474,20 +3474,20 @@ app.get('/api/user-progress/debug', async (req, res) => {
       if (!assignedQuestionnaireKeys.includes('general-v1')) {
         assignedQuestionnaireKeys = ['general-v1', ...assignedQuestionnaireKeys];
       }
-      
+
       // Also check if role-specific questionnaire exists in database and add if missing
       const user = await User.findById(userIdObj);
       const role = user?.role || 'unknown';
-      
+
       // Check if role-specific questionnaire is in the list, if not try to add it
-      const hasRoleQuestionnaire = assignedQuestionnaireKeys.some(key => 
+      const hasRoleQuestionnaire = assignedQuestionnaireKeys.some(key =>
         (role === 'ethical-expert' && (key === 'ethical-v1' || key === 'ethical-expert-v1')) ||
         (role === 'medical-expert' && (key === 'medical-v1' || key === 'medical-expert-v1')) ||
         (role === 'technical-expert' && (key === 'technical-v1' || key === 'technical-expert-v1')) ||
         (role === 'legal-expert' && (key === 'legal-v1' || key === 'legal-expert-v1')) ||
         (role === 'education-expert' && (key === 'education-v1' || key === 'education-expert-v1'))
       );
-      
+
       if (!hasRoleQuestionnaire && role !== 'use-case-owner' && role !== 'admin') {
         // Try to find which format exists in database
         let roleQuestionnaireKey = null;
@@ -3512,7 +3512,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
           const educationExpertV1 = await Question.findOne({ questionnaireKey: 'education-expert-v1' });
           roleQuestionnaireKey = educationV1 ? 'education-v1' : (educationExpertV1 ? 'education-expert-v1' : null);
         }
-        
+
         if (roleQuestionnaireKey && !assignedQuestionnaireKeys.includes(roleQuestionnaireKey)) {
           assignedQuestionnaireKeys.push(roleQuestionnaireKey);
           // Also update the assignment in database to persist this change
@@ -3529,9 +3529,9 @@ app.get('/api/user-progress/debug', async (req, res) => {
         }
       }
     }
-    
+
     console.log(`📋 Assigned questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
-    
+
     // Fetch assigned questions (for total + missing-code reporting + optional sync)
     const assignedQuestions = await Question.find({
       questionnaireKey: { $in: assignedQuestionnaireKeys }
@@ -3570,7 +3570,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
     }).select('answers questionnaireKey').lean();
 
     console.log(`📦 Found ${responses.length} response documents`);
-    
+
     // Count answered questions using the same logic as /projects/:projectId/progress
     // A question is answered if:
     // - choice: answer.choiceKey exists
@@ -3578,101 +3578,101 @@ app.get('/api/user-progress/debug', async (req, res) => {
     // - numeric: answer.numeric is not null
     // - multiChoice: answer.multiChoiceKeys exists and has length > 0
     // IMPORTANT: score=0 is valid and should be treated as answered
-    
+
     const countAnsweredFromResponses = (respDocs) => {
       const answered = new Set();
 
       console.log(`🔍 Analyzing ${respDocs.length} response documents for answered questions...`);
 
       respDocs.forEach((response, responseIndex) => {
-      console.log(`📋 Response ${responseIndex + 1}: questionnaireKey=${response.questionnaireKey}, answers.length=${response.answers?.length || 0}`);
-      
-      if (response.answers && Array.isArray(response.answers)) {
-        response.answers.forEach((answer, answerIndex) => {
-          const idKey = answer?.questionId ? String(answer.questionId) : '';
-          const codeKey = answer?.questionCode !== undefined && answer?.questionCode !== null ? String(answer.questionCode).trim() : '';
-          // Prefer questionId; fallback to questionnaireKey:code if needed
-          const key = idKey.length > 0 ? idKey : (codeKey.length > 0 ? `${response.questionnaireKey}:${codeKey}` : '');
+        console.log(`📋 Response ${responseIndex + 1}: questionnaireKey=${response.questionnaireKey}, answers.length=${response.answers?.length || 0}`);
 
-          if (!key) {
-            console.log(`⚠️ Answer entry ${answerIndex} missing questionCode and questionId:`, JSON.stringify(answer));
-            return; // Skip entries without any identifier
-          }
-          
-          // Check if already counted (avoid duplicates)
-          if (answered.has(key)) {
-            console.log(`⚠️ Duplicate answer key detected: ${key}, skipping`);
-            return;
-          }
-          
-          // Debug: log the answer structure
-          console.log(`🔍 Checking answer for ${key}:`, {
-            hasAnswer: !!answer.answer,
-            answerType: typeof answer.answer,
-            answerValue: answer.answer,
-            score: answer.score,
-            fullAnswer: JSON.stringify(answer).substring(0, 200)
-          });
-          
-          // Check if answer has content
-          // Handle case where answer.answer might be null, undefined, or an empty object
-          // Also handle case where answer might be stored directly (not nested in answer.answer)
-          let hasAnswer = false;
-          
-          // First check if answer.answer exists and has content
-          if (answer.answer) {
-            // Check for choiceKey
-            if (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined && answer.answer.choiceKey !== '') {
-              hasAnswer = true;
-              console.log(`  ✅ Found choiceKey: ${answer.answer.choiceKey}`);
+        if (response.answers && Array.isArray(response.answers)) {
+          response.answers.forEach((answer, answerIndex) => {
+            const idKey = answer?.questionId ? String(answer.questionId) : '';
+            const codeKey = answer?.questionCode !== undefined && answer?.questionCode !== null ? String(answer.questionCode).trim() : '';
+            // Prefer questionId; fallback to questionnaireKey:code if needed
+            const key = idKey.length > 0 ? idKey : (codeKey.length > 0 ? `${response.questionnaireKey}:${codeKey}` : '');
+
+            if (!key) {
+              console.log(`⚠️ Answer entry ${answerIndex} missing questionCode and questionId:`, JSON.stringify(answer));
+              return; // Skip entries without any identifier
             }
-            // Check for text
-            else if (answer.answer.text !== null && answer.answer.text !== undefined && String(answer.answer.text).trim().length > 0) {
-              hasAnswer = true;
-              console.log(`  ✅ Found text: ${String(answer.answer.text).substring(0, 50)}...`);
+
+            // Check if already counted (avoid duplicates)
+            if (answered.has(key)) {
+              console.log(`⚠️ Duplicate answer key detected: ${key}, skipping`);
+              return;
             }
-            // Check for numeric
-            else if (answer.answer.numeric !== null && answer.answer.numeric !== undefined) {
-              hasAnswer = true;
-              console.log(`  ✅ Found numeric: ${answer.answer.numeric}`);
+
+            // Debug: log the answer structure
+            console.log(`🔍 Checking answer for ${key}:`, {
+              hasAnswer: !!answer.answer,
+              answerType: typeof answer.answer,
+              answerValue: answer.answer,
+              score: answer.score,
+              fullAnswer: JSON.stringify(answer).substring(0, 200)
+            });
+
+            // Check if answer has content
+            // Handle case where answer.answer might be null, undefined, or an empty object
+            // Also handle case where answer might be stored directly (not nested in answer.answer)
+            let hasAnswer = false;
+
+            // First check if answer.answer exists and has content
+            if (answer.answer) {
+              // Check for choiceKey
+              if (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined && answer.answer.choiceKey !== '') {
+                hasAnswer = true;
+                console.log(`  ✅ Found choiceKey: ${answer.answer.choiceKey}`);
+              }
+              // Check for text
+              else if (answer.answer.text !== null && answer.answer.text !== undefined && String(answer.answer.text).trim().length > 0) {
+                hasAnswer = true;
+                console.log(`  ✅ Found text: ${String(answer.answer.text).substring(0, 50)}...`);
+              }
+              // Check for numeric
+              else if (answer.answer.numeric !== null && answer.answer.numeric !== undefined) {
+                hasAnswer = true;
+                console.log(`  ✅ Found numeric: ${answer.answer.numeric}`);
+              }
+              // Check for multiChoiceKeys
+              else if (answer.answer.multiChoiceKeys && Array.isArray(answer.answer.multiChoiceKeys) && answer.answer.multiChoiceKeys.length > 0) {
+                hasAnswer = true;
+                console.log(`  ✅ Found multiChoiceKeys: ${answer.answer.multiChoiceKeys.join(', ')}`);
+              } else {
+                console.log(`  ❌ No valid answer content found in answer.answer:`, JSON.stringify(answer.answer));
+              }
             }
-            // Check for multiChoiceKeys
-            else if (answer.answer.multiChoiceKeys && Array.isArray(answer.answer.multiChoiceKeys) && answer.answer.multiChoiceKeys.length > 0) {
+            // Fallback: check if answer fields exist directly on answer object (for backward compatibility)
+            else if (answer.choiceKey || (answer.text && String(answer.text).trim().length > 0) || answer.numeric !== undefined || (answer.multiChoiceKeys && Array.isArray(answer.multiChoiceKeys) && answer.multiChoiceKeys.length > 0)) {
               hasAnswer = true;
-              console.log(`  ✅ Found multiChoiceKeys: ${answer.answer.multiChoiceKeys.join(', ')}`);
+              console.log(`  ✅ Found answer in direct fields (backward compatibility)`);
+            }
+            else {
+              console.log(`  ❌ answer.answer is null/undefined and no direct answer fields found for ${key}`);
+            }
+
+            if (hasAnswer) {
+              answered.add(key);
+              console.log(`✅ Counted answered question: ${key} (score: ${answer.score})`);
             } else {
-              console.log(`  ❌ No valid answer content found in answer.answer:`, JSON.stringify(answer.answer));
+              console.log(`⚠️ Question ${key} not counted as answered`);
             }
-          } 
-          // Fallback: check if answer fields exist directly on answer object (for backward compatibility)
-          else if (answer.choiceKey || (answer.text && String(answer.text).trim().length > 0) || answer.numeric !== undefined || (answer.multiChoiceKeys && Array.isArray(answer.multiChoiceKeys) && answer.multiChoiceKeys.length > 0)) {
-            hasAnswer = true;
-            console.log(`  ✅ Found answer in direct fields (backward compatibility)`);
-          }
-          else {
-            console.log(`  ❌ answer.answer is null/undefined and no direct answer fields found for ${key}`);
-          }
-          
-          if (hasAnswer) {
-            answered.add(key);
-            console.log(`✅ Counted answered question: ${key} (score: ${answer.score})`);
-          } else {
-            console.log(`⚠️ Question ${key} not counted as answered`);
-          }
-        });
-      } else {
-        console.log(`⚠️ Response ${responseIndex + 1} has no answers array`);
-      }
-    });
+          });
+        } else {
+          console.log(`⚠️ Response ${responseIndex + 1} has no answers array`);
+        }
+      });
 
       return answered;
     };
 
     let answeredQuestionCodes = countAnsweredFromResponses(responses);
-    
+
     const answeredCount = answeredQuestionCodes.size;
     const progress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
-    
+
     console.log(`📊 Progress calculation: ${answeredCount}/${totalQuestions} = ${progress}%`);
 
     /**
@@ -3851,7 +3851,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
 
     // Missing codes (debug-friendly)
     const missingQuestionCodes = Array.from(totalKeysSet).filter((k) => !answeredQuestionCodes.has(k));
-    
+
     // Data integrity check: log warning if assigned questions != saved answers
     const savedQuestionCodes = new Set();
     responses.forEach(response => {
@@ -3863,7 +3863,7 @@ app.get('/api/user-progress/debug', async (req, res) => {
         });
       }
     });
-    
+
     if (savedQuestionCodes.size !== totalQuestions) {
       console.warn(`⚠️ DATA INTEGRITY WARNING: Assigned questions (${totalQuestions}) != saved answers (${savedQuestionCodes.size}) for project ${projectId}, user ${userId}`);
       console.warn(`⚠️ Assigned questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
@@ -3899,20 +3899,20 @@ app.post('/api/responses/initialize', async (req, res) => {
 
     const ProjectAssignment = require('./models/projectAssignment');
     const { initializeResponses } = require('./services/evaluationService');
-    
+
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    
+
     const assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
     if (!assignment) {
       return res.status(404).json({ error: 'Assignment not found' });
     }
-    
+
     await initializeResponses(projectIdObj, userIdObj, assignment.role, assignment.questionnaires || []);
-    
-    res.json({ 
-      success: true, 
-      message: `Initialized responses for ${assignment.questionnaires.length} questionnaires` 
+
+    res.json({
+      success: true,
+      message: `Initialized responses for ${assignment.questionnaires.length} questionnaires`
     });
   } catch (err) {
     console.error('Error initializing responses:', err);
@@ -3925,7 +3925,7 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
   try {
     const { projectId } = req.params;
     const { userId } = req.query;
-    
+
     if (!projectId || !userId) {
       return res.status(400).json({ error: 'projectId and userId are required' });
     }
@@ -3934,16 +3934,16 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
     const Question = require('./models/question');
     const ProjectAssignment = require('./models/projectAssignment');
     const { initializeResponses } = require('./services/evaluationService');
-    
+
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    
+
     console.log(`🔍 Integrity check: projectId=${projectId}, userId=${userId}`);
-    
+
     // Step 1: Get project assignment
     const assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
     if (!assignment) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Assignment not found',
         totalAssigned: 0,
         totalSavedAnswerEntries: 0,
@@ -3952,7 +3952,7 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
         isConsistent: false
       });
     }
-    
+
     // Step 2: Get assigned questionnaire keys
     const assignedQuestionnaireKeys = assignment.questionnaires || [];
     if (assignedQuestionnaireKeys.length === 0) {
@@ -3965,31 +3965,31 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
         isConsistent: true
       });
     }
-    
+
     console.log(`📋 Assigned questionnaires: ${assignedQuestionnaireKeys.join(', ')}`);
-    
+
     // Step 3: Count total assigned questions
     const assignedQuestions = await Question.find({
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('code questionnaireKey').lean();
-    
+
     const totalAssigned = assignedQuestions.length;
     console.log(`📊 Total assigned questions: ${totalAssigned}`);
-    
+
     // Step 4: Get all saved responses
     const responses = await Response.find({
       projectId: projectIdObj,
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('questionnaireKey answers').lean();
-    
+
     console.log(`📦 Found ${responses.length} response documents`);
-    
+
     // Step 5: Count total saved answer entries
     let totalSavedAnswerEntries = 0;
     const savedQuestionCodesByQuestionnaire = {};
     const foundQuestionnaireKeys = new Set();
-    
+
     responses.forEach(response => {
       foundQuestionnaireKeys.add(response.questionnaireKey);
       if (response.answers && Array.isArray(response.answers)) {
@@ -4004,29 +4004,29 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
         });
       }
     });
-    
+
     console.log(`💾 Total saved answer entries: ${totalSavedAnswerEntries}`);
-    
+
     // Step 6: Find missing questionnaire keys
     const missingQuestionnaireKeys = assignedQuestionnaireKeys.filter(
       key => !foundQuestionnaireKeys.has(key)
     );
-    
+
     // Step 7: Find missing question codes per questionnaire
     const missingQuestionCodes = [];
     const assignedQuestionsByQuestionnaire = {};
-    
+
     assignedQuestions.forEach(q => {
       if (!assignedQuestionsByQuestionnaire[q.questionnaireKey]) {
         assignedQuestionsByQuestionnaire[q.questionnaireKey] = new Set();
       }
       assignedQuestionsByQuestionnaire[q.questionnaireKey].add(q.code);
     });
-    
+
     assignedQuestionnaireKeys.forEach(questionnaireKey => {
       const assignedCodes = assignedQuestionsByQuestionnaire[questionnaireKey] || new Set();
       const savedCodes = savedQuestionCodesByQuestionnaire[questionnaireKey] || new Set();
-      
+
       assignedCodes.forEach(code => {
         if (!savedCodes.has(code)) {
           missingQuestionCodes.push({
@@ -4036,13 +4036,13 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
         }
       });
     });
-    
+
     // Step 8: Validate consistency
-    const isConsistent = 
-      missingQuestionnaireKeys.length === 0 && 
+    const isConsistent =
+      missingQuestionnaireKeys.length === 0 &&
       missingQuestionCodes.length === 0 &&
       totalSavedAnswerEntries >= totalAssigned; // >= because there might be extra entries
-    
+
     // Step 9: Log errors if mismatch
     if (!isConsistent) {
       console.error(`❌ DATA INTEGRITY ERROR for project ${projectId}, user ${userId}:`);
@@ -4061,7 +4061,7 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
       if (totalSavedAnswerEntries < totalAssigned) {
         console.error(`   Answer count mismatch: ${totalSavedAnswerEntries} saved vs ${totalAssigned} assigned`);
       }
-      
+
       // Optional auto-repair
       const autoRepair = req.query.autoRepair === 'true';
       if (autoRepair) {
@@ -4076,7 +4076,7 @@ app.get('/projects/:projectId/integrity', async (req, res) => {
     } else {
       console.log(`✅ Data integrity check passed for project ${projectId}, user ${userId}`);
     }
-    
+
     res.json({
       totalAssigned,
       totalSavedAnswerEntries,
@@ -4095,21 +4095,21 @@ app.get('/projects/:projectId/debug-answers', async (req, res) => {
   try {
     const { projectId } = req.params;
     const { userId } = req.query;
-    
+
     if (!projectId || !userId) {
       return res.status(400).json({ error: 'projectId and userId are required' });
     }
 
     const Response = require('./models/response');
-    
+
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    
+
     const responses = await Response.find({
       projectId: projectIdObj,
       userId: userIdObj
     }).select('questionnaireKey answers').lean();
-    
+
     const debugInfo = responses.map(response => ({
       questionnaireKey: response.questionnaireKey,
       totalAnswers: response.answers?.length || 0,
@@ -4124,7 +4124,7 @@ app.get('/projects/:projectId/debug-answers', async (req, res) => {
         score: answer.score
       })) || []
     }));
-    
+
     res.json({ responses: debugInfo });
   } catch (err) {
     console.error('Error in debug endpoint:', err);
@@ -4137,7 +4137,7 @@ app.get('/projects/:projectId/progress', async (req, res) => {
   try {
     const { projectId } = req.params;
     const { userId } = req.query;
-    
+
     if (!projectId || !userId) {
       return res.status(400).json({ error: 'projectId and userId are required' });
     }
@@ -4145,52 +4145,52 @@ app.get('/projects/:projectId/progress', async (req, res) => {
     const Response = require('./models/response');
     const Question = require('./models/question');
     const ProjectAssignment = require('./models/projectAssignment');
-    
+
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    
+
     console.log(`📊 Progress request: projectId=${projectId}, userId=${userId}`);
-    
+
     // Step 1: Get project assignment
     const assignment = await ProjectAssignment.findOne({ projectId: projectIdObj, userId: userIdObj });
     if (!assignment) {
-      return res.json({ 
-        totalAssigned: 0, 
-        answeredCount: 0, 
-        progressPercent: 0 
+      return res.json({
+        totalAssigned: 0,
+        answeredCount: 0,
+        progressPercent: 0
       });
     }
-    
+
     // Step 2: Get assigned questionnaire keys
     const assignedQuestionnaireKeys = assignment.questionnaires || [];
     if (assignedQuestionnaireKeys.length === 0) {
-      return res.json({ 
-        totalAssigned: 0, 
-        answeredCount: 0, 
-        progressPercent: 0 
+      return res.json({
+        totalAssigned: 0,
+        answeredCount: 0,
+        progressPercent: 0
       });
     }
-    
+
     // Step 3: Count total assigned questions
     const totalAssigned = await Question.countDocuments({
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     });
-    
+
     if (totalAssigned === 0) {
-      return res.json({ 
-        totalAssigned: 0, 
-        answeredCount: 0, 
-        progressPercent: 0 
+      return res.json({
+        totalAssigned: 0,
+        answeredCount: 0,
+        progressPercent: 0
       });
     }
-    
+
     // Step 4: Get all responses
     const responses = await Response.find({
       projectId: projectIdObj,
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
     }).select('answers').lean();
-    
+
     // Step 5: Count answered questions
     // A question is answered if:
     // - choice: answer.choiceKey exists
@@ -4200,25 +4200,25 @@ app.get('/projects/:projectId/progress', async (req, res) => {
     // IMPORTANT: score=0 is valid and should be treated as answered
     let answeredCount = 0;
     const answeredQuestionCodes = new Set();
-    
+
     console.log(`🔍 Analyzing ${responses.length} response documents for answered questions...`);
-    
+
     responses.forEach((response, responseIndex) => {
       console.log(`📋 Response ${responseIndex + 1}: questionnaireKey=${response.questionnaireKey}, answers.length=${response.answers?.length || 0}`);
-      
+
       if (response.answers && Array.isArray(response.answers)) {
         response.answers.forEach((answer, answerIndex) => {
           if (!answer.questionCode) {
             console.log(`⚠️ Answer entry ${answerIndex} missing questionCode:`, JSON.stringify(answer));
             return; // Skip entries without questionCode
           }
-          
+
           // Check if already counted (avoid duplicates)
           if (answeredQuestionCodes.has(answer.questionCode)) {
             console.log(`⚠️ Duplicate questionCode detected: ${answer.questionCode}, skipping`);
             return;
           }
-          
+
           // Debug: log the answer structure
           console.log(`🔍 Checking answer for ${answer.questionCode}:`, {
             hasAnswer: !!answer.answer,
@@ -4226,11 +4226,11 @@ app.get('/projects/:projectId/progress', async (req, res) => {
             answerValue: answer.answer,
             score: answer.score
           });
-          
+
           // Check if answer has content
           // Handle case where answer.answer might be null, undefined, or an empty object
           let hasAnswer = false;
-          
+
           if (answer.answer) {
             // Check for choiceKey
             if (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined && answer.answer.choiceKey !== '') {
@@ -4257,7 +4257,7 @@ app.get('/projects/:projectId/progress', async (req, res) => {
           } else {
             console.log(`  ❌ answer.answer is null/undefined for ${answer.questionCode}`);
           }
-          
+
           if (hasAnswer) {
             answeredQuestionCodes.add(answer.questionCode);
             answeredCount++;
@@ -4270,14 +4270,14 @@ app.get('/projects/:projectId/progress', async (req, res) => {
         console.log(`⚠️ Response ${responseIndex + 1} has no answers array`);
       }
     });
-    
+
     // Step 6: Calculate progress
-    const progressPercent = totalAssigned > 0 
-      ? Math.round((answeredCount / totalAssigned) * 100) 
+    const progressPercent = totalAssigned > 0
+      ? Math.round((answeredCount / totalAssigned) * 100)
       : 0;
-    
+
     console.log(`📊 Progress: ${answeredCount}/${totalAssigned} = ${progressPercent}%`);
-    
+
     res.json({
       totalAssigned,
       answeredCount,
@@ -4443,25 +4443,25 @@ app.post('/api/login', async (req, res) => {
     // Check MongoDB connection state
     if (mongoose.connection.readyState !== 1) {
       console.warn(`[login:${reqId}] mongo not ready`, { readyState: mongoose.connection.readyState });
-      return res.status(503).json({ 
-        error: 'Veritabanı bağlantısı hazır değil. Lütfen birkaç saniye bekleyip tekrar deneyin.' 
+      return res.status(503).json({
+        error: 'Veritabanı bağlantısı hazır değil. Lütfen birkaç saniye bekleyip tekrar deneyin.'
       });
     }
 
     // Add timeout to prevent hanging - increased to 15 seconds for better reliability
-    const loginPromise = User.findOne({ 
-      email: req.body.email, 
-      password: req.body.password, 
-      role: req.body.role 
+    const loginPromise = User.findOne({
+      email: req.body.email,
+      password: req.body.password,
+      role: req.body.role
     }).select('-profileImage').lean().maxTimeMS(15000); // Exclude large profileImage, add timeout
-    
+
     const user = await Promise.race([
       loginPromise,
-      new Promise((_, reject) => 
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Login timeout')), 15000)
       )
     ]);
-    
+
     if (user) {
       console.log(`[login:${reqId}] success`, { userId: String(user._id || user.id || '') });
       res.json(user);
@@ -4503,32 +4503,31 @@ app.get('/api/projects', async (req, res) => {
     // Check MongoDB connection
     if (mongoose.connection.readyState !== 1) {
       console.error('❌ MongoDB not connected. ReadyState:', mongoose.connection.readyState);
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: 'Database not connected',
-        readyState: mongoose.connection.readyState 
+        readyState: mongoose.connection.readyState
       });
     }
-    
+
     const { userId } = req.query;
     console.log('📥 GET /api/projects - userId:', userId);
-    
+
     // Build query
     const query = {};
-    
+
     // Check if user is admin - if so, only show projects created by this admin
     if (userId && isValidObjectId(userId)) {
       try {
         const user = await User.findById(userId).select('role').lean();
         if (user && user.role && user.role.toLowerCase().includes('admin')) {
-          // Admin users can only see projects they created
-          // Only show projects where createdByAdmin exists and equals userId
-          query.createdByAdmin = { $exists: true, $eq: new mongoose.Types.ObjectId(userId) };
-          console.log('🔒 Admin user detected - filtering by createdByAdmin:', userId);
+          // Admin users can see all projects
+          console.log('🔓 Admin user detected - showing all projects');
+          // No creator filter for admins
         }
       } catch (err) {
         console.warn('Could not verify user role:', err.message);
       }
-      
+
       // Filter out projects hidden for this user (soft delete) if hiddenForUsers field exists
       // Note: hiddenForUsers field may not exist in all projects, so we check if it exists
       if (!query.createdByAdmin) {
@@ -4539,15 +4538,15 @@ app.get('/api/projects', async (req, res) => {
         ];
       }
     }
-    
+
     console.log('🔍 Query:', JSON.stringify(query));
-    
+
     // Check if Project model exists
     if (!Project) {
       console.error('❌ Project model is not defined');
       return res.status(500).json({ error: 'Project model not available' });
     }
-    
+
     const projects = await Project.find(query)
       .select('-fullDescription') // Exclude large description for list view
       .populate({
@@ -4558,41 +4557,73 @@ app.get('/api/projects', async (req, res) => {
       .lean()
       .maxTimeMS(5000)
       .limit(1000);
-    
+
     console.log(`✅ Found ${projects.length} projects`);
-    
+
     // Add evaluation status for each project (for admin dashboard)
     const Response = mongoose.model('Response');
     const Report = mongoose.model('Report');
-    
+
     const enrichedProjects = await Promise.all(projects.map(async (project) => {
       try {
-        // Check if any expert has answered any question
-        const anyAnswers = await Response.exists({ projectId: project._id });
-        
-        // Check if report has been generated
-        const reportExists = await Report.exists({ projectId: project._id });
-        
+        // Count answered questions for this project
+        const responses = await Response.find({ projectId: project._id }, { 'answers': 1 }).lean();
+        let answeredQuestions = 0;
+        for (const resp of responses) {
+          answeredQuestions += (resp.answers || []).length;
+        }
+
+        // Count reports for this project
+        const reportCount = await Report.countDocuments({ projectId: project._id });
+
+        // Derive status based on exact rules:
+        // SETUP: answeredQuestions === 0
+        // ASSESS: answeredQuestions > 0 AND reportCount === 0
+        // RESOLVE: reportCount >= 1
+        let derivedStatus = 'setup';
+        if (reportCount >= 1) {
+          derivedStatus = 'resolve';
+        } else if (answeredQuestions > 0) {
+          derivedStatus = 'assess';
+        }
+
         return {
           ...project,
-          hasAnyAnswers: !!anyAnswers,
-          reportGenerated: !!reportExists
+          hasAnyAnswers: answeredQuestions > 0,
+          reportGenerated: reportCount > 0,
+          answeredQuestions,
+          reportCount,
+          derivedStatus
         };
       } catch (err) {
         console.error(`Error enriching project ${project._id}:`, err);
         return {
           ...project,
           hasAnyAnswers: false,
-          reportGenerated: false
+          reportGenerated: false,
+          answeredQuestions: 0,
+          reportCount: 0,
+          derivedStatus: 'setup'
         };
       }
     }));
-    
+
+    // Debug: Log enrichment summary
+    const enrichmentSummary = enrichedProjects.map(p => ({
+      title: p.title,
+      hasAnyAnswers: p.hasAnyAnswers,
+      reportGenerated: p.reportGenerated,
+      answeredQuestions: p.answeredQuestions,
+      reportCount: p.reportCount,
+      derivedStatus: p.derivedStatus
+    }));
+    console.log('📊 Project enrichment summary:', JSON.stringify(enrichmentSummary, null, 2));
+
     res.json(enrichedProjects);
   } catch (err) {
     console.error('❌ Error fetching projects:', err);
     console.error('❌ Error stack:', err.stack);
-    res.status(500).json({ 
+    res.status(500).json({
       error: err.message || 'Failed to fetch projects',
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -4687,14 +4718,14 @@ app.get('/api/scores', async (req, res) => {
   try {
     const Score = require('./models/score');
     const { projectId } = req.query;
-    
+
     const query = {};
     if (projectId) {
-      query.projectId = isValidObjectId(projectId) 
-        ? new mongoose.Types.ObjectId(projectId) 
+      query.projectId = isValidObjectId(projectId)
+        ? new mongoose.Types.ObjectId(projectId)
         : projectId;
     }
-    
+
     const scores = await Score.find(query).lean();
     res.json(scores);
   } catch (err) {
@@ -4706,7 +4737,7 @@ app.post('/api/projects', async (req, res) => {
   try {
     // Get userId from request (body, query, or headers)
     const userId = req.body?.userId || req.query?.userId || req.headers?.['x-user-id'] || req.headers?.['x-userid'];
-    
+
     // If userId is provided and user is admin, set createdByAdmin
     if (userId && isValidObjectId(userId)) {
       try {
@@ -4719,7 +4750,7 @@ app.post('/api/projects', async (req, res) => {
         console.warn('Could not verify user role for createdByAdmin:', err.message);
       }
     }
-    
+
     // If a useCase is linked, ensure its owner is assigned to the project (server-side safety).
     if (req.body?.useCase) {
       try {
@@ -4769,7 +4800,7 @@ app.get('/api/messages/thread', async (req, res) => {
     if (!projectId || !user1 || !user2) {
       return res.status(400).json({ error: 'Missing required parameters: projectId, user1, user2' });
     }
-    
+
     const messages = await Message.find({
       projectId: projectId,
       isNotification: { $ne: true },
@@ -4778,10 +4809,10 @@ app.get('/api/messages/thread', async (req, res) => {
         { fromUserId: user2, toUserId: user1 }
       ]
     })
-    .sort({ createdAt: 1 })
-    .populate('fromUserId', 'name email')
-    .populate('toUserId', 'name email');
-    
+      .sort({ createdAt: 1 })
+      .populate('fromUserId', 'name email')
+      .populate('toUserId', 'name email');
+
     res.json(messages);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4795,7 +4826,7 @@ app.post('/api/messages', async (req, res) => {
     if (!projectId || !fromUserId || !toUserId || !text) {
       return res.status(400).json({ error: 'Missing required fields: projectId, fromUserId, toUserId, text' });
     }
-    
+
     const message = new Message({
       projectId,
       fromUserId,
@@ -4804,20 +4835,20 @@ app.post('/api/messages', async (req, res) => {
       isNotification: Boolean(isNotification),
       createdAt: new Date()
     });
-    
+
     await message.save();
     const populated = await Message.findById(message._id)
       .populate('fromUserId', 'name email')
       .populate('toUserId', 'name email')
       .populate('projectId', 'title');
-    
+
     // Send email notification (async, don't wait for it)
     (async () => {
       try {
         const fromUser = await User.findById(fromUserId);
         const toUser = await User.findById(toUserId);
         const project = await Project.findById(projectId);
-        
+
         if (fromUser && toUser && project) {
           // Create transporter (using Gmail as example - configure with your SMTP settings)
           const transporter = nodemailer.createTransport({
@@ -4865,7 +4896,7 @@ app.post('/api/messages', async (req, res) => {
         // Don't fail the message send if email fails
       }
     })();
-    
+
     res.json(populated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4876,7 +4907,7 @@ app.post('/api/messages', async (req, res) => {
 app.post('/api/messages/send-email', async (req, res) => {
   try {
     const { to, toName, fromName, projectTitle, message, projectId } = req.body;
-    
+
     // Create transporter (using Gmail as example - configure with your SMTP settings)
     const transporter = nodemailer.createTransport({
       service: 'gmail', // or use your SMTP settings
@@ -4929,7 +4960,7 @@ app.post('/api/messages/send-email', async (req, res) => {
 app.post('/api/messages/mark-read', async (req, res) => {
   try {
     const { messageIds, userId, projectId, otherUserId } = req.body;
-    
+
     if (messageIds && Array.isArray(messageIds)) {
       // Mark specific messages as read
       await Message.updateMany(
@@ -4950,7 +4981,7 @@ app.post('/api/messages/mark-read', async (req, res) => {
     } else {
       return res.status(400).json({ error: 'Invalid parameters' });
     }
-    
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4964,7 +4995,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId parameter' });
     }
-    
+
     // Get unread messages grouped by project and sender.
     // IMPORTANT: Avoid populate() here because missing/deleted refs (project/user) can break the entire endpoint.
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
@@ -4972,11 +5003,11 @@ app.get('/api/messages/unread-count', async (req, res) => {
       toUserId: userIdObj,
       readAt: null
     })
-    .populate('projectId', 'title')
-    .populate('fromUserId', 'name email')
-    .sort({ createdAt: -1 })
-    .lean();
-    
+      .populate('projectId', 'title')
+      .populate('fromUserId', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+
     // Group by projectId and fromUserId
     const conversations = {};
     unreadMessages.forEach(msg => {
@@ -4988,10 +5019,10 @@ app.get('/api/messages/unread-count', async (req, res) => {
         }
         return;
       }
-      
+
       const projectIdRaw = msg.projectId._id || msg.projectId;
       const fromUserIdRaw = msg.fromUserId._id || msg.fromUserId;
-      
+
       if (!projectIdRaw || !fromUserIdRaw) {
         // Only log in development mode to reduce noise
         if (process.env.NODE_ENV === 'development') {
@@ -4999,7 +5030,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
         }
         return;
       }
-      
+
       const projectId = String(projectIdRaw);
       const fromUserId = String(fromUserIdRaw);
       const key = `${projectId}-${fromUserId}`;
@@ -5019,8 +5050,8 @@ app.get('/api/messages/unread-count', async (req, res) => {
       }
 
       conversations[key].count++;
-      if (msg.createdAt && conversations[key].lastMessageTime && 
-          new Date(msg.createdAt) > new Date(conversations[key].lastMessageTime)) {
+      if (msg.createdAt && conversations[key].lastMessageTime &&
+        new Date(msg.createdAt) > new Date(conversations[key].lastMessageTime)) {
         conversations[key].lastMessage = msg.text || '';
         conversations[key].lastMessageTime = msg.createdAt;
         conversations[key].lastMessageId = String(msg._id);
@@ -5051,7 +5082,7 @@ app.get('/api/messages/unread-count', async (req, res) => {
       c.projectTitle = projectTitleById[c.projectId] || '(Unknown project)';
       c.fromUserName = userNameById[c.fromUserId] || '(Unknown user)';
     }
-    
+
     res.json({
       totalCount,
       conversations: conversationList
@@ -5170,10 +5201,10 @@ app.delete('/api/messages/delete-conversation', async (req, res) => {
       ]
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       deletedCount: result.deletedCount,
-      message: `Deleted ${result.deletedCount} messages` 
+      message: `Deleted ${result.deletedCount} messages`
     });
   } catch (err) {
     console.error('Error deleting conversation:', err);
@@ -5186,10 +5217,10 @@ app.get('/api/users', async (req, res) => {
     const { includeProfileImages } = req.query;
     // By default, exclude profileImage for performance (large base64 strings)
     // But allow including them if explicitly requested
-    const selectFields = includeProfileImages === 'true' 
-      ? '-password' 
+    const selectFields = includeProfileImages === 'true'
+      ? '-password'
       : '-password -profileImage';
-    
+
     const users = await User.find({}, selectFields)
       .lean()
       .maxTimeMS(5000)
@@ -5205,32 +5236,32 @@ app.get('/api/users', async (req, res) => {
 app.get('/api/users/:id/profile-image', async (req, res) => {
   try {
     const userId = req.params.id;
-    
+
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
-    
+
     if (!isValidObjectId(userId)) {
       return res.status(400).json({ error: 'Invalid user ID format' });
     }
-    
+
     // Check if User model is available
     if (!User) {
       console.error('❌ User model is not defined');
       return res.status(500).json({ error: 'User model not available' });
     }
-    
+
     const user = await User.findById(userId).select('profileImage').lean();
-    
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     res.json({ profileImage: user.profileImage || null });
   } catch (err) {
     console.error('❌ Error fetching profile image:', err);
     console.error('❌ Error stack:', err.stack);
-    res.status(500).json({ 
+    res.status(500).json({
       error: err.message || 'Failed to fetch profile image',
       details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
@@ -5241,17 +5272,17 @@ app.get('/api/users/:id/profile-image', async (req, res) => {
 app.get('/api/users/:id', async (req, res) => {
   try {
     const userId = req.params.id;
-    
+
     if (!isValidObjectId(userId)) {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
-    
+
     const user = await User.findById(userId).select('-password');
-    
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     res.json(user);
   } catch (err) {
     console.error('❌ Error fetching user:', err);
@@ -5264,30 +5295,30 @@ app.post('/api/users/:id/profile-image', async (req, res) => {
   console.log('🔍 Route hit: POST /api/users/:id/profile-image');
   console.log('🔍 Request params:', req.params);
   console.log('🔍 Request body keys:', Object.keys(req.body || {}));
-  
+
   try {
     const { image } = req.body;
     const userId = req.params.id;
-    
+
     console.log('📸 Profile image update request:', { userId, hasImage: !!image, imageLength: image?.length });
-    
+
     // Validate userId
     if (!isValidObjectId(userId)) {
       console.log('❌ Invalid user ID:', userId);
       return res.status(400).json({ error: 'Invalid user ID' });
     }
-    
+
     const user = await User.findByIdAndUpdate(
       userId,
       { profileImage: image || null },
       { new: true }
     ).select('-password');
-    
+
     if (!user) {
       console.log('❌ User not found:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     console.log('✅ Profile image updated successfully for user:', userId);
     res.json(user);
   } catch (err) {
@@ -5300,29 +5331,29 @@ app.post('/api/users/:id/change-password', async (req, res) => {
   console.log('🔍 Route hit: POST /api/users/:id/change-password');
   console.log('🔍 Request params:', req.params);
   console.log('🔍 Request body keys:', Object.keys(req.body || {}));
-  
+
   try {
     const { oldPassword, newPassword } = req.body;
     const userId = req.params.id;
-    
+
     console.log('🔐 Password change request:', { userId, hasOldPassword: !!oldPassword, hasNewPassword: !!newPassword });
-    
+
     if (!isValidObjectId(userId)) {
       console.log('❌ Invalid user ID:', userId);
       return res.status(400).json({ error: 'Invalid user ID' });
     }
-    
+
     const user = await User.findById(userId);
     if (!user) {
       console.log('❌ User not found:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     if (user.password !== oldPassword) {
       console.log('❌ Old password incorrect');
       return res.status(400).json({ error: 'Old password is incorrect' });
     }
-    
+
     user.password = newPassword;
     await user.save();
     console.log('✅ Password changed successfully for user:', userId);
@@ -5336,11 +5367,11 @@ app.post('/api/users/:id/change-password', async (req, res) => {
 app.delete('/api/users/:id/delete-account', async (req, res) => {
   try {
     const userId = req.params.id;
-    
+
     if (!isValidObjectId(userId)) {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
-    
+
     const user = await User.findByIdAndDelete(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true });
@@ -5354,11 +5385,11 @@ app.put('/api/users/:id', async (req, res) => {
   try {
     const { name } = req.body;
     const userId = req.params.id;
-    
+
     if (!isValidObjectId(userId)) {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
-    
+
     const user = await User.findByIdAndUpdate(
       userId,
       { name },
@@ -5385,14 +5416,14 @@ app.get('/api/shared-discussions', async (req, res) => {
         query.projectId = projectId;
       }
     }
-    
+
     const discussions = await SharedDiscussion.find(query)
       .populate('userId', 'name email role')
       .populate('projectId', 'title')
       .populate('replyTo', 'text userId')
       .populate('mentions', 'name email')
       .sort({ isPinned: -1, createdAt: -1 }); // Pinned mesajlar önce, sonra tarihe göre
-    
+
     res.json(discussions);
   } catch (err) {
     console.error('Error fetching shared discussions:', err);
@@ -5405,12 +5436,12 @@ app.post('/api/shared-discussions', async (req, res) => {
   try {
     console.log('📨 Received shared discussion request:', req.body);
     const { userId, text, projectId, replyTo, mentions } = req.body;
-    
+
     if (!userId || !text) {
       console.error('❌ Missing required fields:', { userId: !!userId, text: !!text });
       return res.status(400).json({ error: 'Missing required fields: userId, text' });
     }
-    
+
     // Convert userId to ObjectId if valid
     let userIdObj;
     if (isValidObjectId(userId)) {
@@ -5435,9 +5466,9 @@ app.post('/api/shared-discussions', async (req, res) => {
     const mentionsObj = mentions && Array.isArray(mentions)
       ? mentions.map(m => isValidObjectId(m) ? new mongoose.Types.ObjectId(m) : m)
       : [];
-    
+
     console.log('✅ Creating discussion with:', { userIdObj, text: text.substring(0, 50), projectIdObj });
-    
+
     const discussion = new SharedDiscussion({
       userId: userIdObj,
       text,
@@ -5447,17 +5478,17 @@ app.post('/api/shared-discussions', async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    
+
     await discussion.save();
     console.log('✅ Discussion saved:', discussion._id);
-    
+
     // Populate ile tam bilgileri getir
     const populated = await SharedDiscussion.findById(discussion._id)
       .populate('userId', 'name email role')
       .populate('projectId', 'title')
       .populate('replyTo', 'text userId')
       .populate('mentions', 'name email');
-    
+
     console.log('✅ Discussion populated successfully');
     res.json(populated);
   } catch (err) {
@@ -5472,7 +5503,7 @@ app.put('/api/shared-discussions/:id/pin', async (req, res) => {
   try {
     const { id } = req.params;
     const { isPinned } = req.body;
-    
+
     const discussion = await SharedDiscussion.findByIdAndUpdate(
       id,
       { isPinned: isPinned === true, updatedAt: new Date() },
@@ -5482,11 +5513,11 @@ app.put('/api/shared-discussions/:id/pin', async (req, res) => {
       .populate('projectId', 'title')
       .populate('replyTo', 'text userId')
       .populate('mentions', 'name email');
-    
+
     if (!discussion) {
       return res.status(404).json({ error: 'Discussion not found' });
     }
-    
+
     res.json(discussion);
   } catch (err) {
     console.error('Error pinning/unpinning discussion:', err);
@@ -5499,11 +5530,11 @@ app.delete('/api/shared-discussions/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await SharedDiscussion.findByIdAndDelete(id);
-    
+
     if (!deleted) {
       return res.status(404).json({ error: 'Discussion not found' });
     }
-    
+
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting discussion:', err);
@@ -5521,8 +5552,8 @@ app.use('/api/reports', reportRoutes);
 
 // Health check endpoint for deployment platforms
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
@@ -5550,12 +5581,12 @@ if (emailConfigured) {
 mongoose.connection.once('open', async () => {
   try {
     const Question = require('./models/question');
-    
+
     // STEP 1: Ensure General T1, T2 exist and are correct
     // If G1/G2 exist, rename to T1/T2
     await Question.updateMany({ questionnaireKey: 'general-v1', code: 'G1' }, { $set: { code: 'T1', appliesToRoles: ['any'] } });
     await Question.updateMany({ questionnaireKey: 'general-v1', code: 'G2' }, { $set: { code: 'T2', appliesToRoles: ['any'] } });
-    
+
     // Check if T1 exists, if not create it
     let genT1Exists = await Question.findOne({ questionnaireKey: 'general-v1', code: 'T1' });
     if (!genT1Exists) {
@@ -5564,7 +5595,7 @@ mongoose.connection.once('open', async () => {
         code: 'T1',
         principle: 'TRANSPARENCY',
         appliesToRoles: ['any'],
-        text: { 
+        text: {
           en: 'Is it clear to you what the AI system can and cannot do?',
           tr: 'AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?'
         },
@@ -5581,7 +5612,7 @@ mongoose.connection.once('open', async () => {
       });
       console.log('✅ Created missing T1 question for general-v1');
     }
-    
+
     // Check if T2 exists, if not create it
     let genT2Exists = await Question.findOne({ questionnaireKey: 'general-v1', code: 'T2' });
     if (!genT2Exists) {
@@ -5590,7 +5621,7 @@ mongoose.connection.once('open', async () => {
         code: 'T2',
         principle: 'TRANSPARENCY',
         appliesToRoles: ['any'],
-        text: { 
+        text: {
           en: 'Do you understand that the system may sometimes be wrong or uncertain?',
           tr: 'Sistemin bazen hatalı veya belirsiz olabileceğini anlıyor musunuz?'
         },
@@ -5606,7 +5637,7 @@ mongoose.connection.once('open', async () => {
       });
       console.log('✅ Created missing T2 question for general-v1');
     }
-    
+
     // Ensure T1, T2 have correct appliesToRoles (fix if they exist but have wrong roles)
     const genT1Result = await Question.updateMany(
       { questionnaireKey: 'general-v1', code: 'T1' },
@@ -5616,7 +5647,7 @@ mongoose.connection.once('open', async () => {
       { questionnaireKey: 'general-v1', code: 'T2' },
       { $set: { appliesToRoles: ['any'] } }
     );
-    
+
     // STEP 2: Technical must be unique: T1_TECH, T2_TECH (CRITICAL: This prevents frontend duplicate detection)
     const techT1Result = await Question.updateMany(
       { questionnaireKey: 'technical-expert-v1', code: 'T1' },
@@ -5626,16 +5657,16 @@ mongoose.connection.once('open', async () => {
       { questionnaireKey: 'technical-expert-v1', code: 'T2' },
       { $set: { code: 'T2_TECH', appliesToRoles: ['technical-expert'] } }
     );
-    
+
     // Verify counts (silent mode - uncomment for debugging)
     // const generalCount = await Question.countDocuments({ questionnaireKey: 'general-v1' });
     // const technicalCount = await Question.countDocuments({ questionnaireKey: 'technical-expert-v1' });
-    
+
     // console.log(`✅ 24 QUESTION MODE:`);
     // console.log(`   General: Fixed T1 (${genT1Result.modifiedCount}), T2 (${genT2Result.modifiedCount}). Total: ${generalCount} questions.`);
     // console.log(`   Technical: T1->T1_TECH (${techT1Result.modifiedCount}), T2->T2_TECH (${techT2Result.modifiedCount}). Total: ${technicalCount} questions.`);
     // console.log(`   Expected: 12 General + 12 Technical = 24 questions.`);
-    
+
   } catch (error) {
     console.error('⚠️ Could not update question codes on startup:', error.message);
   }

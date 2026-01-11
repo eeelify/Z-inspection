@@ -51,6 +51,13 @@ export interface Project {
         resultsUsage: string;
         resultsSharing: string;
     }
+  
+  // Backend-enriched fields (from /api/projects)
+  derivedStatus?: 'setup' | 'assess' | 'resolve';
+  hasAnyAnswers?: boolean;
+  reportGenerated?: boolean;
+  answeredQuestions?: number;
+  reportCount?: number;
 }
 
 export type TensionSeverity = 'high' | 'medium' | 'low';

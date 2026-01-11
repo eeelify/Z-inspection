@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, FormEvent } from 'react';
-import { 
-  ArrowLeft, Save, Send, Plus, AlertTriangle, CheckCircle, XCircle, 
+import {
+  ArrowLeft, Save, Send, Plus, AlertTriangle, CheckCircle, XCircle,
   Info, ChevronRight, ChevronLeft, Loader2, Trash2, Upload, X
 } from 'lucide-react';
 
 import { Project, User, Question, StageKey, QuestionType, UseCase, EthicalPrinciple, Tension, QuestionOption } from '../types';
-import { getQuestionsByRole } from '../data/questions'; 
+import { getQuestionsByRole } from '../data/questions';
 import { api } from '../api';
 import { EthicalTensionSelector } from './EthicalTensionSelector';
 import { fetchUserProgress } from '../utils/userProgress';
@@ -77,7 +77,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   // Ancak kullanıcının kaldığı yerden devam etmesi için 'set-up' ile başlatıp veriyi çekmek daha güvenli.
   const [currentStage, setCurrentStage] = useState<StageKey>('set-up');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  
+
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [questionPriorities, setQuestionPriorities] = useState<Record<string, RiskLevel>>({}); // Her soru için önem derecesi
   const [riskScores, setRiskScores] = useState<Record<string, 0 | 1 | 2 | 3 | 4>>({}); // Her soru için risk skoru (0-4)
@@ -104,11 +104,11 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const resumeInitializedRef = useRef<boolean>(false); // Prevent resume logic from running multiple times
   const [resumeQuestionCode, setResumeQuestionCode] = useState<string | null>(null); // Question code to resume at
   const [resumeComplete, setResumeComplete] = useState<boolean>(false); // Track if resume logic has completed
-  
+
   // Reset resume state when project or user changes (component remounts)
   useEffect(() => {
-    console.log('🔄 EvaluationForm mounted/updated:', { 
-      projectId: project.id || (project as any)._id, 
+    console.log('🔄 EvaluationForm mounted/updated:', {
+      projectId: project.id || (project as any)._id,
       userId: currentUser.id || (currentUser as any)._id,
       project: project,
       currentUser: currentUser
@@ -122,7 +122,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     setLoadedQuestions([]);
     console.log('🔄 Reset resume state - isInitialLoad set to true');
   }, [project.id, currentUser.id]);
-  
+
   // Tension form state
   const [principle1, setPrinciple1] = useState<EthicalPrinciple | undefined>();
   const [principle2, setPrinciple2] = useState<EthicalPrinciple | undefined>();
@@ -131,7 +131,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const [evidence, setEvidence] = useState('');
   const [severity, setSeverity] = useState<number>(2);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  
+
   // Edit tension state
   const [editPrinciple1, setEditPrinciple1] = useState<EthicalPrinciple | undefined>();
   const [editPrinciple2, setEditPrinciple2] = useState<EthicalPrinciple | undefined>();
@@ -145,8 +145,20 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const getOptionValue = (option: QuestionOption) => typeof option === 'string' ? option : option.value;
   const getOptionLabel = (option: QuestionOption) => typeof option === 'string' ? option : option.label;
 
-  const isQuestionAnswered = (questionId: string) => {
-    const v = answers[questionId];
+  // Helper function to get answer value by checking multiple possible keys
+  const getAnswerValue = (question: Question) => {
+    // Check id, code, and _id for backward compatibility
+    return answers[question.id] || answers[question.code || ''] || (question._id ? answers[String(question._id)] : undefined);
+  };
+
+  const isQuestionAnswered = (questionId: string, question?: Question) => {
+    // If question object is provided, check all possible keys
+    let v;
+    if (question) {
+      v = getAnswerValue(question);
+    } else {
+      v = answers[questionId];
+    }
     if (v === undefined || v === null) return false;
     if (typeof v === 'string') return v.trim().length > 0;
     if (Array.isArray(v)) return v.length > 0;
@@ -169,36 +181,54 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   }, [roleKey, customQuestions]);
 
   // Helper function to determine questionnaireKey from role
-  const getQuestionnaireKeyForRole = (role: string): string => {
+  const getQuestionnaireKeyForRole = useCallback((role: string): string => {
     const roleLower = role.toLowerCase();
     if (roleLower === 'ethical-expert') return 'ethical-expert-v1';
     if (roleLower === 'medical-expert') return 'medical-expert-v1';
     if (roleLower === 'technical-expert') return 'technical-expert-v1';
     if (roleLower === 'legal-expert') return 'legal-expert-v1';
+    if (roleLower === 'education-expert') return 'education-expert-v1';
     return 'general-v1';
-  };
+  }, []);
 
   // Helper function to map Response answer to local state format
   const mapResponseAnswerToLocalState = (responseAnswer: any): { answer: any; priority?: RiskLevel; riskScore?: 0 | 1 | 2 | 3 | 4 } => {
     const result: { answer: any; priority?: RiskLevel; riskScore?: 0 | 1 | 2 | 3 | 4 } = { answer: null };
-    
+
+    // DEBUG: Log incoming response answer
+    console.log('🔄 mapResponseAnswerToLocalState input:', {
+      hasResponseAnswer: !!responseAnswer,
+      answerData: responseAnswer?.answer,
+      choiceKey: responseAnswer?.answer?.choiceKey,
+      text: responseAnswer?.answer?.text,
+      questionCode: responseAnswer?.questionCode
+    });
+
     // Check if answer exists and is not null/empty
     if (!responseAnswer) {
       return result;
     }
 
     const answerData = responseAnswer.answer;
-    
+
     // Check if answer is null, undefined, or empty object
     if (!answerData || (typeof answerData === 'object' && Object.keys(answerData).length === 0)) {
       return result;
     }
-    
+
     // Map answer based on type
     if (answerData.choiceKey !== undefined && answerData.choiceKey !== null && answerData.choiceKey !== '') {
       result.answer = answerData.choiceKey;
+      console.log('✅ Mapped radio/select answer:', {
+        questionCode: responseAnswer?.questionCode,
+        choiceKey: answerData.choiceKey
+      });
     } else if (answerData.text !== undefined && answerData.text !== null && answerData.text !== '') {
       result.answer = answerData.text;
+      console.log('✅ Mapped text answer:', {
+        questionCode: responseAnswer?.questionCode,
+        textLength: answerData.text.length
+      });
     } else if (answerData.numeric !== undefined && answerData.numeric !== null) {
       result.answer = answerData.numeric;
     } else if (answerData.multiChoiceKeys && Array.isArray(answerData.multiChoiceKeys) && answerData.multiChoiceKeys.length > 0) {
@@ -211,33 +241,34 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       result.riskScore = responseAnswer.score as 0 | 1 | 2 | 3 | 4;
     }
 
+    console.log('🔄 mapResponseAnswerToLocalState output:', result);
     return result;
   };
 
   // Helper function to check if an answer is unanswered
   const isAnswerUnanswered = (answer: any): boolean => {
     if (!answer || typeof answer !== 'object') return true;
-    
+
     // Check for choiceKey
     if (answer.choiceKey !== undefined && answer.choiceKey !== null && answer.choiceKey !== '') {
       return false;
     }
-    
+
     // Check for text
     if (answer.text !== undefined && answer.text !== null && typeof answer.text === 'string' && answer.text.trim().length > 0) {
       return false;
     }
-    
+
     // Check for numeric
     if (answer.numeric !== undefined && answer.numeric !== null && typeof answer.numeric === 'number') {
       return false;
     }
-    
+
     // Check for multiChoiceKeys
     if (answer.multiChoiceKeys && Array.isArray(answer.multiChoiceKeys) && answer.multiChoiceKeys.length > 0) {
       return false;
     }
-    
+
     return true;
   };
 
@@ -253,47 +284,47 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   // Resume logic: Load responses and determine where to resume
   useEffect(() => {
     // Always log to see if useEffect is triggered
-    console.log('🔍 Resume logic useEffect triggered:', { 
-      resumeInitialized: resumeInitializedRef.current, 
+    console.log('🔍 Resume logic useEffect triggered:', {
+      resumeInitialized: resumeInitializedRef.current,
       isInitialLoad,
       projectId: project?.id || (project as any)?._id,
       userId: currentUser?.id || (currentUser as any)?._id,
       hasProject: !!project,
       hasUser: !!currentUser
     });
-    
+
     // Check conditions
     if (resumeInitializedRef.current) {
       console.log('⏭️ Resume logic skipped: already initialized');
       return;
     }
-    
+
     if (!isInitialLoad) {
       console.log('⏭️ Resume logic skipped: isInitialLoad is false');
       return;
     }
-    
+
     if (!project || (!project.id && !(project as any)._id)) {
       console.log('⏭️ Resume logic skipped: project is missing or has no id');
       return;
     }
-    
+
     if (!currentUser || (!currentUser.id && !(currentUser as any)._id)) {
       console.log('⏭️ Resume logic skipped: currentUser is missing or has no id');
       return;
     }
-    
+
     console.log('🚀 Starting resume logic...');
     const resumeEvaluation = async () => {
       try {
         setLoading(true);
         resumeInitializedRef.current = true;
         console.log('📡 Resume logic: Fetching data...');
-        
+
         const projectId = project.id || (project as any)._id;
         const userId = currentUser.id || (currentUser as any)._id;
         const role = currentUser.role || 'any';
-        
+
         // Step 1: Fetch projectassignments to get assigned questionnaires
         let assignedQuestionnaires: string[] = [];
         try {
@@ -302,7 +333,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           );
           if (assignmentResponse.ok) {
             const assignments = await assignmentResponse.json();
-            const assignment = assignments.find((a: any) => 
+            const assignment = assignments.find((a: any) =>
               String(a.projectId) === String(projectId)
             );
             if (assignment && assignment.questionnaires && Array.isArray(assignment.questionnaires)) {
@@ -316,17 +347,17 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         } catch (error) {
           console.error('Error fetching project assignments:', error);
         }
-        
+
         // Fallback: if no assignments found, use role-based logic
         if (assignedQuestionnaires.length === 0) {
           const roleQuestionnaireKey = getQuestionnaireKeyForRole(role);
-          assignedQuestionnaires = roleQuestionnaireKey !== 'general-v1' 
+          assignedQuestionnaires = roleQuestionnaireKey !== 'general-v1'
             ? ['general-v1', roleQuestionnaireKey]
             : ['general-v1'];
         }
-        
+
         console.log('📋 Assigned questionnaires:', assignedQuestionnaires);
-        
+
         // Step 2: Fetch responses for all assigned questionnaires
         const responsePromises = assignedQuestionnaires.map(async (questionnaireKey) => {
           try {
@@ -343,9 +374,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
             return { questionnaireKey, response: null };
           }
         });
-        
+
         const responses = await Promise.all(responsePromises);
-        
+
         // Step 3: Fetch questions for each questionnaire to understand order
         const questionsByQuestionnaire: Record<string, any[]> = {};
         const allLoadedQuestions: Question[] = [];
@@ -359,7 +390,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
               // Sort by order field
               questions.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
               questionsByQuestionnaire[questionnaireKey] = questions;
-              
+
               // Convert backend questions to frontend Question format
               const stage = getStageForQuestionnaire(questionnaireKey);
               questions.forEach((q: any) => {
@@ -369,9 +400,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   code: q.code,
                   text: typeof q.text === 'object' ? (q.text.en || q.text.tr || '') : q.text || '',
                   stage: stage,
-                  type: q.answerType === 'single_choice' ? 'radio' : 
-                        q.answerType === 'multi_choice' ? 'checkbox' :
-                        q.answerType === 'open_text' ? 'text' :
+                  type: q.answerType === 'single_choice' ? 'radio' :
+                    q.answerType === 'multi_choice' ? 'checkbox' :
+                      q.answerType === 'open_text' ? 'text' :
                         q.answerType === 'numeric' ? 'text' : 'text', // numeric maps to text for now
                   required: q.required !== false,
                   options: q.options ? q.options.map((opt: any) => ({
@@ -389,23 +420,23 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           }
         });
         await Promise.all(questionsPromises);
-        
+
         // Set loaded questions for frontend use
         setLoadedQuestions(allLoadedQuestions);
-        
+
         // Step 4: Determine which questionnaire to open (first unfinished)
         let resumeQuestionnaireKey: string | null = null;
         let resumeQuestionIndex: number = 0;
         let resumeStage: StageKey = 'set-up';
-        
+
         for (const questionnaireKey of assignedQuestionnaires) {
           const response = responses.find(r => r.questionnaireKey === questionnaireKey);
           const questions = questionsByQuestionnaire[questionnaireKey] || [];
-          
+
           // Check if questionnaire is unfinished
           const stage = getStageForQuestionnaire(questionnaireKey);
-          const isUnfinished = !response || 
-            !response.response || 
+          const isUnfinished = !response ||
+            !response.response ||
             response.response.status !== 'submitted' ||
             (response.response.answers && response.response.answers.some((ans: any) => {
               const answerUnanswered = isAnswerUnanswered(ans.answer);
@@ -417,17 +448,17 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
               }
               return answerUnanswered;
             }));
-          
+
           if (isUnfinished) {
             resumeQuestionnaireKey = questionnaireKey;
             resumeStage = getStageForQuestionnaire(questionnaireKey);
-            
+
             // Step 5: Find first unanswered question index and questionCode
             // Use MongoDB response.answers array directly to check which questions are answered
             let resumeCode: string | null = null;
             const responseAnswers = response && response.response && response.response.answers ? response.response.answers : [];
             console.log(`📊 Questionnaire ${questionnaireKey}: Found ${responseAnswers.length} answers in MongoDB response`);
-            
+
             if (responseAnswers.length > 0) {
               // Create a map of questionCode to answer for quick lookup
               const answerMap = new Map<string, any>();
@@ -436,14 +467,14 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   answerMap.set(ans.questionCode, ans);
                 }
               });
-              
+
               console.log(`📊 Answer map has ${answerMap.size} entries for ${questions.length} questions`);
-              
+
               // Find first unanswered question by iterating through questions in order
               for (let i = 0; i < questions.length; i++) {
                 const question = questions[i];
                 const answer = answerMap.get(question.code);
-                
+
                 const answerUnanswered = !answer || isAnswerUnanswered(answer.answer);
                 // For assess stage, also check if risk score is missing
                 let needsResume = answerUnanswered;
@@ -451,7 +482,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   // Answer exists, but check if score is missing (undefined or null, but 0 is valid)
                   needsResume = answer.score === undefined || answer.score === null;
                 }
-                
+
                 if (needsResume) {
                   resumeQuestionIndex = i;
                   resumeCode = question.code;
@@ -459,7 +490,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   break;
                 }
               }
-              
+
               // If all questions are answered, go to last question
               if (resumeCode === null && questions.length > 0) {
                 console.log(`✅ All questions appear to be answered, going to last question`);
@@ -474,14 +505,14 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 resumeCode = questions[0].code;
               }
             }
-            
+
             console.log(`🎯 Resume position: index=${resumeQuestionIndex}, code=${resumeCode}`);
             setResumeQuestionCode(resumeCode);
-            
+
             break; // Found first unfinished questionnaire, stop searching
           }
         }
-        
+
         // If all questionnaires are finished, use the last one
         if (!resumeQuestionnaireKey && assignedQuestionnaires.length > 0) {
           resumeQuestionnaireKey = assignedQuestionnaires[assignedQuestionnaires.length - 1];
@@ -492,32 +523,32 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
             setResumeQuestionCode(questions[questions.length - 1].code);
           }
         }
-        
+
         // Step 6: Load all answers into state using loadedQuestions
         const loadedAnswers: Record<string, any> = {};
         const loadedPriorities: Record<string, RiskLevel> = {};
         const loadedRiskScores: Record<string, 0 | 1 | 2 | 3 | 4> = {};
-        
+
         responses.forEach(({ questionnaireKey, response }) => {
           if (response && response.answers && Array.isArray(response.answers)) {
             console.log(`📝 Loading ${response.answers.length} answers from ${questionnaireKey} response`);
             response.answers.forEach((responseAnswer: any) => {
               // Try to find question by questionCode first, then by questionId
               let question: Question | null = null;
-              
+
               if (responseAnswer.questionCode) {
-                question = allLoadedQuestions.find(q => 
+                question = allLoadedQuestions.find(q =>
                   q.code === responseAnswer.questionCode
                 ) || null;
                 if (question) {
                   console.log(`✅ Found question by code: ${responseAnswer.questionCode}`);
                 }
               }
-              
+
               // If not found by code, try by questionId
               if (!question && responseAnswer.questionId) {
                 const questionIdStr = String(responseAnswer.questionId._id || responseAnswer.questionId);
-                question = allLoadedQuestions.find(q => 
+                question = allLoadedQuestions.find(q =>
                   (q._id && String(q._id) === questionIdStr) ||
                   (q.id === questionIdStr)
                 ) || null;
@@ -525,22 +556,22 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   console.log(`✅ Found question by ID: ${questionIdStr} -> code: ${question.code}`);
                 }
               }
-              
+
               // If still not found, try to find by any matching identifier
               if (!question) {
                 // Try to find by questionCode in the answer (might be stored differently)
-                const possibleCode = responseAnswer.questionCode || 
-                                   (responseAnswer.questionId?.code) ||
-                                   (responseAnswer.questionId?._id ? String(responseAnswer.questionId._id) : null);
+                const possibleCode = responseAnswer.questionCode ||
+                  (responseAnswer.questionId?.code) ||
+                  (responseAnswer.questionId?._id ? String(responseAnswer.questionId._id) : null);
                 if (possibleCode) {
-                  question = allLoadedQuestions.find(q => 
+                  question = allLoadedQuestions.find(q =>
                     q.code === possibleCode ||
                     q.id === possibleCode ||
                     (q._id && String(q._id) === possibleCode)
                   ) || null;
                 }
               }
-              
+
               if (!question) {
                 console.warn(`⚠️ Question not found for answer:`, {
                   questionCode: responseAnswer.questionCode,
@@ -549,49 +580,75 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 });
                 return;
               }
-              
+
               const questionKey = question.id;
               const mapped = mapResponseAnswerToLocalState(responseAnswer);
-              
+
               console.log(`💾 Mapping answer for question ${question.code} (key: ${questionKey}):`, {
                 hasAnswer: mapped.answer !== null && mapped.answer !== undefined && mapped.answer !== '',
                 hasRiskScore: mapped.riskScore !== undefined,
                 answerValue: mapped.answer
               });
-              
+
               if (mapped.answer !== null && mapped.answer !== undefined && mapped.answer !== '') {
+                // Store under all possible keys for reliable lookup
                 loadedAnswers[questionKey] = mapped.answer;
+                if (question.code) {
+                  loadedAnswers[question.code] = mapped.answer;
+                }
+                if (question._id) {
+                  loadedAnswers[String(question._id)] = mapped.answer;
+                }
               }
-              
+
               if (mapped.riskScore !== undefined) {
                 loadedRiskScores[questionKey] = mapped.riskScore;
+                if (question.code) {
+                  loadedRiskScores[question.code] = mapped.riskScore;
+                }
+                if (question._id) {
+                  loadedRiskScores[String(question._id)] = mapped.riskScore;
+                }
               }
             });
           } else {
             console.log(`⚠️ No answers found in response for ${questionnaireKey}`);
           }
         });
-        
+
         console.log(`📊 Loaded ${Object.keys(loadedAnswers).length} answers, ${Object.keys(loadedRiskScores).length} risk scores`);
         
+        // DEBUG: Show sample of loaded answers
+        if (Object.keys(loadedAnswers).length > 0) {
+          const sampleKeys = Object.keys(loadedAnswers).slice(0, 5);
+          console.log('📝 Sample loaded answers:', sampleKeys.map(key => ({
+            key,
+            value: loadedAnswers[key]
+          })));
+        }
+
         // Update state
         if (Object.keys(loadedAnswers).length > 0 || Object.keys(loadedRiskScores).length > 0) {
-          setAnswers(prev => ({ ...prev, ...loadedAnswers }));
+          setAnswers(prev => {
+            const updated = { ...prev, ...loadedAnswers };
+            console.log(`✅ Answers state updated. Total keys: ${Object.keys(updated).length}`);
+            return updated;
+          });
           setQuestionPriorities(prev => ({ ...prev, ...loadedPriorities }));
           setRiskScores(prev => ({ ...prev, ...loadedRiskScores }));
         }
-        
+
         // Step 7: Calculate resume position BEFORE setting state
         let finalResumeIndex = 0;
         if (resumeQuestionnaireKey && resumeQuestionCode && allLoadedQuestions.length > 0) {
           // Filter questions by stage to get the correct index
           const stageQuestions = allLoadedQuestions.filter(q => q.stage === resumeStage);
-          const resumeIndexInStage = stageQuestions.findIndex(q => 
-            q.code === resumeQuestionCode || 
+          const resumeIndexInStage = stageQuestions.findIndex(q =>
+            q.code === resumeQuestionCode ||
             q.id === resumeQuestionCode ||
             (q._id && String(q._id) === resumeQuestionCode)
           );
-          
+
           if (resumeIndexInStage !== -1) {
             finalResumeIndex = resumeIndexInStage;
             console.log(`✅ Resuming at questionnaire: ${resumeQuestionnaireKey}, stage: ${resumeStage}, question code: ${resumeQuestionCode}`);
@@ -605,7 +662,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           console.log(`⚠️ Questions not loaded yet, using backend index: ${resumeQuestionIndex}`);
           finalResumeIndex = resumeQuestionIndex;
         }
-        
+
         // Set all state updates together
         setLoadedQuestions(allLoadedQuestions);
         if (resumeQuestionnaireKey && resumeQuestionCode) {
@@ -613,11 +670,11 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           // Keep resumeQuestionCode so useEffect can find the index
           // useEffect will clear it after using
         }
-        
+
         setHasLoadedResponses(true);
         setIsInitialLoad(false);
         setResumeComplete(true);
-        
+
       } catch (error) {
         console.error("Error in resume logic:", error);
         setIsInitialLoad(false);
@@ -626,7 +683,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         setLoading(false);
       }
     };
-    
+
     resumeEvaluation();
   }, [project, currentUser]); // Use full objects to ensure useEffect runs when component mounts
 
@@ -837,24 +894,24 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       if (!resumeQuestionCode) console.log('⏳ Waiting for resume question code...');
       return;
     }
-    
+
     // Wait for currentQuestions to be updated with loadedQuestions
     if (currentQuestions.length === 0) {
       console.log('⏳ Waiting for currentQuestions to be populated...');
       return;
     }
-    
+
     console.log(`🔍 Looking for resume question code: ${resumeQuestionCode}`);
     console.log(`🔍 Current questions (${currentQuestions.length}):`, currentQuestions.map(q => ({ code: q.code, id: q.id, stage: q.stage })));
     console.log(`🔍 Current stage: ${currentStage}`);
-    
+
     // Find resume question in currentQuestions
-    const resumeIndex = currentQuestions.findIndex(q => 
-      q.code === resumeQuestionCode || 
+    const resumeIndex = currentQuestions.findIndex(q =>
+      q.code === resumeQuestionCode ||
       q.id === resumeQuestionCode ||
       (q._id && String(q._id) === resumeQuestionCode)
     );
-    
+
     if (resumeIndex !== -1) {
       console.log(`✅ Resuming at question code: ${resumeQuestionCode}, index: ${resumeIndex} (out of ${currentQuestions.length} questions in ${currentStage} stage)`);
       setCurrentQuestionIndex(resumeIndex);
@@ -874,25 +931,25 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     if (isInitialLoad || loading || currentQuestions.length === 0 || !resumeComplete) {
       return;
     }
-    
+
     // Skip if resume logic already set the position (hasLoadedResponses = true means resume logic ran)
     if (hasLoadedResponses) {
       console.log('⏭️ Skipping fallback logic - resume logic already set the position');
       return;
     }
-    
+
     // Eğer hiç cevap yoksa ilk sorudan başla (fallback only)
     if (Object.keys(answers).length === 0) {
       console.log('📝 No answers found, starting at first question (fallback)');
       setCurrentQuestionIndex(0);
       return;
     }
-    
+
     // Debug: Soru ID'lerini ve cevapları kontrol et
     console.log('Current Questions:', currentQuestions.map(q => ({ id: q.id, code: q.code || undefined, _id: q._id || undefined })));
     console.log('Answers keys:', Object.keys(answers));
     console.log('Question Priorities keys:', Object.keys(questionPriorities));
-    
+
     // Cevaplanmamış ilk soruyu bul
     let firstUnansweredIndex = -1;
     for (let i = 0; i < currentQuestions.length; i++) {
@@ -907,45 +964,45 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         question.code ? String(question.code) : undefined,
         question._id ? String(question._id) : undefined
       ].filter((id): id is string => id !== undefined && id !== null);
-      
+
       let hasAnswer = false;
       let hasPriority = false;
       let hasRiskScore = false;
-      
+
       // Her olası ID formatını kontrol et
       for (const id of possibleIds) {
         const answerKey = String(id);
         // Answers objesindeki tüm key'leri kontrol et (case-insensitive)
-        const matchingKey = Object.keys(answers).find(key => 
+        const matchingKey = Object.keys(answers).find(key =>
           String(key).toLowerCase() === answerKey.toLowerCase() ||
           String(key) === answerKey
         );
-        
+
         if (matchingKey && answers[matchingKey] !== undefined && answers[matchingKey] !== null && answers[matchingKey] !== '') {
           hasAnswer = true;
         }
-        
-        const priorityKey = Object.keys(questionPriorities).find(key => 
+
+        const priorityKey = Object.keys(questionPriorities).find(key =>
           String(key).toLowerCase() === answerKey.toLowerCase() ||
           String(key) === answerKey
         );
-        
+
         if (priorityKey && questionPriorities[priorityKey] !== undefined) {
           hasPriority = true;
         }
 
-        const riskScoreKey = Object.keys(riskScores).find(key => 
+        const riskScoreKey = Object.keys(riskScores).find(key =>
           String(key).toLowerCase() === answerKey.toLowerCase() ||
           String(key) === answerKey
         );
-        
+
         if (riskScoreKey && riskScores[riskScoreKey] !== undefined && riskScores[riskScoreKey] !== null) {
           hasRiskScore = true;
         }
       }
-      
+
       console.log(`Question ${i} (${question.id || question.code || question._id}): hasAnswer=${hasAnswer}, hasPriority=${hasPriority}, hasRiskScore=${hasRiskScore}`);
-      
+
       // Set-up stage'inde sadece answer yeterli, assess'te hem answer, hem priority, hem risk score gerekli
       if (currentStage === 'set-up') {
         if (!hasAnswer) {
@@ -961,13 +1018,13 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         }
       }
     }
-    
+
     // Eğer cevaplanmamış soru bulunamadıysa (tüm sorular cevaplanmış) son soruya git
     if (firstUnansweredIndex === -1) {
       firstUnansweredIndex = currentQuestions.length > 0 ? currentQuestions.length - 1 : 0;
       console.log('All questions answered, going to last question');
     }
-    
+
     console.log(`Setting currentQuestionIndex to ${firstUnansweredIndex}`);
     setCurrentQuestionIndex(firstUnansweredIndex);
   }, [isInitialLoad, loading, answers, questionPriorities, riskScores, currentQuestions, currentStage, resumeQuestionCode, resumeComplete, hasLoadedResponses, loadedQuestions]);
@@ -998,7 +1055,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   // Backend'den progress çek
   useEffect(() => {
     let mounted = true;
-    
+
     const fetchProgress = async () => {
       try {
         const progress = await fetchUserProgress(project, currentUser);
@@ -1013,13 +1070,13 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         }
       }
     };
-    
+
     // Initial fetch
     fetchProgress();
-    
+
     // Cevaplar değiştiğinde veya kaydetme işlemi sonrasında progress'i güncelle
     const interval = setInterval(fetchProgress, 2000); // Her 2 saniyede bir güncelle
-    
+
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -1034,53 +1091,104 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const saveEvaluation = useCallback(async (status: 'draft' | 'completed' = 'draft', silent: boolean = false) => {
     setSaving(true);
     try {
-      // Log which questions are being saved
-      const answerKeys = Object.keys(answers);
-      console.log(`💾 Saving ${answerKeys.length} answers:`, {
-        answerKeys: answerKeys.slice(0, 20),
-        currentStage,
-        currentQuestionIndex,
-        activeQuestion: activeQuestion ? { id: activeQuestion.id, code: activeQuestion.code, stage: activeQuestion.stage } : null
-      });
+      const projectId = project.id || (project as any)._id;
+      const userId = currentUser.id || (currentUser as any)._id;
+
+      // Group answers by questionnaire using loadedQuestions
+      const answersByQuestionnaire: Record<string, any[]> = {};
       
-      const response = await fetch(api('/api/evaluations'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id || (project as any)._id,
-          userId: currentUser.id || (currentUser as any)._id,
-          stage: currentStage,
-          answers: answers,
-          questionPriorities: questionPriorities, // Her soru için önem derecelerini kaydet
-          riskScores: riskScores, // Risk skorlarını kaydet
-          riskLevel: riskLevel,
-          generalRisks: generalRisks, // Genel riskleri kaydet
-          status: status
-        })
+      loadedQuestions.forEach(question => {
+        // Determine questionnaireKey from the question's stage
+        let questionnaireKey: string;
+        if (question.stage === 'set-up') {
+          questionnaireKey = 'general-v1';
+        } else {
+          // Role-specific questionnaire
+          questionnaireKey = getQuestionnaireKeyForRole(currentUser.role);
+        }
+        
+        if (!answersByQuestionnaire[questionnaireKey]) {
+          answersByQuestionnaire[questionnaireKey] = [];
+        }
+        
+        // Check for answer using multiple keys
+        const answerValue = getAnswerValue(question);
+        const riskScore = riskScores[question.id] !== undefined ? riskScores[question.id] : 
+                         (riskScores[question.code || ''] !== undefined ? riskScores[question.code || ''] : undefined);
+        
+        // Build answer object in backend format
+        const answerObj: any = {
+          questionCode: question.code,
+          questionId: question._id || question.id,
+          answer: {}
+        };
+        
+        // Map answer based on question type
+        if (question.type === 'radio' || question.type === 'select' || question.type === 'multiple-choice') {
+          if (answerValue) {
+            answerObj.answer.choiceKey = answerValue;
+          }
+        } else if (question.type === 'checkbox') {
+          if (Array.isArray(answerValue) && answerValue.length > 0) {
+            answerObj.answer.multiChoiceKeys = answerValue;
+          }
+        } else if (question.type === 'text') {
+          if (answerValue) {
+            answerObj.answer.text = answerValue;
+          }
+        }
+        
+        // Add risk score if exists
+        if (riskScore !== undefined) {
+          answerObj.score = riskScore;
+        }
+        
+        // Only add if there's an actual answer
+        if (Object.keys(answerObj.answer).length > 0) {
+          answersByQuestionnaire[questionnaireKey].push(answerObj);
+        }
       });
 
-      if (!response.ok) {
-        let errorMessage = 'Kaydetme başarısız';
+      // Save each questionnaire separately using new API
+      const savePromises = Object.entries(answersByQuestionnaire).map(async ([questionnaireKey, questionnaireAnswers]) => {
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.details || errorMessage;
-          console.error('❌ Save error from backend:', errorData);
-        } catch {
-          const errorText = await response.text();
-          errorMessage = errorText || errorMessage;
+          const response = await fetch(api('/api/evaluations/responses/save'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              userId,
+              questionnaireKey,
+              answers: questionnaireAnswers
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to save' }));
+            throw new Error(`${questionnaireKey}: ${errorData.error}`);
+          }
+
+          await response.json();
+          return { success: true, questionnaireKey };
+        } catch (error: any) {
+          console.error(`❌ [EvaluationForm] Failed to save ${questionnaireKey}:`, error);
+          return { success: false, questionnaireKey, error: error.message };
         }
-        throw new Error(errorMessage);
+      });
+
+      const results = await Promise.all(savePromises);
+      const failures = results.filter(r => !r.success);
+      
+      if (failures.length > 0) {
+        throw new Error(`Failed to save: ${failures.map(f => f.questionnaireKey).join(', ')}`);
       }
-      
-      const savedData = await response.json();
-      console.log('✅ Saved successfully:', savedData);
-      
+
       if (status === 'draft' && !silent) {
         alert('✅ Draft saved successfully to Database!');
       }
       return true;
     } catch (error: any) {
-      console.error('❌ Error saving evaluation:', error);
+      console.error('❌ [EvaluationForm] Error saving evaluation:', error);
       if (!silent) {
         const errorMsg = error?.message || error?.error || 'Error saving data. Please check your connection.';
         alert(`❌ Error saving data:\n\n${errorMsg}\n\nPlease check the console for more details.`);
@@ -1089,7 +1197,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     } finally {
       setSaving(false);
     }
-  }, [project.id, currentUser.id, currentStage, answers, questionPriorities, riskScores, riskLevel, generalRisks]);
+  }, [project.id, currentUser.id, currentStage, answers, questionPriorities, riskScores, riskLevel, generalRisks, loadedQuestions, currentUser.role, getAnswerValue]);
 
   // Debounced auto-save to MongoDB
   useEffect(() => {
@@ -1146,7 +1254,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     }
 
     // Zorunluluk Kontrolü
-    if (activeQuestion && activeQuestion.required && !answers[activeQuestion.id]) {
+    if (activeQuestion && activeQuestion.required && !getAnswerValue(activeQuestion)) {
       alert("Please answer this required question before proceeding.");
       return;
     }
@@ -1196,7 +1304,22 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   };
 
   const handleAnswerChange = (questionId: string, answer: any) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: answer }));
+    // Store answer under multiple keys for reliable lookup
+    // Find the current question to get all possible keys
+    const currentQuestion = currentQuestions[currentQuestionIndex];
+    const updatedAnswers: Record<string, any> = { [questionId]: answer };
+    
+    // If we have the question object, also store under code and _id
+    if (currentQuestion) {
+      if (currentQuestion.code) {
+        updatedAnswers[currentQuestion.code] = answer;
+      }
+      if (currentQuestion._id) {
+        updatedAnswers[String(currentQuestion._id)] = answer;
+      }
+    }
+    
+    setAnswers((prev) => ({ ...prev, ...updatedAnswers }));
     setIsDraft(true);
   };
 
@@ -1245,7 +1368,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   const handleVoteTension = async (tensionId: string, voteType: 'agree' | 'disagree') => {
     setVotingTensionId(tensionId);
     const userId = currentUser.id || (currentUser as any)._id;
-    
+
     // Mevcut tension'ı bul ve state'i kaydet (hata durumunda geri almak için)
     const currentTension = tensions.find(t => t.id === tensionId);
     if (!currentTension) {
@@ -1273,7 +1396,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       } else if (currentVote === 'disagree') {
         newDisagree = Math.max(0, newDisagree - 1);
       }
-      
+
       if (voteType === 'agree') {
         newAgree += 1;
       } else {
@@ -1361,7 +1484,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
   const handleDeleteTension = async (tensionId: string) => {
     if (!confirm('Are you sure you want to delete this tension?')) return;
-    
+
     try {
       const response = await fetch(api(`/api/tensions/${tensionId}`), {
         method: 'DELETE'
@@ -1437,10 +1560,10 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
   const handleTensionSubmit = async (e: any) => {
     e.preventDefault();
-    
+
     if (principle1 && principle2 && claim && argument) {
       let fileData: string | null = null;
-      
+
       if (selectedFile) {
         try {
           fileData = await convertBase64(selectedFile);
@@ -1471,7 +1594,10 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   // Review screen'den resolve stage'ine geçiş
   const handleFinishAssess = async () => {
     // Enforce same validation as normal flow: all required answers + importance must be set
-    const missingRequired = assessQuestions.filter((q) => q.required && (!answers[q.id] || answers[q.id] === ''));
+    const missingRequired = assessQuestions.filter((q) => {
+      const answerValue = getAnswerValue(q);
+      return q.required && (!answerValue || answerValue === '');
+    });
     const missingImportance = assessQuestions.filter((q) => !questionPriorities[q.id]);
 
     if (missingRequired.length > 0 || missingImportance.length > 0) {
@@ -1479,8 +1605,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       const idx = first ? assessQuestions.findIndex((q) => q.id === first.id) : 0;
       alert(
         `Please complete all Assess questions before finishing.\n` +
-          `Missing answers: ${missingRequired.length}\n` +
-          `Missing importance: ${missingImportance.length}`
+        `Missing answers: ${missingRequired.length}\n` +
+        `Missing importance: ${missingImportance.length}`
       );
       setShowReviewScreen(false);
       setCurrentStage('assess');
@@ -1502,7 +1628,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
   const handleSubmitForm = async () => {
     const requiredQuestions = currentQuestions.filter((q) => q.required);
-    const missingAnswers = requiredQuestions.filter((q) => !answers[q.id]);
+    const missingAnswers = requiredQuestions.filter((q) => !getAnswerValue(q));
 
     if (missingAnswers.length > 0) {
       alert(`Please answer all required questions (${missingAnswers.length} missing).`);
@@ -1512,8 +1638,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     // Son kez kaydet ve status'u completed yap
     const success = await saveEvaluation('completed');
     if (success) {
-        alert('Evaluation submitted successfully and Project Status updated!');
-        onSubmit();
+      alert('Evaluation submitted successfully and Project Status updated!');
+      onSubmit();
     }
   };
 
@@ -1522,7 +1648,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     // This provides instant visual feedback while user is answering
     const roleQuestions = getQuestionsByRole(roleKey);
     const allRoleQuestions = [...roleQuestions, ...customQuestions]; // Tüm stage'lerdeki sorular
-    
+
     let localProgress = 0;
     if (allRoleQuestions.length > 0) {
       // Count answered questions across ALL stages (set-up, assess, resolve)
@@ -1530,7 +1656,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
       allRoleQuestions.forEach(question => {
         const questionId = question.id;
         const hasAnswer = answers[questionId] !== undefined && answers[questionId] !== null && answers[questionId] !== '';
-        
+
         // For assess stage, also check if priority/risk score is set
         if (question.stage === 'assess') {
           const hasPriority = questionPriorities[questionId] !== undefined;
@@ -1545,16 +1671,16 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           }
         }
       });
-      
+
       localProgress = Math.round((answeredCount / allRoleQuestions.length) * 100);
     }
-    
+
     // If backend progress hasn't been fetched yet, use local progress for immediate feedback
     // This prevents showing 0% while waiting for the first backend response (up to 2 seconds delay)
     if (!hasFetchedProgress) {
       return localProgress;
     }
-    
+
     // Once backend progress is available, use the maximum of backend and local progress
     // Backend progress is more accurate as it covers all questions (general + role-specific)
     // Local progress provides immediate feedback for the current session
@@ -1576,14 +1702,14 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
   };
 
   if (loading) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-gray-50">
-              <div className="flex flex-col items-center">
-                <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-                <p className="text-gray-500">Loading evaluation data...</p>
-              </div>
-          </div>
-      )
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+          <p className="text-gray-500">Loading evaluation data...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1593,7 +1719,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <button 
+              <button
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -1607,7 +1733,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                     console.error('Error in onBack:', error);
                     // Error is logged, parent component should handle navigation
                   }
-                }} 
+                }}
                 className="flex items-center text-gray-600 hover:text-gray-900 transition-colors bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-sm font-medium"
               >
                 <ArrowLeft className="h-4 w-4 mr-1" /> Back
@@ -1618,19 +1744,18 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 </h1>
                 {/* PROJE DURUMUNU GÖSTERME DÜZELTMESİ */}
                 <div className="flex items-center gap-2 text-xs text-gray-500 font-medium uppercase tracking-wide">
-                    <span>Project: {project.title}</span>
-                    <span className="text-gray-300">|</span>
-                    <span className={`px-2 py-0.5 rounded ${
-                        project.stage === 'set-up' ? 'bg-blue-100 text-blue-700' :
-                        project.stage === 'assess' ? 'bg-yellow-100 text-yellow-700' :
+                  <span>Project: {project.title}</span>
+                  <span className="text-gray-300">|</span>
+                  <span className={`px-2 py-0.5 rounded ${project.stage === 'set-up' ? 'bg-blue-100 text-blue-700' :
+                      project.stage === 'assess' ? 'bg-yellow-100 text-yellow-700' :
                         'bg-green-100 text-green-700'
                     }`}>
-                        Global Stage: {project.stage}
-                    </span>
+                    Global Stage: {project.stage}
+                  </span>
                 </div>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-4">
               <div className="text-right">
                 <p className="text-xs text-gray-500 font-medium">Progress</p>
@@ -1645,942 +1770,929 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         {/* Stage Navigation Tabs */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-2 mb-8 flex justify-between items-center sticky top-[88px] z-40 backdrop-blur-sm bg-white/90">
           <div className="flex space-x-1 bg-gray-100/50 p-1 rounded-xl">
-             {stages.map((stage) => (
-             <button
-                 key={stage.key}
-                 onClick={() => setCurrentStage(stage.key)}
-                 className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center ${
-                 currentStage === stage.key
-                     ? 'bg-white text-gray-900 shadow-md ring-1 ring-black/5 transform scale-100'
-                     : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                 }`}
-             >
-                 <span className="mr-2 text-lg">{stage.icon}</span> {stage.label}
-             </button>
-             ))}
-         </div>
-         
-         {currentStage !== 'resolve' && currentStage !== 'set-up' && (
+            {stages.map((stage) => (
+              <button
+                key={stage.key}
+                onClick={() => setCurrentStage(stage.key)}
+                className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center ${currentStage === stage.key
+                    ? 'bg-white text-gray-900 shadow-md ring-1 ring-black/5 transform scale-100'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                  }`}
+              >
+                <span className="mr-2 text-lg">{stage.icon}</span> {stage.label}
+              </button>
+            ))}
+          </div>
+
+          {currentStage !== 'resolve' && currentStage !== 'set-up' && (
             <button
               onClick={() => setShowAddQuestion(true)}
               className="px-4 py-2 text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all flex items-center shadow-sm"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Question
             </button>
-         )}
-       </div>
+          )}
+        </div>
 
         <div className="flex-1 flex flex-col min-h-[500px]">
-            {showReviewScreen ? (
-                <div className="flex-1 flex flex-col gap-6">
-                    <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 p-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6">Review</h2>
-                        <div className="space-y-6">
-                            {/* Assess Cevapları */}
-                            <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-5">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                    <Info className="w-5 h-5 mr-2 text-blue-600" />
-                                    Assessment Answers
-                                </h3>
-                                <div className="space-y-3 max-h-96 overflow-y-auto">
-                                    {assessQuestions.map((question) => (
-                                        <div key={question.id} className="bg-white rounded-lg p-4 border border-gray-200">
-                                            <div className="text-sm font-medium text-gray-700 mb-2">{question.text}</div>
-                                            <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded">
-                                                {answers[question.id] || 'No answer provided'}
-                                            </div>
-                                            {questionPriorities[question.id] && (
-                                                <div className="mt-2">
-                                                    <span className={`text-xs px-2 py-1 rounded-full ${
-                                                        questionPriorities[question.id] === 'low' ? 'bg-green-100 text-green-700' :
-                                                        questionPriorities[question.id] === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                        'bg-red-100 text-red-700'
-                                                    }`}>
-                                                        Priority: {questionPriorities[question.id]}
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+          {showReviewScreen ? (
+            <div className="flex-1 flex flex-col gap-6">
+              <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Review</h2>
+                <div className="space-y-6">
+                  {/* Assess Cevapları */}
+                  <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-5">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <Info className="w-5 h-5 mr-2 text-blue-600" />
+                      Assessment Answers
+                    </h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {assessQuestions.map((question) => (
+                        <div key={question.id} className="bg-white rounded-lg p-4 border border-gray-200">
+                          <div className="text-sm font-medium text-gray-700 mb-2">{question.text}</div>
+                          <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded">
+                            {getAnswerValue(question) || 'No answer provided'}
+                          </div>
+                          {questionPriorities[question.id] && (
+                            <div className="mt-2">
+                              <span className={`text-xs px-2 py-1 rounded-full ${questionPriorities[question.id] === 'low' ? 'bg-green-100 text-green-700' :
+                                  questionPriorities[question.id] === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
+                                }`}>
+                                Priority: {questionPriorities[question.id]}
+                              </span>
                             </div>
-
-                            {/* Set-up Riskleri */}
-                            <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-5">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <AlertTriangle className="w-5 h-5 text-orange-600" />
-                                        <h3 className="text-lg font-semibold text-gray-900">General Risks</h3>
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setGeneralRisks([
-                                              ...generalRisks,
-                                              { id: Date.now().toString(), title: '', description: '' }
-                                            ]);
-                                            setIsDraft(true);
-                                        }}
-                                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Add Risk
-                                    </button>
-                                </div>
-                                <div className="space-y-3 max-h-80 overflow-y-auto">
-                                    {generalRisks.length === 0 ? (
-                                        <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                                            <AlertTriangle className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                                            <p className="text-sm text-gray-500 italic">No risks added yet.</p>
-                                        </div>
-                                    ) : (
-                                        generalRisks.map((risk, index) => {
-                                            const severity = risk.severity || 'medium';
-                                            const relatedQuestions = risk.relatedQuestions || [];
-                                            const isEditing = editingRiskIdReview === risk.id;
-                                            return (
-                                                <div
-                                                    key={risk.id}
-                                                    className="bg-white rounded-lg border border-gray-200 p-4 transition-colors"
-                                                    onClick={() => setEditingRiskIdReview(risk.id)}
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="flex-1 space-y-3" onClick={(e) => isEditing && e.stopPropagation()}>
-                                                            {!isEditing && (
-                                                                <div className="flex items-center justify-between">
-                                                                    <div className="text-sm font-semibold text-gray-900">
-                                                                        Risk {index + 1}: {risk.title || 'Untitled risk'}
-                                                                    </div>
-                                                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
-                                                                        severity === 'critical' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                                                        severity === 'high' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                                        severity === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                                                        'bg-green-50 text-green-700 border-green-200'
-                                                                    }`}>
-                                                                        {severity}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                            {isEditing && (
-                                                                <>
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span className="text-xs text-gray-500">Editing Risk {index + 1}</span>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setEditingRiskIdReview(null);
-                                                                            }}
-                                                                            className="text-xs text-gray-500 hover:text-gray-800"
-                                                                        >
-                                                                            Done
-                                                                        </button>
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                                                                        <input
-                                                                            type="text"
-                                                                            value={risk.title}
-                                                                            onChange={(e) => {
-                                                                                const updated = [...generalRisks];
-                                                                                updated[index].title = e.target.value;
-                                                                                setGeneralRisks(updated);
-                                                                                setIsDraft(true);
-                                                                            }}
-                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                                                            placeholder="Enter risk title..."
-                                                                        />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-                                                                        <textarea
-                                                                            value={risk.description}
-                                                                            onChange={(e) => {
-                                                                                const updated = [...generalRisks];
-                                                                                updated[index].description = e.target.value;
-                                                                                setGeneralRisks(updated);
-                                                                                setIsDraft(true);
-                                                                            }}
-                                                                            rows={2}
-                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
-                                                                            placeholder="Add description..."
-                                                                        />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
-                                                                        <select
-                                                                            value={severity}
-                                                                            onChange={(e) => {
-                                                                                const updated = [...generalRisks];
-                                                                                updated[index].severity = e.target.value as any;
-                                                                                setGeneralRisks(updated);
-                                                                                setIsDraft(true);
-                                                                            }}
-                                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                                                        >
-                                                                            {riskSeverityOptions.map(opt => (
-                                                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                                            ))}
-                                                                        </select>
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-2">Related Assess Questions (optional)</label>
-                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50/50">
-                                                                            {assessQuestions.map(q => {
-                                                                                const checked = relatedQuestions.includes(q.id);
-                                                                                return (
-                                                                                    <label key={q.id} className="flex items-start gap-2 text-sm text-gray-700">
-                                                                                        <input
-                                                                                            type="checkbox"
-                                                                                            checked={checked}
-                                                                                            onChange={(e) => {
-                                                                                                const updated = [...generalRisks];
-                                                                                                const current = new Set(updated[index].relatedQuestions || []);
-                                                                                                if (e.target.checked) current.add(q.id); else current.delete(q.id);
-                                                                                                updated[index].relatedQuestions = Array.from(current);
-                                                                                                setGeneralRisks(updated);
-                                                                                                setIsDraft(true);
-                                                                                            }}
-                                                                                            className="mt-1"
-                                                                                        />
-                                                                                        <span>{q.text}</span>
-                                                                                    </label>
-                                                                                );
-                                                                            })}
-                                                                        </div>
-                                                                    </div>
-                                                                </>
-                                                            )}
-
-                                                            {!isEditing && (
-                                                                <>
-                                                                    {risk.description && (
-                                                                        <div className="text-xs text-gray-600 mt-1">{risk.description}</div>
-                                                                    )}
-                                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                                        <span className="px-2 py-0.5 bg-gray-100 rounded-full border border-gray-200">
-                                                                            {relatedQuestions.length} related question(s)
-                                                                        </span>
-                                                                        <span className="text-gray-400">Click to edit</span>
-                                                                    </div>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setGeneralRisks(generalRisks.filter((_, i) => i !== index));
-                                                                setIsDraft(true);
-                                                            }}
-                                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                            title="Remove risk"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            </div>
+                          )}
                         </div>
+                      ))}
                     </div>
-                </div>
-            ) : currentStage === 'set-up' ? (
-                // Set-up Stage: Admin'in girdiği Project Context bilgilerini göster
-                <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 mb-24">
-                    <div className="p-8 border-b border-gray-100 bg-white">
-                        <div className="flex items-center gap-3 mb-4">
-                            <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
-                                Project Context and Scope
-                            </span>
-                        </div>
-                        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
-                            Project Information
-                        </h2>
-                        <p className="text-gray-600 mt-2">Review the project context and scope information provided by the administrator.</p>
+                  </div>
+
+                  {/* Set-up Riskleri */}
+                  <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-orange-600" />
+                        <h3 className="text-lg font-semibold text-gray-900">General Risks</h3>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setGeneralRisks([
+                            ...generalRisks,
+                            { id: Date.now().toString(), title: '', description: '' }
+                          ]);
+                          setIsDraft(true);
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Risk
+                      </button>
                     </div>
-
-                    <div className="p-8 flex-1 bg-gray-50/30 space-y-6 overflow-y-auto pb-24">
-                        {/* Project Context and Scope - Admin'in girdiği bilgiler */}
-                        {project.inspectionContext ? (
-                            <div className="space-y-6">
-                                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                                        <Info className="w-5 h-5 mr-2 text-blue-600" />
-                                        Project Context and Scope
-                                    </h3>
-                                    <div className="grid grid-cols-1 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">1. Who requested the inspection?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.requester || 'Not provided'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">2. Why carry out an inspection?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.inspectionReason || 'Not provided'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">3. For whom is the inspection relevant?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.relevantFor || 'Not provided'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">4. Is it recommended or required (mandatory inspection)?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200 capitalize">{project.inspectionContext.isMandatory || 'Not provided'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">5. What are the sufficient vs. necessary conditions that need to be analyzed?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200 whitespace-pre-wrap">{project.inspectionContext.conditionsToAnalyze || 'Not provided'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">6. How are the inspection results to be used?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.resultsUsage || 'Not provided'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">7. Will the results be shared (public) or kept private?</label>
-                                            <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200 whitespace-pre-wrap">{project.inspectionContext.resultsSharing || 'Not provided'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
-                                <p className="text-yellow-800">Project context information has not been provided yet.</p>
-                            </div>
-                        )}
-
-                        {/* Use Case Owner Information - Sadece başlık olarak */}
-                        {linkedUseCase && (
-                            <div className="bg-green-50/50 border border-green-100 rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
-                                    <Info className="w-5 h-5 mr-2 text-green-600" />
-                                    Use Case Owner Information
-                                </h3>
-                                <p className="text-sm text-gray-600 italic">This section will be available soon.</p>
-                            </div>
-                        )}
-
-                        {/* General Risks Section */}
-                        <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <AlertTriangle className="w-5 h-5 text-orange-600" />
-                                    <h3 className="text-lg font-semibold text-gray-900">General Risks</h3>
-                                </div>
-                                {generalRisks.length > 0 && (
-                                    <button
-                                        onClick={() => {
-                                            setGeneralRisks([
-                                              ...generalRisks,
-                                              { id: Date.now().toString(), title: '', description: '' }
-                                            ]);
-                                        }}
-                                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Add Risk
-                                    </button>
-                                )}
-                            </div>
-                            
-                            <div className="space-y-4">
-                                {generalRisks.length === 0 ? (
-                                    <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                                        <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-sm text-gray-500 italic mb-6">No risks added yet. Click "Add Risk" to start.</p>
-                                        <button
-                                            onClick={() => {
-                                                setGeneralRisks([
-                                                  ...generalRisks,
-                                                  { id: Date.now().toString(), title: '', description: '' }
-                                                ]);
-                                            }}
-                                            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
-                                        >
-                                            <Plus className="w-4 h-4" />
-                                            Add Risk
-                                        </button>
-                                    </div>
-                                ) : (
-                                            generalRisks.map((risk, index) => {
-                                                const severity = risk.severity || 'medium';
-                                                const relatedQuestions = risk.relatedQuestions || [];
-                                                return (
-                                                    <div key={risk.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                                                        <div className="flex items-start gap-3">
-                                                            <div className="flex-1 space-y-3">
-                                                                <div>
-                                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                                        Risk {index + 1} Title *
-                                                                    </label>
-                                                                    <input
-                                                                        type="text"
-                                                                        value={risk.title}
-                                                                        onChange={(e) => {
-                                                                            const updated = [...generalRisks];
-                                                                            updated[index].title = e.target.value;
-                                                                            setGeneralRisks(updated);
-                                                                            setIsDraft(true);
-                                                                        }}
-                                                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                                                        placeholder="Enter risk title..."
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                                        Description (Optional)
-                                                                    </label>
-                                                                    <textarea
-                                                                        value={risk.description}
-                                                                        onChange={(e) => {
-                                                                            const updated = [...generalRisks];
-                                                                            updated[index].description = e.target.value;
-                                                                            setGeneralRisks(updated);
-                                                                            setIsDraft(true);
-                                                                        }}
-                                                                        rows={2}
-                                                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
-                                                                        placeholder="Enter risk description (optional)..."
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setGeneralRisks(generalRisks.filter((_, i) => i !== index));
-                                                                    setIsDraft(true);
-                                                                }}
-                                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title="Remove risk"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                            </div>
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {generalRisks.length === 0 ? (
+                        <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                          <AlertTriangle className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                          <p className="text-sm text-gray-500 italic">No risks added yet.</p>
                         </div>
-                    </div>
-                </div>
-            ) : activeQuestion ? (
-                <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
-                    {/* Mobile: open question list */}
-                    {showQuestionNav && (
-                        <div className="fixed inset-0 z-50 md:hidden">
-                            <div className="absolute inset-0 bg-black/30" onClick={() => setShowQuestionNav(false)} />
-                            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-white shadow-2xl border-r border-gray-200 flex flex-col">
-                                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                                    <div className="font-semibold text-gray-900">Questions</div>
-                                    <button
-                                        type="button"
-                                        className="p-2 rounded-lg hover:bg-gray-100"
-                                        onClick={() => setShowQuestionNav(false)}
-                                        aria-label="Close questions"
-                                    >
-                                        <X className="w-5 h-5 text-gray-600" />
-                                    </button>
-                                </div>
-                                <div className="p-3 overflow-y-auto">
-                                    <div className="space-y-1">
-                                        {currentQuestions.map((q, idx) => {
-                                            const active = idx === currentQuestionIndex;
-                                            const done = isQuestionAnswered(q.id);
-                                            return (
-                                                <button
-                                                    key={q.id || idx}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setCurrentQuestionIndex(idx);
-                                                        setShowQuestionNav(false);
-                                                    }}
-                                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                                                        active
-                                                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                                            : 'text-gray-700 hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    <span className="font-medium">Q{idx + 1}</span>
-                                                    {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Desktop: left question list */}
-                    <div className="hidden md:block md:w-56 lg:w-64 shrink-0">
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-[180px] max-h-[calc(100vh-200px)] overflow-y-auto">
-                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pb-2">
-                                Questions
-                            </div>
-                            <div className="space-y-1">
-                                {currentQuestions.map((q, idx) => {
-                                    const active = idx === currentQuestionIndex;
-                                    const done = isQuestionAnswered(q.id);
-                                    return (
-                                        <button
-                                            key={q.id || idx}
-                                            type="button"
-                                            onClick={() => setCurrentQuestionIndex(idx)}
-                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                                                active
-                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                                    : 'text-gray-700 hover:bg-gray-50'
-                                            }`}
-                                        >
-                                            <span className="font-medium">Q{idx + 1}</span>
-                                            {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right: Active question card */}
-                    <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0 mb-24">
-                    <div className="p-8 border-b border-gray-100 bg-white">
-                        <div className="flex flex-wrap items-center gap-3 mb-4">
-                            <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
-                                Question {currentQuestionIndex + 1} of {currentQuestions.length}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => setShowQuestionNav(true)}
-                                className="px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+                      ) : (
+                        generalRisks.map((risk, index) => {
+                          const severity = risk.severity || 'medium';
+                          const relatedQuestions = risk.relatedQuestions || [];
+                          const isEditing = editingRiskIdReview === risk.id;
+                          return (
+                            <div
+                              key={risk.id}
+                              className="bg-white rounded-lg border border-gray-200 p-4 transition-colors"
+                              onClick={() => setEditingRiskIdReview(risk.id)}
                             >
-                                Q list
-                            </button>
-                            {activeQuestion.required && (
-                                <span className="px-3 py-1 bg-red-50 text-red-600 text-sm font-medium rounded-full border border-red-100">
-                                    Required
-                                </span>
-                            )}
-                        </div>
-                        
-                        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
-                            {activeQuestion.text}
-                        </h2>
-
-                        {activeQuestion.description && (
-                            <div className="flex items-start gap-3 mt-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
-                                <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                                <p className="text-blue-900 text-base leading-relaxed">
-                                    {activeQuestion.description}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="p-8 flex-1 bg-gray-50/30">
-                        {/* INPUT TYPES (Same as before) */}
-                         {(activeQuestion.type === 'select' || activeQuestion.type === 'multiple-choice' || activeQuestion.type === 'radio') && (
-                            <div className="space-y-3 max-w-2xl">
-                                {activeQuestion.options?.map((option) => {
-                                    const optionValue = getOptionValue(option);
-                                    const optionLabel = getOptionLabel(option);
-                                    const isSelected = answers[activeQuestion.id] === optionValue;
-                                    return (
-                                        <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                                            isSelected 
-                                            ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
-                                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                              <div className="flex items-start gap-3">
+                                <div className="flex-1 space-y-3" onClick={(e) => isEditing && e.stopPropagation()}>
+                                  {!isEditing && (
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-sm font-semibold text-gray-900">
+                                        Risk {index + 1}: {risk.title || 'Untitled risk'}
+                                      </div>
+                                      <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${severity === 'critical' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                          severity === 'high' ? 'bg-red-50 text-red-700 border-red-200' :
+                                            severity === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                              'bg-green-50 text-green-700 border-green-200'
                                         }`}>
-                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${
-                                                 isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
-                                            }`}>
-                                                <div className="w-2 h-2 rounded-full bg-white" />
-                                            </div>
-                                            <input
-                                            type="radio"
-                                            name={activeQuestion.id}
-                                            value={optionValue}
-                                            checked={isSelected}
-                                            onChange={(e) => handleAnswerChange(activeQuestion.id, e.target.value)}
-                                            className="hidden"
-                                            />
-                                            <span className={`text-lg font-medium transition-colors ${
-                                                isSelected ? 'text-blue-900' : 'text-gray-700'
-                                            }`}>{optionLabel}</span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {activeQuestion.type === 'text' && (
-                            <div className="relative max-w-3xl">
-                                <textarea
-                                    value={answers[activeQuestion.id] || ''}
-                                    onChange={(e) => handleAnswerChange(activeQuestion.id, e.target.value)}
-                                    rows={6}
-                                    className="w-full px-5 py-4 text-lg text-gray-800 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none placeholder-gray-400 bg-white"
-                                    placeholder="Type your assessment here..."
-                                />
-                            </div>
-                        )}
-
-                        {(activeQuestion.type === 'likert' || activeQuestion.type === 'rating') && (
-                             <div className="py-4 max-w-2xl">
-                                <div className="flex justify-between text-sm font-semibold text-gray-500 mb-4 px-2 uppercase tracking-wide">
-                                    <span>{activeQuestion.min || 'Low'}</span>
-                                    <span>{activeQuestion.max || 'High'}</span>
-                                </div>
-                                <div className="grid grid-cols-5 gap-3">
-                                    {(activeQuestion.options && activeQuestion.options.length > 0 ? activeQuestion.options : ['1', '2', '3', '4', '5']).map((option) => {
-                                        const optionValue = getOptionValue(option);
-                                        const optionLabel = getOptionLabel(option);
-                                        const isSelected = answers[activeQuestion.id] === optionValue;
-                                        return (
-                                            <button
-                                                key={optionValue}
-                                                type="button"
-                                                onClick={() => handleAnswerChange(activeQuestion.id, optionValue)}
-                                                className={`aspect-square rounded-2xl text-xl font-bold transition-all duration-200 flex items-center justify-center ${
-                                                    isSelected
-                                                    ? 'bg-blue-600 text-white shadow-md scale-105 ring-2 ring-blue-200'
-                                                    : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
-                                                }`}
-                                            >
-                                                {optionLabel}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                        
-                         {activeQuestion.type === 'checkbox' && (
-                            <div className="space-y-3 max-w-2xl">
-                                {activeQuestion.options?.map((option) => {
-                                    const optionValue = getOptionValue(option);
-                                    const optionLabel = getOptionLabel(option);
-                                    const currentAnswers: string[] = answers[activeQuestion.id] || [];
-                                    const isChecked = currentAnswers.includes(optionValue);
-                                    return (
-                                        <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                                            isChecked
-                                            ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
-                                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
-                                        }`}>
-                                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center mr-4 transition-colors ${
-                                                 isChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
-                                            }`}>
-                                                <CheckCircle className="w-4 h-4 text-white" />
-                                            </div>
-                                            <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            onChange={(e) => {
-                                                const newAnswers = e.target.checked
-                                                ? [...currentAnswers, optionValue]
-                                                : currentAnswers.filter((a) => a !== optionValue);
-                                                handleAnswerChange(activeQuestion.id, newAnswers);
-                                            }}
-                                            className="hidden"
-                                            />
-                                            <span className={`text-lg font-medium transition-colors ${
-                                                isChecked ? 'text-blue-900' : 'text-gray-700'
-                                            }`}>{optionLabel}</span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {/* Önem Derecesi Belirleme - Her Soru İçin */}
-                        <div className="mt-8 pt-6 border-t border-gray-200">
-                            <div className="flex items-center gap-2 mb-4">
-                                <AlertTriangle className="w-5 h-5 text-orange-500" />
-                                <h3 className="text-lg font-semibold text-gray-900">Importance Level for This Question</h3>
-                                {currentStage === 'assess' && (
-                                    <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
-                                        Required
-                                    </span>
-                                )}
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 max-w-2xl">
-                                {(['low', 'medium', 'high'] as RiskLevel[]).map((level) => {
-                                    const isSelected = questionPriorities[activeQuestion.id] === level;
-                                    return (
-                                        <label
-                                            key={level}
-                                            className={`relative flex flex-col items-center p-6 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                                                isSelected
-                                                    ? level === 'low'
-                                                        ? 'border-green-500 bg-green-50 shadow-md'
-                                                        : level === 'medium'
-                                                        ? 'border-yellow-500 bg-yellow-50 shadow-md'
-                                                        : 'border-red-500 bg-red-50 shadow-md'
-                                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                                            }`}
+                                        {severity}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {isEditing && (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs text-gray-500">Editing Risk {index + 1}</span>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingRiskIdReview(null);
+                                          }}
+                                          className="text-xs text-gray-500 hover:text-gray-800"
                                         >
-                                            <input
-                                                type="radio"
-                                                name={`priority-${activeQuestion.id}`}
-                                                value={level}
-                                                checked={isSelected}
-                                                onChange={() => handlePriorityChange(activeQuestion.id, level)}
-                                                className="hidden"
-                                            />
-                                            <div
-                                                className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${
-                                                    isSelected
-                                                        ? level === 'low'
-                                                            ? 'bg-green-100 text-green-600'
-                                                            : level === 'medium'
-                                                            ? 'bg-yellow-100 text-yellow-600'
-                                                            : 'bg-red-100 text-red-600'
-                                                        : 'bg-gray-100 text-gray-400'
-                                                }`}
-                                            >
-                                                {level === 'low' && <CheckCircle className="w-6 h-6" />}
-                                                {level === 'medium' && <AlertTriangle className="w-6 h-6" />}
-                                                {level === 'high' && <XCircle className="w-6 h-6" />}
-                                            </div>
-                                            <span
-                                                className={`text-sm font-bold capitalize ${
-                                                    isSelected ? 'text-gray-900' : 'text-gray-500'
-                                                }`}
-                                            >
-                                                {level}
-                                            </span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Risk Score Selection (0-4) */}
-                        <div className="mt-8 pt-6 border-t border-gray-200" key={`risk-scores-${activeQuestion.id}-${riskScores[activeQuestion.id] || riskScores[activeQuestion.code || ''] || 'none'}`}>
-                            <div className="flex items-center gap-2 mb-4">
-                                <h3 className="text-lg font-semibold text-gray-900">Importance Score for This Question</h3>
-                                <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
-                                    Required
-                                </span>
-                            </div>
-                            <div className="grid grid-cols-5 gap-3 max-w-4xl">
-                                {([
-                                    { value: 4, label: 'Very Important', labelTr: 'Çok Önemli', desc: 'Critical question / This ethical principle should be dominant.', descTr: 'Kritik soru / Bu etik ilke baskın olmalı.', color: 'red' },
-                                    { value: 3, label: 'Important', labelTr: 'Önemli', desc: 'Important question / This topic requires attention.', descTr: 'Önemli soru / Bu konuya dikkat edilmeli.', color: 'orange' },
-                                    { value: 2, label: 'Moderately Important', labelTr: 'Orta Derecede Önemli', desc: 'Moderately important / Should be considered.', descTr: 'Orta derecede önemli / Dikkate alınmalı.', color: 'yellow' },
-                                    { value: 1, label: 'Less Important', labelTr: 'Az Önemli', desc: 'Less important / Minor consideration.', descTr: 'Az önemli / Küçük bir husus.', color: 'blue' },
-                                    { value: 0, label: 'Not Important', labelTr: 'Önemsiz', desc: 'Not important / Negligible for this evaluation.', descTr: 'Önemsiz / Bu değerlendirme için ihmal edilebilir.', color: 'green' }
-                                ] as const).map(({ value, label, labelTr, desc, descTr, color }) => {
-                                    // Get question key (prefer code over id, same as GeneralQuestions)
-                                    const questionKey = activeQuestion.code || activeQuestion.id;
-                                    
-                                    // Get risk value - check all possible keys (EXACT same logic as GeneralQuestions)
-                                    let riskValue: number | undefined = undefined;
-                                    
-                                    // Check all possible keys - handle 0 and 1 correctly (EXACT same order as GeneralQuestions)
-                                    if (activeQuestion.id !== undefined) {
-                                        const idVal = riskScores[activeQuestion.id];
-                                        if (idVal !== undefined && idVal !== null && typeof idVal === 'number' && idVal >= 0 && idVal <= 4) {
-                                            riskValue = idVal;
-                                        }
-                                    }
-                                    
-                                    if (riskValue === undefined) {
-                                        const keyVal = riskScores[questionKey];
-                                        if (keyVal !== undefined && keyVal !== null && typeof keyVal === 'number' && keyVal >= 0 && keyVal <= 4) {
-                                            riskValue = keyVal;
-                                        }
-                                    }
-                                    
-                                    if (riskValue === undefined && activeQuestion.code !== undefined) {
-                                        const codeVal = riskScores[activeQuestion.code];
-                                        if (codeVal !== undefined && codeVal !== null && typeof codeVal === 'number' && codeVal >= 0 && codeVal <= 4) {
-                                            riskValue = codeVal;
-                                        }
-                                    }
-                                    
-                                    // Use explicit type check and equality (EXACT same as GeneralQuestions)
-                                    // Force strict comparison to handle 0 and 1 correctly
-                                    const isSelected = riskValue !== undefined && riskValue !== null && typeof riskValue === 'number' && riskValue === value;
-                                    
-                                    // Debug log for selected state
-                                    if ((value === 0 || value === 1) && isSelected) {
-                                        console.log(`✅ EvaluationForm: Button ${value} is selected`, {
-                                            riskValue,
-                                            value,
-                                            isSelected,
-                                            questionKey,
-                                            questionId: activeQuestion.id,
-                                            riskScoresCheck: {
-                                                [questionKey]: riskScores[questionKey],
-                                                [activeQuestion.id || '']: riskScores[activeQuestion.id || ''],
-                                                [activeQuestion.code || '']: riskScores[activeQuestion.code || '']
-                                            }
-                                        });
-                                    }
-                                    
-                                    // Color scheme: 4 = highest risk (red), 0 = no risk (green)
-                                    const colorClasses = {
-                                        red: isSelected ? 'border-2 border-red-700 bg-red-200 shadow-md' : 'border-2 border-gray-200 hover:border-red-300 hover:bg-red-50',
-                                        orange: isSelected ? 'border-2 border-orange-600 bg-orange-200 shadow-md' : 'border-2 border-gray-200 hover:border-orange-300 hover:bg-orange-50',
-                                        yellow: isSelected ? 'border-2 border-yellow-600 bg-yellow-50 shadow-md' : 'border-2 border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
-                                        blue: isSelected ? 'border-2 border-blue-500 bg-blue-50 shadow-md' : 'border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
-                                        green: isSelected ? 'border-2 border-green-500 bg-green-50 shadow-md' : 'border-2 border-gray-200 hover:border-green-300 hover:bg-green-50/30'
-                                    };
-                                    const bgColorClasses = {
-                                        red: isSelected ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-400',
-                                        orange: isSelected ? 'bg-orange-200 text-orange-800' : 'bg-gray-100 text-gray-400',
-                                        yellow: isSelected ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400',
-                                        blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
-                                        green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
-                                    };
-                                    
-                                    return (
-                                        <label
-                                            key={value}
-                                            className={`relative flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
+                                          Done
+                                        </button>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                                        <input
+                                          type="text"
+                                          value={risk.title}
+                                          onChange={(e) => {
+                                            const updated = [...generalRisks];
+                                            updated[index].title = e.target.value;
+                                            setGeneralRisks(updated);
+                                            setIsDraft(true);
+                                          }}
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                          placeholder="Enter risk title..."
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                                        <textarea
+                                          value={risk.description}
+                                          onChange={(e) => {
+                                            const updated = [...generalRisks];
+                                            updated[index].description = e.target.value;
+                                            setGeneralRisks(updated);
+                                            setIsDraft(true);
+                                          }}
+                                          rows={2}
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                                          placeholder="Add description..."
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+                                        <select
+                                          value={severity}
+                                          onChange={(e) => {
+                                            const updated = [...generalRisks];
+                                            updated[index].severity = e.target.value as any;
+                                            setGeneralRisks(updated);
+                                            setIsDraft(true);
+                                          }}
+                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                         >
-                                            <input
-                                                type="radio"
-                                                name={`risk-${activeQuestion.id}`}
-                                                value={value}
-                                                checked={isSelected}
-                                                onChange={() => {
-                                                    const questionKey = activeQuestion.code || activeQuestion.id;
-                                                    const riskValueToSet = value as 0 | 1 | 2 | 3 | 4;
-                                                    console.log(`🔵 Setting risk for question ${questionKey} to ${riskValueToSet}`, {
-                                                        questionKey,
-                                                        questionId: activeQuestion.id,
-                                                        questionCode: activeQuestion.code,
-                                                        riskValueToSet,
-                                                        value,
-                                                        currentRiskScores: riskScores
-                                                    });
-                                                    // Update state directly (EXACT same as GeneralQuestions)
-                                                    // Use functional update to ensure state is properly updated
-                                                    setRiskScores((prev) => {
-                                                        const updated = { ...prev };
-                                                        // Update all possible keys to ensure consistency
-                                                        updated[questionKey] = riskValueToSet;
-                                                        if (activeQuestion.id) {
-                                                            updated[activeQuestion.id] = riskValueToSet;
-                                                        }
-                                                        if (activeQuestion.code) {
-                                                            updated[activeQuestion.code] = riskValueToSet;
-                                                        }
-                                                        if ((activeQuestion as any)._id) {
-                                                            updated[(activeQuestion as any)._id] = riskValueToSet;
-                                                        }
-                                                        console.log('✅ Updated riskScores state:', updated);
-                                                        // Return new object to force re-render
-                                                        return { ...updated };
-                                                    });
+                                          {riskSeverityOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Related Assess Questions (optional)</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50/50">
+                                          {assessQuestions.map(q => {
+                                            const checked = relatedQuestions.includes(q.id);
+                                            return (
+                                              <label key={q.id} className="flex items-start gap-2 text-sm text-gray-700">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={checked}
+                                                  onChange={(e) => {
+                                                    const updated = [...generalRisks];
+                                                    const current = new Set(updated[index].relatedQuestions || []);
+                                                    if (e.target.checked) current.add(q.id); else current.delete(q.id);
+                                                    updated[index].relatedQuestions = Array.from(current);
+                                                    setGeneralRisks(updated);
                                                     setIsDraft(true);
-                                                }}
-                                                className="hidden"
-                                            />
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>
-                                                <span className="text-lg font-bold">{value}</span>
-                                            </div>
-                                            <span className={`text-xs font-bold text-center ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
-                                                {label}
-                                            </span>
-                                            <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
-                                            <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
-                                                {descTr || desc}
-                                            </span>
-                                        </label>
-                                    );
-                                })}
+                                                  }}
+                                                  className="mt-1"
+                                                />
+                                                <span>{q.text}</span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {!isEditing && (
+                                    <>
+                                      {risk.description && (
+                                        <div className="text-xs text-gray-600 mt-1">{risk.description}</div>
+                                      )}
+                                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <span className="px-2 py-0.5 bg-gray-100 rounded-full border border-gray-200">
+                                          {relatedQuestions.length} related question(s)
+                                        </span>
+                                        <span className="text-gray-400">Click to edit</span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setGeneralRisks(generalRisks.filter((_, i) => i !== index));
+                                    setIsDraft(true);
+                                  }}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Remove risk"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
-                        </div>
+                          );
+                        })
+                      )}
                     </div>
+                  </div>
                 </div>
+              </div>
             </div>
-            ) : (
-                 <div className="text-center py-32 bg-white rounded-3xl shadow-sm border border-dashed border-gray-200 flex flex-col items-center justify-center">
-                    <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 ring-8 ring-gray-50/50">
-                        <Info className="w-12 h-12 text-gray-300" />
-                    </div>
-                    
-                    <>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-3">No Questions in this Stage</h3>
-                        <p className="text-gray-500 max-w-md mx-auto mb-10 text-lg">
-                            There are no questions defined for the <strong>{currentStage}</strong> stage for your role (<strong>{currentUser.role}</strong>).
-                        </p>
-                    </>
-                    
-                    <button
-                        onClick={() => setShowAddQuestion(true)}
-                        className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors mb-8"
-                    >
-                        <Plus className="w-4 h-4" /> Add a custom question to this stage
-                    </button>
+          ) : currentStage === 'set-up' ? (
+            // Set-up Stage: Admin'in girdiği Project Context bilgilerini göster
+            <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 mb-24">
+              <div className="p-8 border-b border-gray-100 bg-white">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
+                    Project Context and Scope
+                  </span>
                 </div>
-            )}
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
+                  Project Information
+                </h2>
+                <p className="text-gray-600 mt-2">Review the project context and scope information provided by the administrator.</p>
+              </div>
+
+              <div className="p-8 flex-1 bg-gray-50/30 space-y-6 overflow-y-auto pb-24">
+                {/* Project Context and Scope - Admin'in girdiği bilgiler */}
+                {project.inspectionContext ? (
+                  <div className="space-y-6">
+                    <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <Info className="w-5 h-5 mr-2 text-blue-600" />
+                        Project Context and Scope
+                      </h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">1. Who requested the inspection?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.requester || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">2. Why carry out an inspection?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.inspectionReason || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">3. For whom is the inspection relevant?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.relevantFor || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">4. Is it recommended or required (mandatory inspection)?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200 capitalize">{project.inspectionContext.isMandatory || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">5. What are the sufficient vs. necessary conditions that need to be analyzed?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200 whitespace-pre-wrap">{project.inspectionContext.conditionsToAnalyze || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">6. How are the inspection results to be used?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200">{project.inspectionContext.resultsUsage || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">7. Will the results be shared (public) or kept private?</label>
+                          <p className="text-gray-900 bg-white px-4 py-2 rounded-lg border border-gray-200 whitespace-pre-wrap">{project.inspectionContext.resultsSharing || 'Not provided'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6">
+                    <p className="text-yellow-800">Project context information has not been provided yet.</p>
+                  </div>
+                )}
+
+                {/* Use Case Owner Information - Sadece başlık olarak */}
+                {linkedUseCase && (
+                  <div className="bg-green-50/50 border border-green-100 rounded-2xl p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
+                      <Info className="w-5 h-5 mr-2 text-green-600" />
+                      Use Case Owner Information
+                    </h3>
+                    <p className="text-sm text-gray-600 italic">This section will be available soon.</p>
+                  </div>
+                )}
+
+                {/* General Risks Section */}
+                <div className="bg-orange-50/50 border border-orange-100 rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-orange-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">General Risks</h3>
+                    </div>
+                    {generalRisks.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setGeneralRisks([
+                            ...generalRisks,
+                            { id: Date.now().toString(), title: '', description: '' }
+                          ]);
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Risk
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    {generalRisks.length === 0 ? (
+                      <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                        <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-sm text-gray-500 italic mb-6">No risks added yet. Click "Add Risk" to start.</p>
+                        <button
+                          onClick={() => {
+                            setGeneralRisks([
+                              ...generalRisks,
+                              { id: Date.now().toString(), title: '', description: '' }
+                            ]);
+                          }}
+                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Risk
+                        </button>
+                      </div>
+                    ) : (
+                      generalRisks.map((risk, index) => {
+                        const severity = risk.severity || 'medium';
+                        const relatedQuestions = risk.relatedQuestions || [];
+                        return (
+                          <div key={risk.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1 space-y-3">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Risk {index + 1} Title *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={risk.title}
+                                    onChange={(e) => {
+                                      const updated = [...generalRisks];
+                                      updated[index].title = e.target.value;
+                                      setGeneralRisks(updated);
+                                      setIsDraft(true);
+                                    }}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                    placeholder="Enter risk title..."
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Description (Optional)
+                                  </label>
+                                  <textarea
+                                    value={risk.description}
+                                    onChange={(e) => {
+                                      const updated = [...generalRisks];
+                                      updated[index].description = e.target.value;
+                                      setGeneralRisks(updated);
+                                      setIsDraft(true);
+                                    }}
+                                    rows={2}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                                    placeholder="Enter risk description (optional)..."
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setGeneralRisks(generalRisks.filter((_, i) => i !== index));
+                                  setIsDraft(true);
+                                }}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remove risk"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeQuestion ? (
+            <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
+              {/* Mobile: open question list */}
+              {showQuestionNav && (
+                <div className="fixed inset-0 z-50 md:hidden">
+                  <div className="absolute inset-0 bg-black/30" onClick={() => setShowQuestionNav(false)} />
+                  <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-white shadow-2xl border-r border-gray-200 flex flex-col">
+                    <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                      <div className="font-semibold text-gray-900">Questions</div>
+                      <button
+                        type="button"
+                        className="p-2 rounded-lg hover:bg-gray-100"
+                        onClick={() => setShowQuestionNav(false)}
+                        aria-label="Close questions"
+                      >
+                        <X className="w-5 h-5 text-gray-600" />
+                      </button>
+                    </div>
+                    <div className="p-3 overflow-y-auto">
+                      <div className="space-y-1">
+                        {currentQuestions.map((q, idx) => {
+                          const active = idx === currentQuestionIndex;
+                          const done = isQuestionAnswered(q.id, q);
+                          return (
+                            <button
+                              key={q.id || idx}
+                              type="button"
+                              onClick={() => {
+                                setCurrentQuestionIndex(idx);
+                                setShowQuestionNav(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${active
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                              <span className="font-medium">Q{idx + 1}</span>
+                              {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop: left question list */}
+              <div className="hidden md:block md:w-56 lg:w-64 shrink-0">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 md:sticky md:top-[180px] max-h-[calc(100vh-200px)] overflow-y-auto">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 pb-2">
+                    Questions
+                  </div>
+                  <div className="space-y-1">
+                    {currentQuestions.map((q, idx) => {
+                      const active = idx === currentQuestionIndex;
+                      const done = isQuestionAnswered(q.id, q);
+                      return (
+                        <button
+                          key={q.id || idx}
+                          type="button"
+                          onClick={() => setCurrentQuestionIndex(idx)}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${active
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                          <span className="font-medium">Q{idx + 1}</span>
+                          {done && <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Active question card */}
+              <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0 mb-24">
+                <div className="p-8 border-b border-gray-100 bg-white">
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
+                      Question {currentQuestionIndex + 1} of {currentQuestions.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuestionNav(true)}
+                      className="px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+                    >
+                      Q list
+                    </button>
+                    {activeQuestion.required && (
+                      <span className="px-3 py-1 bg-red-50 text-red-600 text-sm font-medium rounded-full border border-red-100">
+                        Required
+                      </span>
+                    )}
+                  </div>
+
+                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
+                    {activeQuestion.text}
+                  </h2>
+
+                  {activeQuestion.description && (
+                    <div className="flex items-start gap-3 mt-4 bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
+                      <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-blue-900 text-base leading-relaxed">
+                        {activeQuestion.description}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-8 flex-1 bg-gray-50/30">
+                  {/* INPUT TYPES (Same as before) */}
+                  {(activeQuestion.type === 'select' || activeQuestion.type === 'multiple-choice' || activeQuestion.type === 'radio') && (
+                    <div className="space-y-3 max-w-2xl">
+                      {activeQuestion.options?.map((option) => {
+                        const optionValue = getOptionValue(option);
+                        const optionLabel = getOptionLabel(option);
+                        // Check multiple keys for answer value (id, code, _id)
+                        const currentAnswer = getAnswerValue(activeQuestion);
+                        const isSelected = currentAnswer === optionValue;
+                        return (
+                          <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${isSelected
+                              ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                            }`}>
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
+                              }`}>
+                              <div className="w-2 h-2 rounded-full bg-white" />
+                            </div>
+                            <input
+                              type="radio"
+                              name={activeQuestion.id}
+                              value={optionValue}
+                              checked={isSelected}
+                              onChange={(e) => handleAnswerChange(activeQuestion.id, e.target.value)}
+                              className="hidden"
+                            />
+                            <span className={`text-lg font-medium transition-colors ${isSelected ? 'text-blue-900' : 'text-gray-700'
+                              }`}>{optionLabel}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {activeQuestion.type === 'text' && (
+                    <div className="relative max-w-3xl">
+                      <textarea
+                        value={getAnswerValue(activeQuestion) || ''}
+                        onChange={(e) => handleAnswerChange(activeQuestion.id, e.target.value)}
+                        rows={6}
+                        className="w-full px-5 py-4 text-lg text-gray-800 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none placeholder-gray-400 bg-white"
+                        placeholder="Type your assessment here..."
+                      />
+                    </div>
+                  )}
+
+                  {(activeQuestion.type === 'likert' || activeQuestion.type === 'rating') && (
+                    <div className="py-4 max-w-2xl">
+                      <div className="flex justify-between text-sm font-semibold text-gray-500 mb-4 px-2 uppercase tracking-wide">
+                        <span>{activeQuestion.min || 'Low'}</span>
+                        <span>{activeQuestion.max || 'High'}</span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-3">
+                        {(activeQuestion.options && activeQuestion.options.length > 0 ? activeQuestion.options : ['1', '2', '3', '4', '5']).map((option) => {
+                          const optionValue = getOptionValue(option);
+                          const optionLabel = getOptionLabel(option);
+                          const currentAnswer = getAnswerValue(activeQuestion);
+                          const isSelected = currentAnswer === optionValue;
+                          return (
+                            <button
+                              key={optionValue}
+                              type="button"
+                              onClick={() => handleAnswerChange(activeQuestion.id, optionValue)}
+                              className={`aspect-square rounded-2xl text-xl font-bold transition-all duration-200 flex items-center justify-center ${isSelected
+                                  ? 'bg-blue-600 text-white shadow-md scale-105 ring-2 ring-blue-200'
+                                  : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
+                                }`}
+                            >
+                              {optionLabel}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeQuestion.type === 'checkbox' && (
+                    <div className="space-y-3 max-w-2xl">
+                      {activeQuestion.options?.map((option) => {
+                        const optionValue = getOptionValue(option);
+                        const optionLabel = getOptionLabel(option);
+                        const currentAnswers: string[] = (getAnswerValue(activeQuestion) as string[]) || [];
+                        const isChecked = currentAnswers.includes(optionValue);
+                        return (
+                          <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${isChecked
+                              ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                            }`}>
+                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center mr-4 transition-colors ${isChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
+                              }`}>
+                              <CheckCircle className="w-4 h-4 text-white" />
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const newAnswers = e.target.checked
+                                  ? [...currentAnswers, optionValue]
+                                  : currentAnswers.filter((a) => a !== optionValue);
+                                handleAnswerChange(activeQuestion.id, newAnswers);
+                              }}
+                              className="hidden"
+                            />
+                            <span className={`text-lg font-medium transition-colors ${isChecked ? 'text-blue-900' : 'text-gray-700'
+                              }`}>{optionLabel}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Önem Derecesi Belirleme - Her Soru İçin */}
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <AlertTriangle className="w-5 h-5 text-orange-500" />
+                      <h3 className="text-lg font-semibold text-gray-900">Importance Level for This Question</h3>
+                      {currentStage === 'assess' && (
+                        <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
+                          Required
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 max-w-2xl">
+                      {(['low', 'medium', 'high'] as RiskLevel[]).map((level) => {
+                        const isSelected = questionPriorities[activeQuestion.id] === level;
+                        return (
+                          <label
+                            key={level}
+                            className={`relative flex flex-col items-center p-6 rounded-xl border-2 cursor-pointer transition-all duration-200 ${isSelected
+                                ? level === 'low'
+                                  ? 'border-green-500 bg-green-50 shadow-md'
+                                  : level === 'medium'
+                                    ? 'border-yellow-500 bg-yellow-50 shadow-md'
+                                    : 'border-red-500 bg-red-50 shadow-md'
+                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`priority-${activeQuestion.id}`}
+                              value={level}
+                              checked={isSelected}
+                              onChange={() => handlePriorityChange(activeQuestion.id, level)}
+                              className="hidden"
+                            />
+                            <div
+                              className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${isSelected
+                                  ? level === 'low'
+                                    ? 'bg-green-100 text-green-600'
+                                    : level === 'medium'
+                                      ? 'bg-yellow-100 text-yellow-600'
+                                      : 'bg-red-100 text-red-600'
+                                  : 'bg-gray-100 text-gray-400'
+                                }`}
+                            >
+                              {level === 'low' && <CheckCircle className="w-6 h-6" />}
+                              {level === 'medium' && <AlertTriangle className="w-6 h-6" />}
+                              {level === 'high' && <XCircle className="w-6 h-6" />}
+                            </div>
+                            <span
+                              className={`text-sm font-bold capitalize ${isSelected ? 'text-gray-900' : 'text-gray-500'
+                                }`}
+                            >
+                              {level}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Risk Score Selection (0-4) */}
+                  <div className="mt-8 pt-6 border-t border-gray-200" key={`risk-scores-${activeQuestion.id}-${riskScores[activeQuestion.id] || riskScores[activeQuestion.code || ''] || 'none'}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900">Importance Score for This Question</h3>
+                      <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
+                        Required
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-3 max-w-4xl">
+                      {([
+                        { value: 4, label: 'Very Important', labelTr: 'Çok Önemli', desc: 'Critical question / This ethical principle should be dominant.', descTr: 'Kritik soru / Bu etik ilke baskın olmalı.', color: 'red' },
+                        { value: 3, label: 'Important', labelTr: 'Önemli', desc: 'Important question / This topic requires attention.', descTr: 'Önemli soru / Bu konuya dikkat edilmeli.', color: 'orange' },
+                        { value: 2, label: 'Moderately Important', labelTr: 'Orta Derecede Önemli', desc: 'Moderately important / Should be considered.', descTr: 'Orta derecede önemli / Dikkate alınmalı.', color: 'yellow' },
+                        { value: 1, label: 'Less Important', labelTr: 'Az Önemli', desc: 'Less important / Minor consideration.', descTr: 'Az önemli / Küçük bir husus.', color: 'blue' },
+                        { value: 0, label: 'Not Important', labelTr: 'Önemsiz', desc: 'Not important / Negligible for this evaluation.', descTr: 'Önemsiz / Bu değerlendirme için ihmal edilebilir.', color: 'green' }
+                      ] as const).map(({ value, label, labelTr, desc, descTr, color }) => {
+                        // Get question key (prefer code over id, same as GeneralQuestions)
+                        const questionKey = activeQuestion.code || activeQuestion.id;
+
+                        // Get risk value - check all possible keys (EXACT same logic as GeneralQuestions)
+                        let riskValue: number | undefined = undefined;
+
+                        // Check all possible keys - handle 0 and 1 correctly (EXACT same order as GeneralQuestions)
+                        if (activeQuestion.id !== undefined) {
+                          const idVal = riskScores[activeQuestion.id];
+                          if (idVal !== undefined && idVal !== null && typeof idVal === 'number' && idVal >= 0 && idVal <= 4) {
+                            riskValue = idVal;
+                          }
+                        }
+
+                        if (riskValue === undefined) {
+                          const keyVal = riskScores[questionKey];
+                          if (keyVal !== undefined && keyVal !== null && typeof keyVal === 'number' && keyVal >= 0 && keyVal <= 4) {
+                            riskValue = keyVal;
+                          }
+                        }
+
+                        if (riskValue === undefined && activeQuestion.code !== undefined) {
+                          const codeVal = riskScores[activeQuestion.code];
+                          if (codeVal !== undefined && codeVal !== null && typeof codeVal === 'number' && codeVal >= 0 && codeVal <= 4) {
+                            riskValue = codeVal;
+                          }
+                        }
+
+                        // Use explicit type check and equality (EXACT same as GeneralQuestions)
+                        // Force strict comparison to handle 0 and 1 correctly
+                        const isSelected = riskValue !== undefined && riskValue !== null && typeof riskValue === 'number' && riskValue === value;
+
+                        // Debug log for selected state
+                        if ((value === 0 || value === 1) && isSelected) {
+                          console.log(`✅ EvaluationForm: Button ${value} is selected`, {
+                            riskValue,
+                            value,
+                            isSelected,
+                            questionKey,
+                            questionId: activeQuestion.id,
+                            riskScoresCheck: {
+                              [questionKey]: riskScores[questionKey],
+                              [activeQuestion.id || '']: riskScores[activeQuestion.id || ''],
+                              [activeQuestion.code || '']: riskScores[activeQuestion.code || '']
+                            }
+                          });
+                        }
+
+                        // Color scheme: 4 = highest risk (red), 0 = no risk (green)
+                        const colorClasses = {
+                          red: isSelected ? 'border-2 border-red-700 bg-red-200 shadow-md' : 'border-2 border-gray-200 hover:border-red-300 hover:bg-red-50',
+                          orange: isSelected ? 'border-2 border-orange-600 bg-orange-200 shadow-md' : 'border-2 border-gray-200 hover:border-orange-300 hover:bg-orange-50',
+                          yellow: isSelected ? 'border-2 border-yellow-600 bg-yellow-50 shadow-md' : 'border-2 border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
+                          blue: isSelected ? 'border-2 border-blue-500 bg-blue-50 shadow-md' : 'border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
+                          green: isSelected ? 'border-2 border-green-500 bg-green-50 shadow-md' : 'border-2 border-gray-200 hover:border-green-300 hover:bg-green-50/30'
+                        };
+                        const bgColorClasses = {
+                          red: isSelected ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-400',
+                          orange: isSelected ? 'bg-orange-200 text-orange-800' : 'bg-gray-100 text-gray-400',
+                          yellow: isSelected ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400',
+                          blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
+                          green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                        };
+
+                        return (
+                          <label
+                            key={value}
+                            className={`relative flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
+                          >
+                            <input
+                              type="radio"
+                              name={`risk-${activeQuestion.id}`}
+                              value={value}
+                              checked={isSelected}
+                              onChange={() => {
+                                const questionKey = activeQuestion.code || activeQuestion.id;
+                                const riskValueToSet = value as 0 | 1 | 2 | 3 | 4;
+                                console.log(`🔵 Setting risk for question ${questionKey} to ${riskValueToSet}`, {
+                                  questionKey,
+                                  questionId: activeQuestion.id,
+                                  questionCode: activeQuestion.code,
+                                  riskValueToSet,
+                                  value,
+                                  currentRiskScores: riskScores
+                                });
+                                // Update state directly (EXACT same as GeneralQuestions)
+                                // Use functional update to ensure state is properly updated
+                                setRiskScores((prev) => {
+                                  const updated = { ...prev };
+                                  // Update all possible keys to ensure consistency
+                                  updated[questionKey] = riskValueToSet;
+                                  if (activeQuestion.id) {
+                                    updated[activeQuestion.id] = riskValueToSet;
+                                  }
+                                  if (activeQuestion.code) {
+                                    updated[activeQuestion.code] = riskValueToSet;
+                                  }
+                                  if ((activeQuestion as any)._id) {
+                                    updated[(activeQuestion as any)._id] = riskValueToSet;
+                                  }
+                                  console.log('✅ Updated riskScores state:', updated);
+                                  // Return new object to force re-render
+                                  return { ...updated };
+                                });
+                                setIsDraft(true);
+                              }}
+                              className="hidden"
+                            />
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>
+                              <span className="text-lg font-bold">{value}</span>
+                            </div>
+                            <span className={`text-xs font-bold text-center ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
+                              {label}
+                            </span>
+                            <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
+                            <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
+                              {descTr || desc}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-32 bg-white rounded-3xl shadow-sm border border-dashed border-gray-200 flex flex-col items-center justify-center">
+              <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 ring-8 ring-gray-50/50">
+                <Info className="w-12 h-12 text-gray-300" />
+              </div>
+
+              <>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">No Questions in this Stage</h3>
+                <p className="text-gray-500 max-w-md mx-auto mb-10 text-lg">
+                  There are no questions defined for the <strong>{currentStage}</strong> stage for your role (<strong>{currentUser.role}</strong>).
+                </p>
+              </>
+
+              <button
+                onClick={() => setShowAddQuestion(true)}
+                className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors mb-8"
+              >
+                <Plus className="w-4 h-4" /> Add a custom question to this stage
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 mt-8 flex justify-between items-center z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-            {showReviewScreen ? (
-                <>
-                    <button
-                        onClick={() => setShowReviewScreen(false)}
-                        className="flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
-                    >
-                        <ChevronLeft className="w-5 h-5 mr-2" /> Back to Questions
-                    </button>
+          {showReviewScreen ? (
+            <>
+              <button
+                onClick={() => setShowReviewScreen(false)}
+                className="flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+              >
+                <ChevronLeft className="w-5 h-5 mr-2" /> Back to Questions
+              </button>
 
-                    <div className="flex items-center gap-4">
-                        <button 
-                            onClick={() => saveEvaluation('draft')} 
-                            disabled={saving}
-                            className="px-6 py-3 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center"
-                        >
-                            {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin"/> : <Save className="w-5 h-5 mr-2" />}
-                            {saving ? 'Saving...' : 'Save Draft'}
-                        </button>
-
-                        <button
-                            onClick={handleFinishAssess}
-                            disabled={saving}
-                            className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
-                        >
-                            Finish Assess Stage <ChevronRight className="w-5 h-5 ml-2" />
-                        </button>
-                    </div>
-                </>
-            ) : (
-                <>
-            <button
-                onClick={handleBack}
-                        disabled={currentStage === 'set-up'}
-                className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 ${
-                            currentStage === 'set-up'
-                    ? 'text-gray-300 border-gray-100 cursor-not-allowed bg-gray-50' 
-                    : 'text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm'
-                }`}
-            >
-                <ChevronLeft className="w-5 h-5 mr-2" /> Previous
-            </button>
-
-            <div className="flex items-center gap-4">
-                <button 
-                    onClick={() => saveEvaluation('draft')} 
-                    disabled={saving}
-                    className="px-6 py-3 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center"
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => saveEvaluation('draft')}
+                  disabled={saving}
+                  className="px-6 py-3 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center"
                 >
-                    {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin"/> : <Save className="w-5 h-5 mr-2" />}
-                    {saving ? 'Saving...' : 'Save Draft'}
+                  {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
+                  {saving ? 'Saving...' : 'Save Draft'}
                 </button>
 
                 <button
-                    onClick={handleForward}
-                    disabled={saving}
-                    className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
+                  onClick={handleFinishAssess}
+                  disabled={saving}
+                  className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
                 >
-                    {getNextButtonText()} <ChevronRight className="w-5 h-5 ml-2" />
+                  Finish Assess Stage <ChevronRight className="w-5 h-5 ml-2" />
                 </button>
-            </div>
-                </>
-            )}
+              </div>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleBack}
+                disabled={currentStage === 'set-up'}
+                className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 ${currentStage === 'set-up'
+                    ? 'text-gray-300 border-gray-100 cursor-not-allowed bg-gray-50'
+                    : 'text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm'
+                  }`}
+              >
+                <ChevronLeft className="w-5 h-5 mr-2" /> Previous
+              </button>
+
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => saveEvaluation('draft')}
+                  disabled={saving}
+                  className="px-6 py-3 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center"
+                >
+                  {saving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
+                  {saving ? 'Saving...' : 'Save Draft'}
+                </button>
+
+                <button
+                  onClick={handleForward}
+                  disabled={saving}
+                  className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
+                >
+                  {getNextButtonText()} <ChevronRight className="w-5 h-5 ml-2" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
       </div>
@@ -2623,8 +2735,8 @@ function AddQuestionModal({ currentStage, onClose, onAdd }: AddQuestionModalProp
       type,
       principle: principle || undefined,
       required,
-      options: (type === 'multiple-choice' || type === 'select' || type === 'radio' || type === 'checkbox') 
-        ? options.filter(o => o.trim() !== '') 
+      options: (type === 'multiple-choice' || type === 'select' || type === 'radio' || type === 'checkbox')
+        ? options.filter(o => o.trim() !== '')
         : undefined,
       min: type === 'likert' ? 1 : undefined,
       max: type === 'likert' ? 5 : undefined,
@@ -2719,13 +2831,11 @@ function AddQuestionModal({ currentStage, onClose, onAdd }: AddQuestionModalProp
               <button
                 type="button"
                 onClick={() => setRequired(!required)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                  required ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${required ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
               >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  required ? 'translate-x-6' : 'translate-x-1'
-                }`} />
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${required ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
               </button>
             </div>
           </div>

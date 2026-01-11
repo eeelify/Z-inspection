@@ -57,7 +57,7 @@ const ProjectCard: React.FC<{
         console.error('Error fetching progress:', error);
       }
     };
-    
+
     fetchProgress();
     // Progress'i periyodik olarak güncelle (her 3 saniyede bir)
     const interval = setInterval(fetchProgress, 3000);
@@ -99,31 +99,28 @@ const ProjectCard: React.FC<{
 
       <div className="flex items-center space-x-2 mb-4">
         {(() => {
-          // Check evaluation status from backend
-          const hasAnyAnswers = (project as any).hasAnyAnswers || false;
-          const hasReport = (project as any).reportGenerated || false;
-          
-          if (hasReport) {
-            // Report generated → RESOLVE
-            return (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                RESOLVE
-              </span>
-            );
-          } else if (hasAnyAnswers) {
-            // Questions being answered → ASSESS
-            return (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                ASSESS
-              </span>
-            );
-          } else {
-            // No answers yet → SETUP
-            return (
-              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                SETUP
-              </span>
-            );
+          // USE BACKEND derivedStatus AS SINGLE SOURCE OF TRUTH
+          const derivedStatus = project.derivedStatus || 'setup';
+
+          switch (derivedStatus.toLowerCase()) {
+            case 'resolve':
+              return (
+                <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                  RESOLVE
+                </span>
+              );
+            case 'assess':
+              return (
+                <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                  ASSESS
+                </span>
+              );
+            default: // 'setup' or unknown
+              return (
+                <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                  SETUP
+                </span>
+              );
           }
         })()}
       </div>
@@ -195,26 +192,26 @@ export function AdminDashboardEnhanced({
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
     // Try to find an existing project where both users are assigned
-    let commProject = projects.find(p => 
-      p.assignedUsers.includes(currentUser.id) && 
+    let commProject = projects.find(p =>
+      p.assignedUsers.includes(currentUser.id) &&
       p.assignedUsers.includes(otherUser.id)
     );
-    
+
     // If not found, try to find a project with similar name
     if (!commProject) {
       const projectName = `Communication: ${currentUser.name} & ${otherUser.name}`;
-      commProject = projects.find(p => 
-        p.title === projectName || 
+      commProject = projects.find(p =>
+        p.title === projectName ||
         p.title.includes('Communication') ||
         (p.assignedUsers.includes(currentUser.id) && p.assignedUsers.includes(otherUser.id))
       );
     }
-    
+
     // If still not found, use first project as fallback
     if (!commProject && projects.length > 0) {
       commProject = projects[0];
     }
-    
+
     // If still no project, create one via API
     if (!commProject) {
       try {
@@ -246,19 +243,19 @@ export function AdminDashboardEnhanced({
         console.error('Error creating communication project:', error);
       }
     }
-    
+
     // Final fallback - use existing project
     if (!commProject) {
       // Try to use any project where current user is assigned
       commProject = projects.find(p => p.assignedUsers.includes(currentUser.id));
-      
+
       if (!commProject) {
         console.error('No project available for communication. Please create a project first.');
         alert('Cannot start conversation: No project available. Please create a project first.');
         throw new Error('No project available');
       }
     }
-    
+
     console.log('Using project for communication:', commProject);
     return commProject;
   };
@@ -290,7 +287,7 @@ export function AdminDashboardEnhanced({
           otherUserId
         }),
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         // Close chat panel if this conversation is open
@@ -356,14 +353,14 @@ export function AdminDashboardEnhanced({
       if (response.ok) {
         const data = await response.json();
         const conversations = data.conversations || [];
-        
+
         // Filter out notification-only messages - chat bubble should only show real user messages
         const realConversations = conversations.filter((conv: any) => {
           const lastMsg = String(conv.lastMessage || '');
           const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
           return !isNotification;
         });
-        
+
         // Calculate actual unread count from real conversations only
         const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         setMessageUnreadCount(actualUnreadCount);
@@ -384,7 +381,7 @@ export function AdminDashboardEnhanced({
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000); // 30 seconds
-    
+
     // Listen for message sent events to refresh immediately
     const handleMessageSent = () => {
       setTimeout(() => {
@@ -396,7 +393,7 @@ export function AdminDashboardEnhanced({
       }
     };
     window.addEventListener('message-sent', handleMessageSent);
-    
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('message-sent', handleMessageSent);
@@ -441,29 +438,29 @@ export function AdminDashboardEnhanced({
         id: conversation.fromUserId,
         name: conversation.fromUserName || 'User',
       } as any);
-    
+
     if (project && otherUser) {
-    // Mark messages as read
-    try {
-      await fetch(api('/api/messages/mark-read'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: conversation.projectId,
-          userId: currentUser.id,
-          otherUserId: conversation.fromUserId,
-        }),
-      });
-      fetchUnreadCount();
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-    }
+      // Mark messages as read
+      try {
+        await fetch(api('/api/messages/mark-read'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: conversation.projectId,
+            userId: currentUser.id,
+            otherUserId: conversation.fromUserId,
+          }),
+        });
+        fetchUnreadCount();
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
 
       // Open chat panel (also for notification-only messages)
-        setChatProject(project);
-        setChatOtherUser(otherUser);
-        setChatPanelOpen(true);
-        setShowNotifications(false);
+      setChatProject(project);
+      setChatOtherUser(otherUser);
+      setChatPanelOpen(true);
+      setShowNotifications(false);
     }
   };
   const [selectedUseCaseForAssignment, setSelectedUseCaseForAssignment] = useState<UseCase | null>(null);
@@ -510,36 +507,32 @@ export function AdminDashboardEnhanced({
         <nav className="flex-1 px-3 py-6 space-y-1">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <Folder className={`h-5 w-5 mr-3 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-blue-500'}`} />
             Dashboard
           </button>
           <button
             onClick={() => setActiveTab('use-case-assignments')}
-            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'use-case-assignments' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'use-case-assignments' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <UserPlus className={`h-5 w-5 mr-3 ${activeTab === 'use-case-assignments' ? 'text-orange-600' : 'text-orange-500'}`} />
             Assignments
           </button>
           <button
             onClick={() => setActiveTab('project-creation')}
-            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'project-creation' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'project-creation' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <Plus className={`h-5 w-5 mr-3 ${activeTab === 'project-creation' ? 'text-green-600' : 'text-green-500'}`} />
             Create Project
           </button>
           <button
             onClick={() => setActiveTab('created-reports')}
-            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${
-              activeTab === 'created-reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-            }`}
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'created-reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
           >
             <FileText className={`h-5 w-5 mr-3 ${activeTab === 'created-reports' ? 'text-purple-600' : 'text-purple-500'}`} />
             Created Reports
@@ -589,7 +582,7 @@ export function AdminDashboardEnhanced({
           <div className="flex items-center space-x-4">
             {/* Message Notifications Button */}
             <div className="relative" ref={messageNotificationRef}>
-              <button 
+              <button
                 onClick={() => setShowMessageNotifications(!showMessageNotifications)}
                 className="relative p-2 text-gray-600 hover:text-gray-900"
               >
@@ -600,11 +593,11 @@ export function AdminDashboardEnhanced({
                   </span>
                 )}
               </button>
-              
+
               {showMessageNotifications && (
-                <div 
+                <div
                   className="absolute top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] overflow-hidden flex flex-col"
-                  style={{ 
+                  style={{
                     right: '0',
                     width: 'min(320px, calc(100vw - 2rem))',
                     maxHeight: 'min(500px, calc(100vh - 100px))',
@@ -662,10 +655,10 @@ export function AdminDashboardEnhanced({
                 </div>
               )}
             </div>
-            
+
             {/* Notification Button */}
             <div className="relative" ref={notificationRef}>
-              <button 
+              <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="relative p-2 text-gray-600 hover:text-gray-900"
               >
@@ -676,11 +669,11 @@ export function AdminDashboardEnhanced({
                   </span>
                 )}
               </button>
-              
+
               {showNotifications && (
-                <div 
+                <div
                   className="absolute top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] overflow-hidden flex flex-col"
-                  style={{ 
+                  style={{
                     right: '0',
                     width: 'min(320px, calc(100vw - 2rem))',
                     maxHeight: 'min(500px, calc(100vh - 100px))',
@@ -742,7 +735,7 @@ export function AdminDashboardEnhanced({
             </div>
           </div>
         </div>
-        
+
         {/* Chats Tab - Always mounted for stable height */}
         <div className={`flex-1 min-h-0 flex flex-col ${activeTab === 'chats' ? '' : 'hidden'}`}>
           <div className="flex-1 min-h-0 flex">
@@ -770,9 +763,8 @@ export function AdminDashboardEnhanced({
                       return (
                         <div
                           key={`${conv.projectId}-${conv.otherUserId}`}
-                          className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-all relative group ${
-                            hasUnread ? 'border-blue-500 border-l-4' : 'border-gray-200'
-                          } ${isSelected ? 'bg-blue-50 border-blue-300' : ''}`}
+                          className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-all relative group ${hasUnread ? 'border-blue-500 border-l-4' : 'border-gray-200'
+                            } ${isSelected ? 'bg-blue-50 border-blue-300' : ''}`}
                         >
                           <div onClick={() => handleOpenChat(conv)}>
                             <div className="flex items-start space-x-4">
@@ -913,67 +905,67 @@ export function AdminDashboardEnhanced({
             setSelectedUseCaseForAssignment(null);
           }}
           onAssign={async (expertIds, notes) => {
-              try {
-               const response = await fetch(api(`/api/use-cases/${selectedUseCaseForAssignment.id}/assign`), {
-                 method: 'PUT',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                   assignedExperts: expertIds,
-                   adminNotes: notes
-                 })
-               });
+            try {
+              const response = await fetch(api(`/api/use-cases/${selectedUseCaseForAssignment.id}/assign`), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  assignedExperts: expertIds,
+                  adminNotes: notes
+                })
+              });
 
-               if (response.ok) {
-                 // Reload projects to reflect updated assignments and progress
-                 try {
-                   const userId = currentUser?.id || (currentUser as any)?._id;
-                   const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
-                   if (projectsRes.ok) {
-                     const data = await projectsRes.json();
-                     const formattedProjects = data.map((p: any) => {
-                       // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
-                       const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
-                         if (typeof user === 'string') return user;
-                         if (user && user._id) return user._id.toString();
-                         return user;
-                       });
-                       return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
-                     });
-                     // Update projects in parent component via window event
-                     window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
-                   }
-                 } catch (reloadError) {
-                   console.error("Error reloading projects:", reloadError);
-                 }
-                 
-                 // Reload use cases to reflect updated assignments
-                 try {
-                   const useCasesRes = await fetch(api('/api/use-cases'));
-                   if (useCasesRes.ok) {
-                     const useCasesData = await useCasesRes.json();
-                     const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
-                     // Update use cases in parent component via window event
-                     window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
-                   }
-                 } catch (reloadError) {
-                   console.error("Error reloading use cases:", reloadError);
-                 }
-                 
-                 alert("Experts assigned successfully!");
-                 setShowAssignExpertsModal(false);
-                 setSelectedUseCaseForAssignment(null);
-               } else {
-                 const errorData = await response.json().catch(() => ({}));
-                 alert(`Failed to assign experts: ${errorData.error || 'Unknown error'}`);
-               }
-             } catch (error) {
-               console.error("Assignment error:", error);
-               alert("Failed to assign experts.");
-             }
-           }}
+              if (response.ok) {
+                // Reload projects to reflect updated assignments and progress
+                try {
+                  const userId = currentUser?.id || (currentUser as any)?._id;
+                  const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
+                  if (projectsRes.ok) {
+                    const data = await projectsRes.json();
+                    const formattedProjects = data.map((p: any) => {
+                      // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
+                      const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+                        if (typeof user === 'string') return user;
+                        if (user && user._id) return user._id.toString();
+                        return user;
+                      });
+                      return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
+                    });
+                    // Update projects in parent component via window event
+                    window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
+                  }
+                } catch (reloadError) {
+                  console.error("Error reloading projects:", reloadError);
+                }
+
+                // Reload use cases to reflect updated assignments
+                try {
+                  const useCasesRes = await fetch(api('/api/use-cases'));
+                  if (useCasesRes.ok) {
+                    const useCasesData = await useCasesRes.json();
+                    const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
+                    // Update use cases in parent component via window event
+                    window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
+                  }
+                } catch (reloadError) {
+                  console.error("Error reloading use cases:", reloadError);
+                }
+
+                alert("Experts assigned successfully!");
+                setShowAssignExpertsModal(false);
+                setSelectedUseCaseForAssignment(null);
+              } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(`Failed to assign experts: ${errorData.error || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error("Assignment error:", error);
+              alert("Failed to assign experts.");
+            }
+          }}
         />
       )}
-      
+
       {/* CHAT PANEL - Always mounted when project/user exist, shown when chatPanelOpen and not in chats tab */}
       {chatProject && chatOtherUser ? (
         <div className={chatPanelOpen && activeTab !== 'chats' ? 'fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4' : 'hidden'}>
@@ -1025,7 +1017,7 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
 
   useEffect(() => {
     let mounted = true;
-    
+
     const calculateAverageProgress = async () => {
       if (!project.assignedUsers || project.assignedUsers.length === 0) {
         if (mounted) {
@@ -1040,7 +1032,7 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
         const progressPromises = assignedUserIds.map(async (userId: string) => {
           const user = users.find(u => (u.id || (u as any)._id) === userId);
           if (!user) return 0;
-          
+
           try {
             const progress = await fetchUserProgress(project, user);
             return progress;
@@ -1052,7 +1044,7 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
 
         const progresses = await Promise.all(progressPromises);
         const validProgresses = progresses.filter(p => p > 0);
-        
+
         if (validProgresses.length > 0) {
           const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
           if (mounted) {
@@ -1075,10 +1067,10 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
     };
 
     calculateAverageProgress();
-    
+
     // Progress'i periyodik olarak güncelle (her 5 saniyede bir)
     const interval = setInterval(calculateAverageProgress, 5000);
-    
+
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -1235,22 +1227,22 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status]?.text || 'text-gray-800'}`}>
                           {useCase.status.replace('-', ' ').toUpperCase()}
-                          </span>
+                        </span>
                       </td>
                       <td className="px-6 py-4">
-                          <div className="flex -space-x-2">
-                            {assignedExperts.length === 0 ? (
-                              <span className="text-xs text-gray-400 italic">None</span>
-                            ) : (
-                              assignedExperts.map((expert: User) => (
-                                <div
-                                  key={expert.id}
-                                  className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                  title={`${expert.name} (${expert.role})`}
-                                >
+                        <div className="flex -space-x-2">
+                          {assignedExperts.length === 0 ? (
+                            <span className="text-xs text-gray-400 italic">None</span>
+                          ) : (
+                            assignedExperts.map((expert: User) => (
+                              <div
+                                key={expert.id}
+                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                title={`${expert.name} (${expert.role})`}
+                              >
                                 {expert.name.charAt(0)}
-                                </div>
-                              ))
+                              </div>
+                            ))
                           )}
                         </div>
                       </td>
@@ -1372,7 +1364,7 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
       <div className="px-8 py-8">
         <div className="max-w-2xl mx-auto">
           <form onSubmit={handleSubmit} className="space-y-6">
-            
+
             {/* 1. Project Info Section */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-6">
 
@@ -1566,16 +1558,15 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
                   Assign Evaluation Team (Experts & Owners) *
                 </label>
                 <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  
+
                   {experts.length === 0 ? (
                     <div className="text-sm text-gray-500 text-center py-4">No users available for assignment.</div>
                   ) : (
                     experts.map((user: User) => (
-                      <label 
-                        key={user.id} 
-                        className={`flex items-center p-2 rounded cursor-pointer transition-colors ${
-                          selectedTeam.includes(user.id) ? 'bg-blue-100 border border-blue-200' : 'hover:bg-gray-100'
-                        }`}
+                      <label
+                        key={user.id}
+                        className={`flex items-center p-2 rounded cursor-pointer transition-colors ${selectedTeam.includes(user.id) ? 'bg-blue-100 border border-blue-200' : 'hover:bg-gray-100'
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -1588,9 +1579,8 @@ function ProjectCreationTab({ users, useCases = [], onCreateProject, onClose }: 
                             {user.name.charAt(0)}
                           </div>
                           <span className="text-sm text-gray-900 font-medium">{user.name}</span>
-                          <span className={`text-xs ml-auto px-2 py-0.5 rounded-full capitalize ${
-                            user.role !== 'use-case-owner' && user.role !== 'admin' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
-                          }`}>
+                          <span className={`text-xs ml-auto px-2 py-0.5 rounded-full capitalize ${user.role !== 'use-case-owner' && user.role !== 'admin' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                            }`}>
                             {user.role.replace('-', ' ')}
                           </span>
                         </div>
@@ -1628,16 +1618,27 @@ function CreatedReportsTab({ projects, currentUser }: any) {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const url = filterProjectId 
-        ? api(`/api/reports?userId=${currentUser.id}&projectId=${filterProjectId}`)
-        : api(`/api/reports?userId=${currentUser.id}`);
+      const userId = currentUser.id || (currentUser as any)._id;
+      if (!userId) {
+        console.error('❌ No userId available for CreatedReportsTab');
+        setLoading(false);
+        return;
+      }
+      const url = filterProjectId
+        ? api(`/api/reports?userId=${userId}&projectId=${filterProjectId}`)
+        : api(`/api/reports?userId=${userId}`);
+      console.log('📥 [CreatedReportsTab] Fetching reports from:', url);
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ [CreatedReportsTab] Reports fetched:', data.length);
         setReports(data);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ [CreatedReportsTab] Failed to fetch reports:', response.status, errorText);
       }
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      console.error('❌ [CreatedReportsTab] Error fetching reports:', error);
     } finally {
       setLoading(false);
     }
@@ -1646,7 +1647,8 @@ function CreatedReportsTab({ projects, currentUser }: any) {
   // View report
   const handleViewReport = async (reportId: string) => {
     try {
-      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`));
+      const userId = currentUser.id || (currentUser as any)._id;
+      const response = await fetch(api(`/api/reports/${reportId}?userId=${userId}`));
       if (response.ok) {
         const data = await response.json();
         setSelectedReport(data);
@@ -1664,14 +1666,14 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     if (e) {
       e.stopPropagation(); // Prevent card click event
     }
-    
+
     const button = e?.currentTarget as HTMLButtonElement;
     const originalText = button?.textContent;
     if (button) {
       button.disabled = true;
       button.textContent = 'Downloading...';
     }
-    
+
     try {
       const userId = currentUser?.id || (currentUser as any)?._id;
       // Use /download-pdf endpoint which always uses latest data
@@ -1707,23 +1709,23 @@ function CreatedReportsTab({ projects, currentUser }: any) {
   // Download report as Word (DOCX)
   const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
+
     const button = e?.currentTarget as HTMLButtonElement;
     const originalText = button?.textContent;
     if (button) {
       button.disabled = true;
       button.textContent = 'Downloading...';
     }
-    
+
     try {
       const userId = currentUser?.id || (currentUser as any)?._id;
       if (!userId) {
         alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
         return;
       }
-      
+
       const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
-      
+
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         const expectedTypes = [
@@ -1731,7 +1733,7 @@ function CreatedReportsTab({ projects, currentUser }: any) {
           'application/octet-stream',
           'application/zip'
         ];
-        
+
         if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
           const text = await response.text();
           try {
@@ -1742,13 +1744,13 @@ function CreatedReportsTab({ projects, currentUser }: any) {
           }
           return;
         }
-        
+
         const blob = await response.blob();
         if (blob.size === 0) {
           alert('Word dosyası boş. Lütfen tekrar deneyin.');
           return;
         }
-        
+
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -1791,7 +1793,8 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     if (!confirmDelete) return;
 
     try {
-      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`), {
+      const userId = currentUser.id || (currentUser as any)._id;
+      const response = await fetch(api(`/api/reports/${reportId}?userId=${userId}`), {
         method: 'DELETE'
       });
       if (response.ok) {
@@ -1862,7 +1865,7 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                     className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
-                      <div 
+                      <div
                         className="flex-1 cursor-pointer"
                         onClick={() => handleViewReport(reportId)}
                       >
@@ -1906,10 +1909,9 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           Delete
                         </button>
                         {report.status === 'final' || report.status === 'archived' ? (
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${
-                            report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${report.status === 'final' ? 'bg-green-100 text-green-800' :
                             'bg-gray-100 text-gray-800'
-                          }`}>
+                            }`}>
                             {report.status === 'final' ? 'Final' : 'Archived'}
                           </span>
                         ) : null}
@@ -2020,16 +2022,27 @@ function ReportsTab({ projects, currentUser, users }: any) {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const url = filterProjectId 
-        ? api(`/api/reports?userId=${currentUser.id}&projectId=${filterProjectId}`)
-        : api(`/api/reports?userId=${currentUser.id}`);
+      const userId = currentUser.id || (currentUser as any)._id;
+      if (!userId) {
+        console.error('❌ No userId available for ReportsTab');
+        setLoading(false);
+        return;
+      }
+      const url = filterProjectId
+        ? api(`/api/reports?userId=${userId}&projectId=${filterProjectId}`)
+        : api(`/api/reports?userId=${userId}`);
+      console.log('📥 [ReportsTab] Fetching reports from:', url);
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ [ReportsTab] Reports fetched:', data.length);
         setReports(data);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ [ReportsTab] Failed to fetch reports:', response.status, errorText);
       }
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      console.error('❌ [ReportsTab] Error fetching reports:', error);
     } finally {
       setLoading(false);
     }
@@ -2089,14 +2102,14 @@ function ReportsTab({ projects, currentUser, users }: any) {
     if (e) {
       e.stopPropagation(); // Prevent card click event
     }
-    
+
     const button = e?.currentTarget as HTMLButtonElement;
     const originalText = button?.textContent;
     if (button) {
       button.disabled = true;
       button.textContent = 'Downloading...';
     }
-    
+
     try {
       const userId = currentUser?.id || (currentUser as any)?._id;
       // Use /download-pdf endpoint which always uses latest data
@@ -2133,23 +2146,23 @@ function ReportsTab({ projects, currentUser, users }: any) {
   // Download report as Word (DOCX)
   const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
+
     const button = e?.currentTarget as HTMLButtonElement;
     const originalText = button?.textContent;
     if (button) {
       button.disabled = true;
       button.textContent = 'Downloading...';
     }
-    
+
     try {
       const userId = currentUser?.id || (currentUser as any)?._id;
       if (!userId) {
         alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
         return;
       }
-      
+
       const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
-      
+
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         const expectedTypes = [
@@ -2157,7 +2170,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
           'application/octet-stream',
           'application/zip'
         ];
-        
+
         if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
           const text = await response.text();
           try {
@@ -2168,13 +2181,13 @@ function ReportsTab({ projects, currentUser, users }: any) {
           }
           return;
         }
-        
+
         const blob = await response.blob();
         if (blob.size === 0) {
           alert('Word dosyası boş. Lütfen tekrar deneyin.');
           return;
         }
-        
+
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -2217,7 +2230,8 @@ function ReportsTab({ projects, currentUser, users }: any) {
     if (!confirmDelete) return;
 
     try {
-      const response = await fetch(api(`/api/reports/${reportId}?userId=${currentUser.id}`), {
+      const userId = currentUser.id || (currentUser as any)._id;
+      const response = await fetch(api(`/api/reports/${reportId}?userId=${userId}`), {
         method: 'DELETE'
       });
       if (response.ok) {
@@ -2240,7 +2254,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
   useEffect(() => {
     const fetchAllProgresses = async () => {
       if (!users || users.length === 0) return;
-      
+
       const progresses: Record<string, number> = {};
       await Promise.all(
         projects.map(async (project: any) => {
@@ -2255,7 +2269,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
             const progressPromises = assignedUserIds.map(async (userId: string) => {
               const user = users.find((u: any) => (u.id || (u as any)._id) === userId);
               if (!user) return 0;
-              
+
               try {
                 const { fetchUserProgress } = await import('../utils/userProgress');
                 const progress = await fetchUserProgress(project, user);
@@ -2268,7 +2282,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
 
             const progressesList = await Promise.all(progressPromises);
             const validProgresses = progressesList.filter(p => p > 0);
-            
+
             if (validProgresses.length > 0) {
               const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
               progresses[projectId] = Math.round(average);
@@ -2281,7 +2295,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
           }
         })
       );
-      
+
       setProjectProgresses(progresses);
     };
 
@@ -2342,7 +2356,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
             {projects.map((project: any) => {
               const projectId = project.id || project._id;
               const isGenerating = generating === projectId;
-              const projectReports = reports.filter((r: any) => 
+              const projectReports = reports.filter((r: any) =>
                 (r.projectId?._id || r.projectId) === projectId
               );
               const projectProgress = projectProgresses[projectId] ?? project.progress ?? 0;
@@ -2365,9 +2379,8 @@ function ReportsTab({ projects, currentUser, users }: any) {
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5">
                       <div
-                        className={`h-1.5 rounded-full transition-all ${
-                          isComplete ? 'bg-green-500' : 'bg-gray-300'
-                        }`}
+                        className={`h-1.5 rounded-full transition-all ${isComplete ? 'bg-green-500' : 'bg-gray-300'
+                          }`}
                         style={{ width: `${Math.min(100, projectProgress)}%`, minWidth: projectProgress > 0 ? '8px' : '0' }}
                       />
                     </div>
@@ -2379,11 +2392,10 @@ function ReportsTab({ projects, currentUser, users }: any) {
                     <button
                       onClick={() => handleGenerateReport(projectId)}
                       disabled={!canGenerate}
-                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                        !canGenerate
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-green-600 text-white hover:bg-green-700'
-                      }`}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${!canGenerate
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                        }`}
                       title={!isComplete ? 'Project must be 100% complete to generate report' : ''}
                     >
                       {isGenerating ? 'Generating...' : 'Generate Report'}
@@ -2419,7 +2431,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
                     className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
-                      <div 
+                      <div
                         className="flex-1 cursor-pointer"
                         onClick={() => handleViewReport(reportId)}
                       >
@@ -2463,10 +2475,9 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           Delete
                         </button>
                         {report.status === 'final' || report.status === 'archived' ? (
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${
-                            report.status === 'final' ? 'bg-green-100 text-green-800' :
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${report.status === 'final' ? 'bg-green-100 text-green-800' :
                             'bg-gray-100 text-gray-800'
-                          }`}>
+                            }`}>
                             {report.status === 'final' ? 'Final' : 'Archived'}
                           </span>
                         ) : null}
@@ -2616,11 +2627,10 @@ function AssignExpertsModal({ useCase, users, onClose, onAssign }: AssignExperts
                 experts.map(expert => (
                   <label
                     key={expert.id}
-                    className={`flex items-center p-3 rounded-lg cursor-pointer transition-all ${
-                      selectedExperts.includes(expert.id)
-                        ? 'bg-blue-50 border border-blue-200'
-                        : 'hover:bg-white border border-transparent'
-                    }`}
+                    className={`flex items-center p-3 rounded-lg cursor-pointer transition-all ${selectedExperts.includes(expert.id)
+                      ? 'bg-blue-50 border border-blue-200'
+                      : 'hover:bg-white border border-transparent'
+                      }`}
                   >
                     <input
                       type="checkbox"

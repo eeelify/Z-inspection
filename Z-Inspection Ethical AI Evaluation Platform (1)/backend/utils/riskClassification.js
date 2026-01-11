@@ -23,14 +23,14 @@ function classifyRisk(score) {
   if (score === null || score === undefined || isNaN(score)) {
     return "N/A";
   }
-  
-  // Validate range (0-4)
-  if (score < 0 || score > 4) {
-    throw new Error(`INVALID RISK SCORE: ${score} is outside valid range [0-4]. Score must be between 0 and 4.`);
+
+  // Validate range (>= 0 only - CUMULATIVE RISK IS UNBOUNDED)
+  if (score < 0) {
+    throw new Error(`INVALID RISK SCORE: ${score} is negative. Score must be >= 0.`);
   }
-  
-  // CORRECT SCALE: Higher score = Higher risk
-  if (score >= 4) return "MAX_RISK";
+
+  // CORRECT SCALE: Higher score = Higher risk (UNBOUNDED)
+  if (score >= 4) return "MAX_RISK"; // 4+ = Critical
   if (score >= 3) return "HIGH_RISK";
   if (score >= 2) return "MEDIUM_RISK";
   if (score >= 1) return "LOW_RISK";
@@ -64,7 +64,7 @@ function getRiskLabel(score) {
  */
 function validateRiskClassification(score, classification) {
   const correctClassification = classifyRisk(score);
-  
+
   if (correctClassification !== classification) {
     throw new Error(
       `RISK CLASSIFICATION INCONSISTENCY: Score ${score} was classified as "${classification}" ` +
@@ -74,9 +74,67 @@ function validateRiskClassification(score, classification) {
   }
 }
 
+/**
+ * CUMULATIVE RISK CLASSIFICATION (NORMALIZED)
+ * 
+ * For cumulative/aggregated risk values that represent the SUM of multiple
+ * finalRiskContribution values, we NORMALIZE by question count before
+ * applying the bounded 0-4 thresholds.
+ * 
+ * This prevents inflation where principles with many questions always
+ * appear as CRITICAL even when individual answers are low-risk.
+ * 
+ * Formula: normalizedRisk = cumulativeRisk / questionCount
+ * 
+ * @param {number} cumulativeScore - Sum of finalRiskContribution values
+ * @param {number} questionCount - Number of questions contributing to this sum
+ * @returns {string} Risk classification: "MINIMAL_RISK" | "LOW_RISK" | "MEDIUM_RISK" | "HIGH_RISK" | "MAX_RISK" | "N/A"
+ */
+function classifyCumulativeRisk(cumulativeScore, questionCount) {
+  // NULL/undefined means not evaluated
+  if (cumulativeScore === null || cumulativeScore === undefined || isNaN(cumulativeScore)) {
+    return "N/A";
+  }
+
+  // No questions = N/A
+  if (!questionCount || questionCount <= 0) {
+    return "N/A";
+  }
+
+  // Normalize: average risk per question
+  const normalizedRisk = cumulativeScore / questionCount;
+
+  // Apply standard 0-4 thresholds to normalized value
+  if (normalizedRisk >= 4) return "MAX_RISK";
+  if (normalizedRisk >= 3) return "HIGH_RISK";
+  if (normalizedRisk >= 2) return "MEDIUM_RISK";
+  if (normalizedRisk >= 1) return "LOW_RISK";
+  return "MINIMAL_RISK";
+}
+
+/**
+ * Get human-readable label for cumulative risk (normalized)
+ * @param {number} cumulativeScore - Sum of finalRiskContribution values
+ * @param {number} questionCount - Number of questions
+ * @returns {string} Human-readable label
+ */
+function getCumulativeRiskLabel(cumulativeScore, questionCount) {
+  const classification = classifyCumulativeRisk(cumulativeScore, questionCount);
+  const labels = {
+    "MINIMAL_RISK": "Minimal Risk",
+    "LOW_RISK": "Low Risk",
+    "MEDIUM_RISK": "Medium Risk",
+    "HIGH_RISK": "High Risk",
+    "MAX_RISK": "Critical Risk",
+    "N/A": "Not Evaluated"
+  };
+  return labels[classification] || "Unknown";
+}
+
 module.exports = {
   classifyRisk,
   getRiskLabel,
-  validateRiskClassification
+  validateRiskClassification,
+  classifyCumulativeRisk,
+  getCumulativeRiskLabel
 };
-
