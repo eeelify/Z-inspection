@@ -1,0 +1,60 @@
+Checking Project: "test case 3" (695d560382d4754a7272e0de)
+Total Scores Found: 4
+
+Score #1:
+  - Role: ethical-expert
+  - Questionnaire Key: general-v1
+  - User ID: 69341f3a77e89c5de5ae6484
+  - Principles Scored: TRANSPARENCY, HUMAN AGENCY & OVERSIGHT, TECHNICAL ROBUSTNESS & SAFETY, PRIVACY & DATA GOVERNANCE, DIVERSITY, NON-DISCRIMINATION & FAIRNESS, SOCIETAL & INTERPERSONAL WELL-BEING, ACCOUNTABILITY
+    > TRANSPARENCY: n=2, risk=undefined
+    > HUMAN AGENCY & OVERSIGHT: n=2, risk=undefined
+    > TECHNICAL ROBUSTNESS & SAFETY: n=1, risk=undefined
+    > PRIVACY & DATA GOVERNANCE: n=2, risk=undefined
+    > DIVERSITY, NON-DISCRIMINATION & FAIRNESS: n=1, risk=undefined
+    > SOCIETAL & INTERPERSONAL WELL-BEING: n=2, risk=undefined
+    > ACCOUNTABILITY: n=2, risk=undefined
+
+Score #2:
+  - Role: ethical-expert
+  - Questionnaire Key: ethical-expert-v1
+  - User ID: 69341f3a77e89c5de5ae6484
+  - Principles Scored: HUMAN AGENCY & OVERSIGHT, TECHNICAL ROBUSTNESS & SAFETY, PRIVACY & DATA GOVERNANCE, TRANSPARENCY, DIVERSITY, NON-DISCRIMINATION & FAIRNESS, SOCIETAL & INTERPERSONAL WELL-BEING, ACCOUNTABILITY
+    > HUMAN AGENCY & OVERSIGHT: n=2, risk=undefined
+    > TECHNICAL ROBUSTNESS & SAFETY: n=1, risk=undefined
+    > PRIVACY & DATA GOVERNANCE: n=1, risk=undefined
+    > TRANSPARENCY: n=1, risk=undefined
+    > DIVERSITY, NON-DISCRIMINATION & FAIRNESS: n=2, risk=undefined
+    > SOCIETAL & INTERPERSONAL WELL-BEING: n=2, risk=undefined
+    > ACCOUNTABILITY: n=3, risk=undefined
+
+Score #3:
+  - Role: technical-expert
+  - Questionnaire Key: general-v1
+  - User ID: 6934202b77e89c5de5ae648a
+  - Principles Scored: TRANSPARENCY, HUMAN AGENCY & OVERSIGHT, TECHNICAL ROBUSTNESS & SAFETY, PRIVACY & DATA GOVERNANCE, DIVERSITY, NON-DISCRIMINATION & FAIRNESS, SOCIETAL & INTERPERSONAL WELL-BEING, ACCOUNTABILITY
+    > TRANSPARENCY: n=0, risk=4
+    > HUMAN AGENCY & OVERSIGHT: n=2, risk=4
+    > TECHNICAL ROBUSTNESS & SAFETY: n=1, risk=2
+    > PRIVACY & DATA GOVERNANCE: n=2, risk=4
+    > DIVERSITY, NON-DISCRIMINATION & FAIRNESS: n=1, risk=4
+    > SOCIETAL & INTERPERSONAL WELL-BEING: n=2, risk=1.5
+    > ACCOUNTABILITY: n=2, risk=1
+
+Score #4:
+  - Role: technical-expert
+  - Questionnaire Key: technical-expert-v1
+  - User ID: 6934202b77e89c5de5ae648a
+  - Principles Scored: TRANSPARENCY, HUMAN AGENCY & OVERSIGHT, TECHNICAL ROBUSTNESS & SAFETY, PRIVACY & DATA GOVERNANCE, DIVERSITY, NON-DISCRIMINATION & FAIRNESS, SOCIETAL & INTERPERSONAL WELL-BEING, ACCOUNTABILITY
+    > TRANSPARENCY: n=1, risk=2
+    > HUMAN AGENCY & OVERSIGHT: n=0, risk=4
+    > TECHNICAL ROBUSTNESS & SAFETY: n=9, risk=2.83
+    > PRIVACY & DATA GOVERNANCE: n=1, risk=2
+    > DIVERSITY, NON-DISCRIMINATION & FAIRNESS: n=0, risk=4
+    > SOCIETAL & INTERPERSONAL WELL-BEING: n=0, risk=4
+    > ACCOUNTABILITY: n=1, risk=2
+
+Summary of Roles Found:
+{
+  "ethical-expert": 2,
+  "technical-expert": 2
+}

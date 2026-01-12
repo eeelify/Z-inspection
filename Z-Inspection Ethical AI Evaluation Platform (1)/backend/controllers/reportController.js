@@ -312,7 +312,7 @@ async function collectAnalysisData(projectId) {
       .lean();
 
     const needsRecomputation = existingScores.length === 0 ||
-      existingScores.some(s => !s.totals?.overallRisk && !s.totals?.overallMaturity);
+      existingScores.some(s => (!s.totals?.overallRisk && !s.totals?.overallMaturity) || !s.byQuestion);
 
     if (needsRecomputation) {
       console.log('🔄 Scores need recomputation (old format detected or missing), computing with new ethical scoring system...');
@@ -535,7 +535,6 @@ exports.generateReport = async (req, res) => {
       // PRESENTATION REFACTOR: Chart generation disabled.
       // Charts replaced with deterministic tables for audit integrity and stability.
       // Puppeteer dependency removed from report generation flow.
-      /*
       const chartGenerationResult = await chartGenerationService.generateAllCharts({
         projectId,
         questionnaireKey: null, // Include all questionnaires
@@ -546,12 +545,9 @@ exports.generateReport = async (req, res) => {
       });
       chartResults = chartGenerationResult.charts;
       chartErrors = chartGenerationResult.chartErrors;
-      */
 
-      // Return empty chart results - HTML template now uses tables instead
-      chartResults = {};
-      chartErrors = [];
-      console.log(`✅ Chart generation BYPASSED: Using table-based presentation for PDF stability`);
+      // Chart generation enabled
+      console.log(`✅ Chart generation completed`);
 
       // Log chart status
       Object.entries(chartResults).forEach(([chartId, chart]) => {

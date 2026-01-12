@@ -1262,13 +1262,20 @@ export function UserDashboard({
                                 (async () => {
                                   try {
                                     const assignedUsers = project.assignedUsers || [];
-                                    if (assignedUsers.length === 0) {
+
+                                    // Filter out admins (and other non-expert roles if necessary)
+                                    const expertUsers = assignedUsers.filter((userId: string) => {
+                                      const u = users.find(user => (user.id || (user as any)._id) === userId);
+                                      return u && u.role !== 'admin';
+                                    });
+
+                                    if (expertUsers.length === 0) {
                                       setAllExpertsCompleted(prev => ({ ...prev, [projectId]: true }));
                                       setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
                                       return;
                                     }
 
-                                    const progressPromises = assignedUsers.map(async (userId: string) => {
+                                    const progressPromises = expertUsers.map(async (userId: string) => {
                                       try {
                                         const user = users.find(u => (u.id || (u as any)._id) === userId);
                                         if (!user) return { userId, progress: 0 };
@@ -1294,11 +1301,23 @@ export function UserDashboard({
                                             if (tensions.length === 0) {
                                               setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
                                             } else {
-                                              const assignedUserIds = assignedUsers.map((id: string) => String(id));
+                                              const expertUserIds = expertUsers.map((id: string) => String(id));
                                               const allTensionsVoted = tensions.every((tension: any) => {
                                                 const votes = tension.votes || [];
                                                 const votedUserIds = votes.map((v: any) => String(v.userId));
-                                                return assignedUserIds.every((userId: string) => votedUserIds.includes(userId));
+                                                
+                                                // Exclude the creator from required voters
+                                                // Handle createdBy as object or string
+                                                const creatorId = tension.createdBy && typeof tension.createdBy === 'object' 
+                                                  ? String(tension.createdBy._id || tension.createdBy.id) 
+                                                  : String(tension.createdBy || '');
+                                                  
+                                                const requiredVoters = expertUserIds.filter(uid => uid !== creatorId);
+                                                
+                                                // If there are no required voters (e.g. only creator is assigned), consider it voted
+                                                if (requiredVoters.length === 0) return true;
+
+                                                return requiredVoters.every((userId: string) => votedUserIds.includes(userId));
                                               });
                                               setTensionsVoted(prev => ({ ...prev, [projectId]: allTensionsVoted }));
                                             }

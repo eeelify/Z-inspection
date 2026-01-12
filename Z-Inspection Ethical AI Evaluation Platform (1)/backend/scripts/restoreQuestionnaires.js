@@ -21,7 +21,7 @@ const Questionnaire = require('../models/questionnaire');
 async function restoreQuestionnaires() {
   try {
     console.log('🔄 Restoring Questionnaires...\n');
-    
+
     // Create general-v1
     const general = await Questionnaire.findOneAndUpdate(
       { key: 'general-v1' },
@@ -35,7 +35,7 @@ async function restoreQuestionnaires() {
       { new: true, upsert: true }
     );
     console.log(`✅ Created/Updated: ${general.key} - ${general.title}`);
-    
+
     // Create ethical-expert-v1
     const ethical = await Questionnaire.findOneAndUpdate(
       { key: 'ethical-expert-v1' },
@@ -49,7 +49,7 @@ async function restoreQuestionnaires() {
       { new: true, upsert: true }
     );
     console.log(`✅ Created/Updated: ${ethical.key} - ${ethical.title}`);
-    
+
     // Create medical-expert-v1
     const medical = await Questionnaire.findOneAndUpdate(
       { key: 'medical-expert-v1' },
@@ -63,14 +63,14 @@ async function restoreQuestionnaires() {
       { new: true, upsert: true }
     );
     console.log(`✅ Created/Updated: ${medical.key} - ${medical.title}`);
-    
+
     // Verify
     console.log('\n📋 Verification:');
     const all = await Questionnaire.find({ isActive: true }).lean();
     all.forEach(q => {
       console.log(`  - ${q.key}: ${q.title}`);
     });
-    
+
     console.log('\n✅ Questionnaires restored successfully!');
     process.exit(0);
   } catch (error) {

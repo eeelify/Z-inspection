@@ -196,12 +196,12 @@ OUTPUT FORMAT (ENTERPRISE-GRADE MARKDOWN)
 
 Generate a professional, audit-ready report in markdown. Use this EXACT structure:
 
-## 🧭 Quick Navigation
-[Dashboard](#dashboard) | [Key Risks](#top-risk-drivers) | [Ethical Tensions](#ethical-tensions-analysis) | [Evidence Coverage](#evidence-coverage-analysis) | [Methodology](#methodology-disclosure)
+
+
 
 ---
 
-## 📋 Executive Summary
+## Executive Summary
 
 Provide 4-6 concise bullet points:
 - Overall ERC score and risk classification (use provided label)
@@ -216,7 +216,7 @@ CRITICAL: Base ALL statements on provided ERC values. Do NOT label as "high risk
 ---
 
 <a name="dashboard"></a>
-## 📊 Dashboard Summary
+## Dashboard Summary
 
 **Overall Ethical Risk (ERC-Based)**
 - Overall ERC Score: [use provided value]
@@ -238,7 +238,7 @@ CRITICAL: All numbers must match provided data exactly. Do NOT estimate or infer
 
 ---
 
-## 🧠 Understanding the ERC Model
+## Understanding the ERC Model
 
 **CRITICAL: Include this explanatory section to distinguish concepts**
 
@@ -273,7 +273,7 @@ A highly important question (Risk Score = 4) can have low actual risk (ERC = 0.8
 
 ---
 
-## 📈 Ethical Principles Assessment
+## Ethical Principles Assessment
 
 **Summary by Principle** (using provided ERC values)
 
@@ -287,16 +287,7 @@ DO NOT recompute or adjust any values. Use provided ERC scores only.
 
 ---
 
-## 🔥 Role × Principle Heatmap Interpretation
 
-Provide a brief analysis (3-5 sentences):
-- Highlight any extreme ERC values (near 0 or near 4) by specific role and principle
-- Note alignment or disagreement between evaluators on specific principles
-- Identify which roles flagged higher risks and in which principles
-- DO NOT over-interpret or speculate beyond the data
-- Base ALL statements on provided role × principle ERC matrix
-
-CRITICAL: Use actual evaluator roles from the project. Do NOT duplicate roles or create placeholders.
 
 ---
 
@@ -325,40 +316,9 @@ DO NOT infer evidence that wasn't provided. State gaps clearly.
 
 ---
 
-<a name="top-risk-drivers"></a>
-## ⚠️ Top Risk Drivers (Key Ethical Concerns)
 
-**CRITICAL: Analyze the top 5 questions by ERC contribution**
+*** TOP RISK DRIVERS SECTION REMOVED ***
 
-For EACH of the top 5 risk drivers (use provided data exactly):
-
-### [X]. [Question Code] - [Principle Name]
-
-**Risk Metrics** (use provided values exactly)
-- Question Importance: [provided value] (how critical this topic is in general)
-- Answer Severity: [provided value] / 1.0 (observed risk in this system)
-- **Actual System Risk (ERC):** [provided value] → **[Risk Label]**
-
-**Evaluator Response**
-- Role(s): [list actual roles who answered this question]
-- Answer Snippet: [if answerSnippet exists, quote it briefly; if null, state "No qualitative explanation was provided"]
-
-**Risk Source Analysis**
-Explicitly state whether this ERC value is driven by:
-- ✓ High question importance (critical ethical topic)
-- ✓ Observed system weakness (poor management in this system)
-- ✓ Both factors combined
-
-**Interpretation:**
-[1-2 sentences explaining the significance. If ERC is low despite high importance, explain that the system manages this risk well. If ERC is high, explain what specific weakness or gap was identified.]
-
-CRITICAL RULES:
-- DO NOT fabricate answer content if answerSnippet is null
-- DO NOT relabel risk severity - use provided ERC classification
-- DO NOT speculate beyond what evaluators stated
-- Clearly distinguish between question importance and actual system risk
-
----
 
 <a name="ethical-tensions-analysis"></a>
 ## ⚖️ Ethical Tensions Analysis
@@ -375,101 +335,13 @@ CRITICAL RULES:
 
 ---
 
-### 🔍 Tension Maturity Assessment
 
-**CRITICAL: For EACH tension, assess maturity across THREE dimensions:**
+*** DETAILED TENSION ANALYSIS REMOVED ***
 
-**Maturity Framework:**
-1. **Evidence Presence** (Has evidence? Count? Types?)
-   - HIGH: 3+ evidence items of diverse types
-   - MEDIUM: 1-2 evidence items
-   - LOW: No evidence attached
 
-2. **Consensus Level** (Evaluator agreement)
-   - HIGH: >70% agreement
-   - MEDIUM: 40-70% agreement
-   - LOW: <40% agreement or high dispute rate
 
-3. **Review Status** (Governance maturity)
-   - ACTIVE: Accepted or Under Review with evidence
-   - STALLED: Under Review with no evidence or low consensus
-   - IMMATURE: Proposed with no evidence or low participation
+*** PRINCIPLE DEEP DIVE REMOVED ***
 
-**⚠️ HIGH-PRIORITY TENSIONS (FLAG EXPLICITLY):**
-Identify tensions that combine:
-- High severity (Medium/High/Critical)
-- Low evidence presence (<2 evidence items)
-- Low consensus (<50% agreement)
-
-These represent **GOVERNANCE MATURITY GAPS** - not just ethical concerns, but organizational readiness issues.
-
----
-
-### 📋 Individual Tension Details
-
-For EACH tension, provide:
-
-#### Tension [X]: [Principle 1] vs [Principle 2]
-
-**Conflict Description**
-- Severity: [provided level - Low/Medium/High/Critical]
-- Claim: [if provided, state it; if "Not provided", state "Claim not provided in submissions"]
-- Explanation: [1-2 sentences on why this tension exists, based ONLY on provided claim]
-
-**Evidence & Documentation**
-- Evidence Count: [provided count]
-- Evidence Types: [list types - Policy/Test/Feedback/Log/Incident]
-- Evidence Assessment: [if count = 0, state "No evidence attached"; if count > 0, assess diversity and relevance]
-
-**Consensus & Review Status**
-- Review State: [Proposed / SingleReview / UnderReview / Accepted / Disputed]
-- Agreement: [provided count/percentage]
-- Disagreement: [provided count/percentage]
-- Consensus Level: [High/Medium/Low based on provided percentages]
-
-**Mitigation Status**
-- Proposed Mitigations: [Yes/No - state if proposedMitigations exist]
-- Trade-off Decision: [Yes/No - state if tradeOffDecision exists]
-
-**Maturity Assessment**
-- Evidence Maturity: **[High/Medium/Low]** (based on evidence count and diversity)
-- Consensus Maturity: **[High/Medium/Low]** (based on agreement percentage)
-- Review Maturity: **[Active/Stalled]** (based on review state and evidence)
-- **Overall Assessment:** [Mature/Developing/Immature] - [1 sentence explanation]
-
-**⚠️ Action Required:** [If high severity + low evidence, explicitly flag: "HIGH PRIORITY - requires immediate evidence collection and stakeholder alignment"]
-
-CRITICAL: Do NOT fabricate claims, evidence, or consensus data. Use provided values only.
-
----
-
-## 🎯 Principle-by-Principle Deep Dive
-
-For EACH of the 7 ethical principles:
-
-### [Principle Name]
-
-**ERC Assessment**
-- ERC Score: [provided value]
-- Risk Classification: [provided label]
-- Interpretation: [what this ERC value indicates about this principle's management]
-
-**Key Risk Signals** (if ERC > 2.0)
-- [List 2-3 specific concerns based on top risk drivers or answer patterns]
-- [Reference specific questions or evaluator responses]
-
-**Related Tensions** (if applicable)
-- [List tensions involving this principle, with severity]
-- [Note evidence and consensus status]
-
-**Safeguards & Gaps**
-- [What safeguards are in place? - from evaluator answers]
-- [What gaps exist? - from high ERC questions or missing evidence]
-
-**Recommendations**
-- [1-2 specific, actionable recommendations grounded in observed ERC and tensions]
-
----
 
 If ERC < 1.0 and no tensions: State "No major ethical concerns identified for this principle based on available data. Current safeguards appear effective."
 
