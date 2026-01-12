@@ -8,15 +8,15 @@ router.get('/list-models', async (req, res) => {
   try {
     const { listAvailableModels } = require('../services/geminiService');
     const models = await listAvailableModels();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       models,
-      count: models.length 
+      count: models.length
     });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -27,9 +27,9 @@ router.get('/test-api-key', async (req, res) => {
     const result = await testApiKey();
     res.json(result);
   } catch (error) {
-    res.status(500).json({ 
-      valid: false, 
-      error: error.message 
+    res.status(500).json({
+      valid: false,
+      error: error.message
     });
   }
 });
@@ -54,6 +54,9 @@ router.patch('/:id/sections/:principle/expert-edit', reportController.updateSect
 
 // POST /api/reports/:id/sections/:principle/comments - Add comment to a section (expert/admin)
 router.post('/:id/sections/:principle/comments', reportController.addSectionComment);
+
+// POST /api/reports/:id/comments - Add expert comment to report
+router.post('/:id/comments', reportController.addReportComment);
 
 // GET /api/reports/:id/file - Serve report file (PDF) inline (must be before /:id route)
 router.get('/:id/file', reportController.getReportFile);

@@ -166,7 +166,7 @@ export function UserDashboard({
     const fetchAllProgresses = async () => {
       const progresses: Record<string, number> = {};
       const assignedProjects = projects.filter(p => p.assignedUsers.includes(currentUser.id));
-      
+
       await Promise.all(
         assignedProjects.map(async (project) => {
           try {
@@ -178,7 +178,7 @@ export function UserDashboard({
           }
         })
       );
-      
+
       setProjectProgresses(prev => ({ ...prev, ...progresses }));
     };
 
@@ -198,14 +198,14 @@ export function UserDashboard({
         const data = await response.json();
         console.log('Unread count fetched:', data);
         const conversations = data.conversations || [];
-        
+
         // Filter out notification-only messages - chat bubble should only show real user messages
         const realConversations = conversations.filter((conv: any) => {
           const lastMsg = String(conv.lastMessage || '');
           const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
           return !isNotification;
         });
-        
+
         // Calculate actual unread count from real conversations only
         const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         // Only show badge if there are actual conversations with unread messages
@@ -247,7 +247,7 @@ export function UserDashboard({
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000); // 30 seconds
-    
+
     // Listen for message sent events to refresh immediately
     const handleMessageSent = () => {
       setTimeout(fetchUnreadCount, 1000); // Small delay to ensure backend processed
@@ -256,7 +256,7 @@ export function UserDashboard({
       }
     };
     window.addEventListener('message-sent', handleMessageSent);
-    
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('message-sent', handleMessageSent);
@@ -294,7 +294,7 @@ export function UserDashboard({
       const reportMap: Record<string, boolean> = {};
       // Check reports for all assigned projects (both assigned and finished)
       const myProjects = projects.filter(p => p.assignedUsers.includes(currentUser.id));
-      
+
       // First, fetch all reports assigned to the user
       try {
         const response = await fetch(api(`/api/reports/assigned-to-me?userId=${currentUser.id}`));
@@ -306,7 +306,7 @@ export function UserDashboard({
             const projectId = String(report.projectId?._id || report.projectId || report.useCaseId || '');
             reportsByProjectId.set(projectId, true);
           });
-          
+
           // Check each project
           myProjects.forEach(project => {
             const projectId = String(project.id || (project as any)._id);
@@ -320,7 +320,7 @@ export function UserDashboard({
           reportMap[project.id] = false;
         });
       }
-      
+
       setProjectReports(prev => ({ ...prev, ...reportMap }));
     };
 
@@ -360,7 +360,7 @@ export function UserDashboard({
     if (e) {
       e.stopPropagation();
     }
-    
+
     // Show loading state
     const button = e?.currentTarget as HTMLButtonElement;
     const originalText = button?.textContent;
@@ -368,30 +368,30 @@ export function UserDashboard({
       button.disabled = true;
       button.textContent = 'Downloading...';
     }
-    
+
     try {
       const userId = currentUser?.id || (currentUser as any)?._id;
       if (!userId) {
         alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
         return;
       }
-      
+
       if (!reportId) {
         alert('Rapor ID bulunamadı.');
         return;
       }
-      
+
       console.log(`📥 Downloading PDF for report: ${reportId}, user: ${userId}`);
-      
+
       // Use /download-pdf endpoint which generates full dashboard report with charts (always uses latest data)
       const response = await fetch(api(`/api/reports/${reportId}/download-pdf?userId=${userId}`));
-      
+
       console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
-      
+
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         console.log(`📄 Content-Type: ${contentType}`);
-        
+
         if (!contentType || !contentType.includes('application/pdf')) {
           // Try to get error message from response
           const text = await response.text();
@@ -404,15 +404,15 @@ export function UserDashboard({
           }
           return;
         }
-        
+
         const blob = await response.blob();
         console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
-        
+
         if (blob.size === 0) {
           alert('PDF dosyası boş. Lütfen tekrar deneyin.');
           return;
         }
-        
+
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -422,7 +422,7 @@ export function UserDashboard({
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        
+
         console.log('✅ PDF downloaded successfully');
       } else {
         let errorMessage = 'Bilinmeyen hata';
@@ -451,105 +451,7 @@ export function UserDashboard({
     }
   };
 
-  // Download report as Word (DOCX) - always uses latest data
-  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    
-    // Show loading state
-    const button = e?.currentTarget as HTMLButtonElement;
-    const originalText = button?.textContent;
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Downloading...';
-    }
-    
-    try {
-      const userId = currentUser?.id || (currentUser as any)?._id;
-      if (!userId) {
-        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
-        return;
-      }
-      
-      if (!reportId) {
-        alert('Rapor ID bulunamadı.');
-        return;
-      }
-      
-      console.log(`📥 Downloading DOCX for report: ${reportId}, user: ${userId}`);
-      
-      // Use /download-docx endpoint which always uses latest data
-      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
-      
-      console.log(`📊 Response status: ${response.status}, ok: ${response.ok}`);
-      
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        console.log(`📄 Content-Type: ${contentType}`);
-        
-        const expectedTypes = [
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/octet-stream',
-          'application/zip'
-        ];
-        
-        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
-          // Try to get error message from response
-          const text = await response.text();
-          console.error('❌ Response is not DOCX:', text.substring(0, 200));
-          try {
-            const error = JSON.parse(text);
-            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
-          } catch {
-            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
-          }
-          return;
-        }
-        
-        const blob = await response.blob();
-        console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
-        
-        if (blob.size === 0) {
-          alert('Word dosyası boş. Lütfen tekrar deneyin.');
-          return;
-        }
-        
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        
-        console.log('✅ DOCX downloaded successfully');
-      } else {
-        let errorMessage = 'Bilinmeyen hata';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || error.message || errorMessage;
-          console.error('❌ DOCX download error:', error);
-        } catch {
-          const text = await response.text();
-          errorMessage = text.substring(0, 200) || errorMessage;
-          console.error('❌ DOCX download error (text):', text.substring(0, 200));
-        }
-        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
-      }
-    } catch (error: any) {
-      console.error('❌ Error downloading Word:', error);
-      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
-    } finally {
-      // Restore button state
-      if (button) {
-        button.disabled = false;
-        if (originalText) {
-          button.textContent = originalText;
-        }
-      }
-    }
-  };
+
 
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
@@ -582,26 +484,26 @@ export function UserDashboard({
   // Find or create a project for communication with a user (UseCaseOwner-Admin mantığı)
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
     // Try to find an existing project where both users are assigned
-    let commProject = projects.find(p => 
-      p.assignedUsers.includes(currentUser.id) && 
+    let commProject = projects.find(p =>
+      p.assignedUsers.includes(currentUser.id) &&
       p.assignedUsers.includes(otherUser.id)
     );
-    
+
     // If not found, try to find a project with similar name
     if (!commProject) {
       const projectName = `Communication: ${currentUser.name} & ${otherUser.name}`;
-      commProject = projects.find(p => 
-        p.title === projectName || 
+      commProject = projects.find(p =>
+        p.title === projectName ||
         p.title.includes('Communication') ||
         (p.assignedUsers.includes(currentUser.id) && p.assignedUsers.includes(otherUser.id))
       );
     }
-    
+
     // If still not found, use first project as fallback
     if (!commProject && projects.length > 0) {
       commProject = projects[0];
     }
-    
+
     // If still no project, create one via API
     if (!commProject) {
       try {
@@ -637,19 +539,19 @@ export function UserDashboard({
         console.error('Error creating communication project:', error);
       }
     }
-    
+
     // Final fallback - use existing project
     if (!commProject) {
       // Try to use any project where current user is assigned
       commProject = projects.find(p => p.assignedUsers.includes(currentUser.id));
-      
+
       if (!commProject) {
         console.error('No project available for communication. Please create a project first.');
         alert('Cannot start conversation: No project available. Please contact an admin to create a project.');
         throw new Error('No project available');
       }
     }
-    
+
     console.log('Using project for communication:', commProject);
     return commProject;
   };
@@ -704,10 +606,10 @@ export function UserDashboard({
   // Handle notification click - expand notification panel or open chat
   const handleNotificationClick = async (conversation: any) => {
     console.log('handleNotificationClick called with:', conversation);
-    
+
     // Check if this is a notification-only message (starts with [NOTIFICATION])
     const isNotificationOnly = String(conversation.lastMessage || '').startsWith('[NOTIFICATION]');
-    
+
     // Mark messages as read
     try {
       await fetch(api('/api/messages/mark-read'), {
@@ -733,10 +635,10 @@ export function UserDashboard({
       // Try multiple ways to find project ID
       const projectId = conversation.projectId || conversation.project?._id || conversation.project?.id;
       const fromUserId = conversation.fromUserId || conversation.fromUser?._id || conversation.fromUser?.id;
-      
+
       console.log('Looking for project with ID:', projectId);
       console.log('Available projects:', projects.map(p => ({ id: p.id, _id: (p as any)._id })));
-      
+
       const project = projects.find(p => {
         const pId = p.id || (p as any)._id;
         return pId?.toString() === projectId?.toString();
@@ -744,10 +646,10 @@ export function UserDashboard({
         id: projectId,
         title: conversation.projectTitle || conversation.project?.title || 'Project',
       } as any);
-      
+
       console.log('Looking for user with ID:', fromUserId);
       console.log('Available users:', users.map(u => ({ id: u.id, _id: (u as any)._id })));
-      
+
       const otherUser = users.find(u => {
         const uId = u.id || (u as any)._id;
         return uId?.toString() === fromUserId?.toString();
@@ -755,10 +657,10 @@ export function UserDashboard({
         id: fromUserId,
         name: conversation.fromUserName || conversation.fromUser?.name || 'User',
       } as any);
-      
+
       console.log('Found project:', project);
       console.log('Found otherUser:', otherUser);
-      
+
       if (project && otherUser && project.id && otherUser.id) {
         setChatProject(project);
         setChatOtherUser(otherUser);
@@ -784,7 +686,7 @@ export function UserDashboard({
     if (!searchTerm.trim()) {
       return true; // Show all projects if search is empty
     }
-    
+
     const searchLower = searchTerm.toLowerCase();
     const titleMatch = p.title?.toLowerCase().includes(searchLower) || false;
     const descriptionMatch = p.shortDescription?.toLowerCase().includes(searchLower) || false;
@@ -808,8 +710,8 @@ export function UserDashboard({
 
     try {
       // Get use case ID (could be string or object with url)
-      const useCaseId = typeof project.useCase === 'string' 
-        ? project.useCase 
+      const useCaseId = typeof project.useCase === 'string'
+        ? project.useCase
         : (project.useCase as any).url || project.useCase;
 
       // Fetch use case data
@@ -849,7 +751,7 @@ export function UserDashboard({
         qaContent += `Created: ${new Date(useCase.createdAt).toLocaleDateString()}\n\n`;
         qaContent += `DESCRIPTION:\n${useCase.description || 'N/A'}\n\n`;
         qaContent += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
-        
+
         questionsWithAnswers.forEach((q, idx) => {
           qaContent += `${idx + 1}. ${q.questionEn}\n`;
           if (q.questionTr) {
@@ -857,7 +759,7 @@ export function UserDashboard({
           }
           qaContent += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
         });
-        
+
         const qaBlob = new Blob([qaContent], { type: 'text/plain' });
         const qaUrl = URL.createObjectURL(qaBlob);
         const qaLink = document.createElement('a');
@@ -882,7 +784,7 @@ export function UserDashboard({
                   const contentType = file.contentType || 'application/octet-stream';
                   dataUrl = `data:${contentType};base64,${file.data}`;
                 }
-                
+
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = file.name || `file-${idx}`;
@@ -937,7 +839,7 @@ export function UserDashboard({
               )}
 
               {/* In-app Notifications Bell */}
-              <NotificationBell 
+              <NotificationBell
                 currentUser={currentUser}
                 onNavigate={(view, params) => {
                   // Handle navigation using App's state system
@@ -958,21 +860,24 @@ export function UserDashboard({
                   }
                 }}
               />
-              
+
               {/* Legacy Message Notifications */}
               <div className="relative" ref={notificationRef}>
-                <button 
+                <button
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2 text-gray-600 hover:text-gray-900"
+                  className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
                 >
                   <MessageSquare className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                    <span
+                      className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium will-change-auto"
+                      style={{ transition: 'none' }}
+                    >
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
                 </button>
-                
+
                 {showNotifications && (
                   <div
                     className="absolute left-auto right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden flex flex-col"
@@ -985,7 +890,7 @@ export function UserDashboard({
                     }}
                   >
                     <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-                      <h3 className="font-semibold text-gray-900">Notifications</h3>
+                      <h3 className="font-semibold text-gray-900">Messages</h3>
                       <button
                         onClick={() => setShowNotifications(false)}
                         className="p-1 hover:bg-gray-100 rounded-full"
@@ -1093,9 +998,8 @@ export function UserDashboard({
                   setCurrentTab("assigned");
                   onNavigate("dashboard");
                 }}
-                className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${
-                  !showChats && currentTab !== 'reports' ? 'bg-blue-50 border-r-2 border-blue-500' : ''
-                }`}
+                className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${!showChats && currentTab !== 'reports' ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                  }`}
               >
                 <Folder className="h-4 w-4 mr-3 text-blue-600" />
                 My Projects
@@ -1105,9 +1009,8 @@ export function UserDashboard({
                   setShowChats(false);
                   setCurrentTab("reports");
                 }}
-                className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${
-                  !showChats && currentTab === 'reports' ? 'bg-blue-50 border-r-2 border-blue-500' : ''
-                }`}
+                className={`w-full flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 ${!showChats && currentTab === 'reports' ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                  }`}
               >
                 <FileText className="h-4 w-4 mr-3 text-orange-600" />
                 Reports
@@ -1167,9 +1070,8 @@ export function UserDashboard({
                       <div
                         key={`${conv.projectId}-${conv.otherUserId}`}
                         onClick={() => handleOpenChat(conv)}
-                        className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-all ${
-                          hasUnread ? 'border-blue-500 border-l-4' : 'border-gray-200'
-                        }`}
+                        className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-all ${hasUnread ? 'border-blue-500 border-l-4' : 'border-gray-200'
+                          }`}
                       >
                         <div className="flex items-start space-x-4">
                           <div className="relative flex-shrink-0">
@@ -1219,22 +1121,20 @@ export function UserDashboard({
                   <nav className="flex space-x-8">
                     <button
                       onClick={() => setCurrentTab("assigned")}
-                      className={`py-2 px-1 border-b-2 text-sm ${
-                        currentTab === "assigned"
-                          ? "border-blue-600 text-blue-600"
-                          : "border-transparent text-gray-500 hover:text-gray-700"
-                      }`}
+                      className={`py-2 px-1 border-b-2 text-sm ${currentTab === "assigned"
+                        ? "border-blue-600 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
                     >
                       📂 Assigned ({assignedProjects.length})
                     </button>
 
                     <button
                       onClick={() => setCurrentTab("finished")}
-                      className={`py-2 px-1 border-b-2 text-sm ${
-                        currentTab === "finished"
-                          ? "border-blue-600 text-blue-600"
-                          : "border-transparent text-gray-500 hover:text-gray-700"
-                      }`}
+                      className={`py-2 px-1 border-b-2 text-sm ${currentTab === "finished"
+                        ? "border-blue-600 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
                     >
                       ✅ Finished Projects ({finishedProjects.length})
                     </button>
@@ -1244,318 +1144,317 @@ export function UserDashboard({
 
               {/* ===== PROJECT LIST ===== */}
               {currentTab !== "reports" && (
-              <div className="space-y-4">
-                {filteredProjects.map((project) => (
-              <div
-                key={project.id}
-                className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-all"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {project.title}
-                      </h3>
-                      <p className="text-gray-600 text-sm mt-1">
-                        {project.shortDescription}
-                      </p>
+                <div className="space-y-4">
+                  {filteredProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-all"
+                    >
+                      <div className="p-6">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {project.title}
+                            </h3>
+                            <p className="text-gray-600 text-sm mt-1">
+                              {project.shortDescription}
+                            </p>
 
-                      {/* Status + Stage */}
-                      <div className="flex items-center space-x-3 mt-3">
-                        {(() => {
+                            {/* Status + Stage */}
+                            <div className="flex items-center space-x-3 mt-3">
+                              {(() => {
+                                const progress = projectProgresses[project.id] ?? project.progress ?? 0;
+                                const progressDisplay = Math.max(0, Math.min(100, progress));
+                                const hasReport = projectReports[project.id] ?? false;
+                                const isComplete = progressDisplay >= 100;
+
+                                if (isComplete && hasReport) {
+                                  // Report generated → show RESOLVED
+                                  return (
+                                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                      RESOLVED
+                                    </span>
+                                  );
+                                } else if (isComplete && !hasReport) {
+                                  // Progress 100% but no report → show "Report Available"
+                                  return (
+                                    <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                                      ONGOING - Report Available
+                                    </span>
+                                  );
+                                } else {
+                                  // Still in progress → show current status and stage
+                                  const currentStage = getStageFromProgress(progressDisplay, hasReport);
+                                  return (
+                                    <>
+                                      <span
+                                        className={`px-2 py-1 text-xs rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}
+                                      >
+                                        {project.status.toUpperCase()}
+                                      </span>
+                                      <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full">
+                                        {stageLabels[currentStage]}
+                                      </span>
+                                    </>
+                                  );
+                                }
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Assigned / Observer */}
+                          <span
+                            className={`px-2 py-1 text-xs rounded-full ${project.assignedUsers.includes(currentUser.id)
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-600"
+                              }`}
+                          >
+                            {project.assignedUsers.includes(currentUser.id)
+                              ? "Assigned"
+                              : "Observer"}
+                          </span>
+                        </div>
+
+                        {/* Progress bar (only if assigned) */}
+                        {project.assignedUsers.includes(currentUser.id) && (() => {
                           const progress = projectProgresses[project.id] ?? project.progress ?? 0;
                           const progressDisplay = Math.max(0, Math.min(100, progress));
-                          const hasReport = projectReports[project.id] ?? false;
-                          const isComplete = progressDisplay >= 100;
-                          
-                          if (isComplete && hasReport) {
-                            // Report generated → show RESOLVED
-                            return (
-                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                RESOLVED
-                              </span>
-                            );
-                          } else if (isComplete && !hasReport) {
-                            // Progress 100% but no report → show "Report Available"
-                            return (
-                              <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                                ONGOING - Report Available
-                              </span>
-                            );
-                          } else {
-                            // Still in progress → show current status and stage
-                            const currentStage = getStageFromProgress(progressDisplay, hasReport);
-                            return (
-                              <>
-                                <span
-                                  className={`px-2 py-1 text-xs rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}
-                                >
-                                  {project.status.toUpperCase()}
-                                </span>
-                                <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-full">
-                                  {stageLabels[currentStage]}
-                                </span>
-                              </>
-                            );
-                          }
+                          return (
+                            <div className="mt-2 mb-4">
+                              <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                <span>Your Progress</span>
+                                <span>{progressDisplay}%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 h-2 rounded-full">
+                                <div
+                                  className="h-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                                  style={{
+                                    width: `${progressDisplay}%`,
+                                    minWidth: progressDisplay > 0 ? '8px' : '0',
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
                         })()}
-                      </div>
-                    </div>
 
-                    {/* Assigned / Observer */}
-                    <span
-                      className={`px-2 py-1 text-xs rounded-full ${
-                        project.assignedUsers.includes(currentUser.id)
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {project.assignedUsers.includes(currentUser.id)
-                        ? "Assigned"
-                        : "Observer"}
-                    </span>
-                  </div>
+                        {/* ACTIONS */}
+                        <div className="flex items-center justify-between mt-4">
+                          <div className="flex items-center space-x-3">
+                            <button
+                              onClick={() => onViewProject(project)}
+                              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+                            >
+                              View Details
+                            </button>
 
-                  {/* Progress bar (only if assigned) */}
-                  {project.assignedUsers.includes(currentUser.id) && (() => {
-                    const progress = projectProgresses[project.id] ?? project.progress ?? 0;
-                    const progressDisplay = Math.max(0, Math.min(100, progress));
-                    return (
-                      <div className="mt-2 mb-4">
-                        <div className="flex justify-between text-xs text-gray-600 mb-1">
-                          <span>Your Progress</span>
-                          <span>{progressDisplay}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 h-2 rounded-full">
-                          <div
-                            className="h-2 rounded-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
-                            style={{
-                              width: `${progressDisplay}%`,
-                              minWidth: progressDisplay > 0 ? '8px' : '0',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
+                            {(() => {
+                              const progress = projectProgresses[project.id] ?? project.progress ?? 0;
+                              const evolutionCompleted = Boolean(assignmentByProjectId[project.id]?.evolutionCompletedAt);
+                              const allExpertsFinished = Boolean(assignmentByProjectId[project.id]?.allExpertsCompleted);
+                              const projectId = project.id || (project as any)._id;
+                              const isChecking = checkingExperts[projectId] || false;
+                              const allCompleted = allExpertsCompleted[projectId];
 
-                  {/* ACTIONS */}
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => onViewProject(project)}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
-                      >
-                        View Details
-                      </button>
-
-                      {(() => {
-                        const progress = projectProgresses[project.id] ?? project.progress ?? 0;
-                        const evolutionCompleted = Boolean(assignmentByProjectId[project.id]?.evolutionCompletedAt);
-                        const allExpertsFinished = Boolean(assignmentByProjectId[project.id]?.allExpertsCompleted);
-                        const projectId = project.id || (project as any)._id;
-                        const isChecking = checkingExperts[projectId] || false;
-                        const allCompleted = allExpertsCompleted[projectId];
-                        
-                        // Auto-check when user reaches 100% progress
-                        if (progress >= 100 && !evolutionCompleted && allCompleted === undefined && !isChecking) {
-                          setCheckingExperts(prev => ({ ...prev, [projectId]: true }));
-                          (async () => {
-                            try {
-                              const assignedUsers = project.assignedUsers || [];
-                              if (assignedUsers.length === 0) {
-                                setAllExpertsCompleted(prev => ({ ...prev, [projectId]: true }));
-                                setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
-                                return;
-                              }
-                              
-                              const progressPromises = assignedUsers.map(async (userId: string) => {
-                                try {
-                                  const user = users.find(u => (u.id || (u as any)._id) === userId);
-                                  if (!user) return { userId, progress: 0 };
-                                  const userProgress = await fetchUserProgress(project, user);
-                                  return { userId, progress: userProgress };
-                                } catch (err) {
-                                  console.error(`Error fetching progress for user ${userId}:`, err);
-                                  return { userId, progress: 0 };
-                                }
-                              });
-                              
-                              const expertProgresses = await Promise.all(progressPromises);
-                              const allCompleted = expertProgresses.every(ep => ep.progress >= 100);
-                              setAllExpertsCompleted(prev => ({ ...prev, [projectId]: allCompleted }));
-                              
-                              if (allCompleted) {
-                                if (tensionsVoted[projectId] === undefined && !checkingTensions[projectId]) {
-                                  setCheckingTensions(prev => ({ ...prev, [projectId]: true }));
+                              // Auto-check when user reaches 100% progress
+                              if (progress >= 100 && !evolutionCompleted && allCompleted === undefined && !isChecking) {
+                                setCheckingExperts(prev => ({ ...prev, [projectId]: true }));
+                                (async () => {
                                   try {
-                                    const tensionsRes = await fetch(api(`/api/tensions/${projectId}?userId=${currentUser.id || (currentUser as any)._id}`));
-                                    if (tensionsRes.ok) {
-                                      const tensions = await tensionsRes.json();
-                                      if (tensions.length === 0) {
-                                        setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
-                                      } else {
-                                        const assignedUserIds = assignedUsers.map((id: string) => String(id));
-                                        const allTensionsVoted = tensions.every((tension: any) => {
-                                          const votes = tension.votes || [];
-                                          const votedUserIds = votes.map((v: any) => String(v.userId));
-                                          return assignedUserIds.every((userId: string) => votedUserIds.includes(userId));
-                                        });
-                                        setTensionsVoted(prev => ({ ...prev, [projectId]: allTensionsVoted }));
+                                    const assignedUsers = project.assignedUsers || [];
+                                    if (assignedUsers.length === 0) {
+                                      setAllExpertsCompleted(prev => ({ ...prev, [projectId]: true }));
+                                      setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
+                                      return;
+                                    }
+
+                                    const progressPromises = assignedUsers.map(async (userId: string) => {
+                                      try {
+                                        const user = users.find(u => (u.id || (u as any)._id) === userId);
+                                        if (!user) return { userId, progress: 0 };
+                                        const userProgress = await fetchUserProgress(project, user);
+                                        return { userId, progress: userProgress };
+                                      } catch (err) {
+                                        console.error(`Error fetching progress for user ${userId}:`, err);
+                                        return { userId, progress: 0 };
                                       }
-                                    } else {
-                                      setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                    });
+
+                                    const expertProgresses = await Promise.all(progressPromises);
+                                    const allCompleted = expertProgresses.every(ep => ep.progress >= 100);
+                                    setAllExpertsCompleted(prev => ({ ...prev, [projectId]: allCompleted }));
+
+                                    if (allCompleted) {
+                                      if (tensionsVoted[projectId] === undefined && !checkingTensions[projectId]) {
+                                        setCheckingTensions(prev => ({ ...prev, [projectId]: true }));
+                                        try {
+                                          const tensionsRes = await fetch(api(`/api/tensions/${projectId}?userId=${currentUser.id || (currentUser as any)._id}`));
+                                          if (tensionsRes.ok) {
+                                            const tensions = await tensionsRes.json();
+                                            if (tensions.length === 0) {
+                                              setTensionsVoted(prev => ({ ...prev, [projectId]: true }));
+                                            } else {
+                                              const assignedUserIds = assignedUsers.map((id: string) => String(id));
+                                              const allTensionsVoted = tensions.every((tension: any) => {
+                                                const votes = tension.votes || [];
+                                                const votedUserIds = votes.map((v: any) => String(v.userId));
+                                                return assignedUserIds.every((userId: string) => votedUserIds.includes(userId));
+                                              });
+                                              setTensionsVoted(prev => ({ ...prev, [projectId]: allTensionsVoted }));
+                                            }
+                                          } else {
+                                            setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                          }
+                                        } catch (err) {
+                                          console.error('Error checking tensions:', err);
+                                          setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                        } finally {
+                                          setCheckingTensions(prev => ({ ...prev, [projectId]: false }));
+                                        }
+                                      }
                                     }
                                   } catch (err) {
-                                    console.error('Error checking tensions:', err);
-                                    setTensionsVoted(prev => ({ ...prev, [projectId]: null }));
+                                    console.error('Error checking all experts progress:', err);
+                                    setAllExpertsCompleted(prev => ({ ...prev, [projectId]: null }));
                                   } finally {
-                                    setCheckingTensions(prev => ({ ...prev, [projectId]: false }));
+                                    setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
                                   }
+                                })();
+                              }
+
+                              // STATE 1: Not started or in progress (< 100%)
+                              if (progress < 100 && !evolutionCompleted) {
+                                return (
+                                  <button
+                                    onClick={() => onStartEvaluation(project)}
+                                    className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
+                                    style={{ backgroundColor: roleColor }}
+                                  >
+                                    <Play className="h-3 w-3 mr-2" />
+                                    {progress > 0 ? 'Continue Evaluation' : 'Start Evaluation'}
+                                  </button>
+                                );
+                              }
+
+                              // STATE 2: User finished (100%) but hasn't pressed finish evolution yet
+                              if (progress >= 100 && !evolutionCompleted) {
+                                if (isChecking || checkingTensions[projectId]) {
+                                  return (
+                                    <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center">
+                                      <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                                      Checking experts...
+                                    </div>
+                                  );
+                                }
+
+                                if (allCompleted === false) {
+                                  return (
+                                    <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
+                                      <Clock className="h-3 w-3 mr-2" />
+                                      Waiting for other experts to complete
+                                    </div>
+                                  );
+                                }
+
+                                const tensionsStatus = tensionsVoted[projectId];
+                                if (tensionsStatus === false) {
+                                  return (
+                                    <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
+                                      <Clock className="h-3 w-3 mr-2" />
+                                      Waiting for all experts to vote on tensions
+                                    </div>
+                                  );
+                                }
+
+                                if (allCompleted === true && (tensionsStatus === true || tensionsStatus === undefined)) {
+                                  return (
+                                    <button
+                                      onClick={() => onFinishEvolution?.(project)}
+                                      className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
+                                      style={{ backgroundColor: roleColor }}
+                                    >
+                                      <Target className="h-3 w-3 mr-2" />
+                                      Finish Evolution
+                                    </button>
+                                  );
                                 }
                               }
-                            } catch (err) {
-                              console.error('Error checking all experts progress:', err);
-                              setAllExpertsCompleted(prev => ({ ...prev, [projectId]: null }));
-                            } finally {
-                              setCheckingExperts(prev => ({ ...prev, [projectId]: false }));
-                            }
-                          })();
-                        }
-                        
-                        // STATE 1: Not started or in progress (< 100%)
-                        if (progress < 100 && !evolutionCompleted) {
-                          return (
-                            <button
-                              onClick={() => onStartEvaluation(project)}
-                              className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
-                              style={{ backgroundColor: roleColor }}
-                            >
-                              <Play className="h-3 w-3 mr-2" />
-                              {progress > 0 ? 'Continue Evaluation' : 'Start Evaluation'}
-                            </button>
-                          );
-                        }
-                        
-                        // STATE 2: User finished (100%) but hasn't pressed finish evolution yet
-                        if (progress >= 100 && !evolutionCompleted) {
-                          if (isChecking || checkingTensions[projectId]) {
-                            return (
-                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center">
-                                <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
-                                Checking experts...
-                              </div>
-                            );
-                          }
-                          
-                          if (allCompleted === false) {
-                            return (
-                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
-                                <Clock className="h-3 w-3 mr-2" />
-                                Waiting for other experts to complete
-                              </div>
-                            );
-                          }
-                          
-                          const tensionsStatus = tensionsVoted[projectId];
-                          if (tensionsStatus === false) {
-                            return (
-                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
-                                <Clock className="h-3 w-3 mr-2" />
-                                Waiting for all experts to vote on tensions
-                              </div>
-                            );
-                          }
-                          
-                          if (allCompleted === true && (tensionsStatus === true || tensionsStatus === undefined)) {
-                            return (
+
+                              // STATE 3: User has finished evolution
+                              if (evolutionCompleted) {
+                                if (allExpertsFinished) {
+                                  return (
+                                    <div className="px-4 py-2 text-white rounded-lg text-sm flex items-center bg-green-600">
+                                      <CheckCircle className="h-3 w-3 mr-2" />
+                                      Finished Evolution
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
+                                      <Clock className="h-3 w-3 mr-2" />
+                                      Waiting for other experts
+                                    </div>
+                                  );
+                                }
+                              }
+
+                              return null;
+                            })()}
+
+                            {project.useCase && (
                               <button
-                                onClick={() => onFinishEvolution?.(project)}
-                                className="px-4 py-2 text-white rounded-lg text-sm hover:opacity-90 flex items-center"
-                                style={{ backgroundColor: roleColor }}
+                                onClick={() => handleDownloadUseCase(project)}
+                                className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-800 text-sm"
                               >
-                                <Target className="h-3 w-3 mr-2" />
-                                Finish Evolution
+                                <Download className="h-3 w-3 mr-1" />
+                                Use Case
                               </button>
-                            );
-                          }
-                        }
-                        
-                        // STATE 3: User has finished evolution
-                        if (evolutionCompleted) {
-                          if (allExpertsFinished) {
-                            return (
-                              <div className="px-4 py-2 text-white rounded-lg text-sm flex items-center bg-green-600">
-                                <CheckCircle className="h-3 w-3 mr-2" />
-                                Finished Evolution
-                              </div>
-                            );
-                          } else {
-                            return (
-                              <div className="px-4 py-2 text-gray-600 rounded-lg text-sm flex items-center bg-yellow-50 border border-yellow-200">
-                                <Clock className="h-3 w-3 mr-2" />
-                                Waiting for other experts
-                              </div>
-                            );
-                          }
-                        }
+                            )}
+                          </div>
 
-                        return null;
-                      })()}
+                          <div className="text-xs text-gray-500">
+                            Created{" "}
+                            {new Date(project.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
 
-                      {project.useCase && (
-                        <button 
-                          onClick={() => handleDownloadUseCase(project)}
-                          className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-800 text-sm"
-                        >
-                          <Download className="h-3 w-3 mr-1" />
-                          Use Case
-                        </button>
-                      )}
+                        {/* Delete action */}
+                        <div className="flex justify-end mt-3">
+                          <button
+                            onClick={() => {
+                              const confirmDelete = window.confirm("Delete this project? This cannot be undone.");
+                              if (!confirmDelete) return;
+                              onDeleteProject(project.id);
+                            }}
+                            className="text-sm text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     </div>
+                  ))}
 
-                    <div className="text-xs text-gray-500">
-                      Created{" "}
-                      {new Date(project.createdAt).toLocaleDateString()}
+                  {/* EMPTY STATES */}
+                  {filteredProjects.length === 0 && (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-3">
+                        {currentTab === "assigned" ? "📂" : "✅"}
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        No {currentTab === "assigned" ? "assigned" : "finished"} projects found
+                      </h3>
+                      <p className="text-gray-600">
+                        {searchTerm
+                          ? "No projects match your search."
+                          : currentTab === "assigned"
+                            ? "You have not been assigned to any projects."
+                            : "You have not finished any projects yet."}
+                      </p>
                     </div>
-                  </div>
-
-                  {/* Delete action */}
-                  <div className="flex justify-end mt-3">
-                    <button
-                      onClick={() => {
-                        const confirmDelete = window.confirm("Delete this project? This cannot be undone.");
-                        if (!confirmDelete) return;
-                        onDeleteProject(project.id);
-                      }}
-                      className="text-sm text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  )}
                 </div>
-              </div>
-                ))}
-
-                {/* EMPTY STATES */}
-                {filteredProjects.length === 0 && (
-                  <div className="text-center py-12">
-                    <div className="text-6xl mb-3">
-                      {currentTab === "assigned" ? "📂" : "✅"}
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No {currentTab === "assigned" ? "assigned" : "finished"} projects found
-                    </h3>
-                    <p className="text-gray-600">
-                      {searchTerm
-                        ? "No projects match your search."
-                        : currentTab === "assigned"
-                        ? "You have not been assigned to any projects."
-                        : "You have not finished any projects yet."}
-                    </p>
-                  </div>
-                )}
-              </div>
               )}
 
               {/* ===== REPORTS TAB ===== */}
@@ -1596,7 +1495,7 @@ export function UserDashboard({
                             className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                           >
                             <div className="flex items-start justify-between">
-                              <div 
+                              <div
                                 className="flex-1 cursor-pointer"
                                 onClick={() => {
                                   // Experts/viewers should not open the report modal by clicking the card.
@@ -1631,10 +1530,10 @@ export function UserDashboard({
                                       onReviewReport(reportId);
                                     }}
                                     className="px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-2"
-                                    title="Review report"
+                                    title="View and comment on report"
                                   >
                                     <FileText className="h-4 w-4" />
-                                    Review
+                                    Comment
                                   </button>
                                 )}
                                 <button
@@ -1644,14 +1543,6 @@ export function UserDashboard({
                                 >
                                   <Download className="h-4 w-4" />
                                   PDF
-                                </button>
-                                <button
-                                  onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
-                                  className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
-                                  title="Download Word"
-                                >
-                                  <Download className="h-4 w-4 text-green-600" />
-                                  Word
                                 </button>
                                 {currentUser.role === "admin" && (
                                   <button
@@ -1665,11 +1556,10 @@ export function UserDashboard({
                                 )}
                                 {report.status !== 'draft' && (
                                   <span
-                                    className={`px-2 py-1 text-xs font-medium rounded ${
-                                      report.status === 'final'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}
+                                    className={`px-2 py-1 text-xs font-medium rounded ${report.status === 'final'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                      }`}
                                   >
                                     {report.status === 'final' ? 'Final' : 'Archived'}
                                   </span>
@@ -1789,8 +1679,8 @@ export function UserDashboard({
         />
       )}
 
-      {/* REPORT VIEW MODAL */}
-      {selectedReport && currentUser.role === "admin" && (
+      {/* REPORT VIEW MODAL - Updated to show Summary */}
+      {selectedReport && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -1807,16 +1697,30 @@ export function UserDashboard({
                 <X className="h-6 w-6" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="prose max-w-none whitespace-pre-wrap text-gray-700">
-                {(() => {
-                  const comments = (selectedReport as any)?.expertComments;
-                  if (Array.isArray(comments) && comments.length > 0) {
-                    return String(comments[0]?.commentText || "");
-                  }
-                  return "";
-                })()}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+              {/* Report Summary Section */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <h3 className="text-sm font-bold text-blue-900 uppercase mb-2">Report Summary (PDF Preview)</h3>
+                <div className="prose max-w-none text-gray-800 whitespace-pre-wrap text-sm">
+                  {(selectedReport as any).summary || "No summary available for this report."}
+                </div>
               </div>
+
+              {/* Expert Comments Section */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-700 uppercase mb-2">Expert Review Comments</h3>
+                <div className="prose max-w-none whitespace-pre-wrap text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  {(() => {
+                    const comments = (selectedReport as any)?.expertComments;
+                    if (Array.isArray(comments) && comments.length > 0) {
+                      return String(comments[0]?.commentText || "");
+                    }
+                    return "No comments yet.";
+                  })()}
+                </div>
+              </div>
+
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-2">
@@ -1830,7 +1734,7 @@ export function UserDashboard({
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                 >
                   <Download className="h-4 w-4" />
-                  Download PDF
+                  Download PDF Report
                 </button>
                 {currentUser.role === "admin" && (
                   <button

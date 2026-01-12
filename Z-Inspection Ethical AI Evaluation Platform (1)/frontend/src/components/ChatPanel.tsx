@@ -42,60 +42,11 @@ export function ChatPanel({
   const currentUserId = getId(currentUser);
   const otherUserId = getId(otherUser);
 
-  // Chat scroll behavior (WhatsApp-style):
-  // - Auto-scroll only on send or initial open
-  // - Never override manual user scrolling
-  const scrollToBottom = (force = false) => {
+  // Simple scroll to bottom - no aggressive retries
+  const scrollToBottom = () => {
     const container = messagesContainerRef.current;
-    if (!container) return;
-    
-    // Use multiple attempts to ensure scroll happens after DOM updates
-    const attemptScroll = () => {
-      if (container) {
-        // Force scroll to absolute bottom - use scrollHeight directly
-        // This ensures we go to the very bottom
-        container.scrollTop = container.scrollHeight;
-        
-        // Double-check: if still not at bottom, force it again
-        requestAnimationFrame(() => {
-          if (container) {
-            const maxScroll = container.scrollHeight - container.clientHeight;
-            if (container.scrollTop < maxScroll - 5) {
-              container.scrollTop = container.scrollHeight;
-            }
-          }
-        });
-        
-        // Also try scrollIntoView on the messagesEndRef element as backup
-        if (messagesEndRef.current) {
-          try {
-            messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end', inline: 'nearest' });
-          } catch (e) {
-            // Fallback if scrollIntoView fails
-            container.scrollTop = container.scrollHeight;
-          }
-        }
-      }
-    };
-    
-    // Immediate scroll
-    attemptScroll();
-    
-    // Scroll after next frame
-    requestAnimationFrame(() => {
-      attemptScroll();
-      // Also try after a small delay to catch any late DOM updates
-      setTimeout(attemptScroll, 50);
-    });
-    
-    // Force scroll after multiple delays if needed
-    if (force) {
-      setTimeout(attemptScroll, 100);
-      setTimeout(attemptScroll, 200);
-      setTimeout(attemptScroll, 400);
-      setTimeout(attemptScroll, 600);
-      setTimeout(attemptScroll, 1000);
-      setTimeout(attemptScroll, 1500);
+    if (container) {
+      container.scrollTop = container.scrollHeight;
     }
   };
 
@@ -168,7 +119,7 @@ export function ChatPanel({
           otherUserId: otherUserId
         }),
       });
-      
+
       if (response.ok) {
         await response.json();
         setMessages([]);
@@ -228,15 +179,12 @@ export function ChatPanel({
 
   useEffect(() => {
     if (!normalizedProjectId || !currentUserId || !otherUserId) return;
-    
+
     // Initial fetch - scroll to bottom after first load
     const initialLoad = async () => {
       await fetchMessages();
-      // Force scroll to bottom with multiple attempts - wait for DOM to be ready
-      setTimeout(() => scrollToBottom(true), 150);
-      setTimeout(() => scrollToBottom(true), 300);
-      setTimeout(() => scrollToBottom(true), 500);
-      setTimeout(() => scrollToBottom(true), 800);
+      // Simple scroll after messages load
+      setTimeout(scrollToBottom, 300);
     };
     initialLoad();
     markAsRead();
@@ -250,49 +198,26 @@ export function ChatPanel({
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
     };
   }, [normalizedProjectId, currentUserId, otherUserId]);
-  
-  // Also scroll when messages change (for initial load) - THIS IS CRITICAL
+
+  // Auto-scroll only when messages change AND user is already at bottom
   useEffect(() => {
     if (messages.length > 0 && !loading) {
-      // Aggressively scroll to bottom when messages are loaded
-      // Use multiple timeouts to ensure it happens after all DOM updates
-      const scrollAttempts = [50, 100, 200, 400, 600, 800, 1200];
-      scrollAttempts.forEach(delay => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+
+      // Check if user is already at or near bottom
+      const isNearBottom = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 50;
+
+      // Only auto-scroll if user was already viewing the bottom
+      if (isNearBottom) {
         setTimeout(() => {
-          scrollToBottom(true);
-          // Also check if we're actually at bottom, if not, try again
-          const container = messagesContainerRef.current;
           if (container) {
-            const isAtBottom = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 10;
-            if (!isAtBottom) {
-              container.scrollTop = container.scrollHeight;
-            }
+            container.scrollTop = container.scrollHeight;
           }
-        }, delay);
-      });
+        }, 100);
+      }
     }
   }, [messages.length, loading]);
-  
-  // Force scroll when panel is opened (for admin chats)
-  useEffect(() => {
-    if (forceScrollOnMount && messages.length > 0 && !loading) {
-      // Very aggressive scroll when chat is first opened
-      const scrollAttempts = [50, 100, 200, 300, 500, 700, 1000, 1500];
-      scrollAttempts.forEach(delay => {
-        setTimeout(() => {
-          scrollToBottom(true);
-          // Double-check we're at bottom
-          const container = messagesContainerRef.current;
-          if (container) {
-            const maxScroll = container.scrollHeight - container.clientHeight;
-            if (container.scrollTop < maxScroll - 10) {
-              container.scrollTop = container.scrollHeight;
-            }
-          }
-        }, delay);
-      });
-    }
-  }, [forceScrollOnMount, messages.length, loading]);
 
   // Disable auto-scroll when user manually scrolls
   useEffect(() => {
@@ -304,13 +229,13 @@ export function ChatPanel({
     };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
-    
+
     // Listen for chat-opened event to force scroll
     const handleChatOpened = () => {
-      setTimeout(() => scrollToBottom(true), 100);
+      setTimeout(scrollToBottom, 100);
     };
     window.addEventListener('chat-opened', handleChatOpened);
-    
+
     return () => {
       container.removeEventListener('scroll', handleScroll);
       window.removeEventListener('chat-opened', handleChatOpened);
@@ -344,7 +269,7 @@ export function ChatPanel({
     if (date.toDateString() === today.toDateString()) return 'Today';
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
 
-      return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   // WhatsApp-style message grouping: group consecutive messages from same sender ONLY
@@ -357,9 +282,9 @@ export function ChatPanel({
         senderId: string;
         senderName: string;
         isFromMe: boolean;
-      messages: Array<{
-        message: any;
-        showTime: boolean;
+        messages: Array<{
+          message: any;
+          showTime: boolean;
         }>;
       }>;
     }> = [];
@@ -375,15 +300,15 @@ export function ChatPanel({
     msgs.forEach((msg, idx) => {
       const msgDate = new Date(msg.createdAt).toDateString();
       const isFromMe = isFromCurrentUser(msg);
-      const senderId = typeof msg.fromUserId === 'object' 
-        ? (msg.fromUserId._id || msg.fromUserId.id) 
+      const senderId = typeof msg.fromUserId === 'object'
+        ? (msg.fromUserId._id || msg.fromUserId.id)
         : msg.fromUserId;
       const senderName = getSenderName(msg);
       const nextMsg = idx < msgs.length - 1 ? msgs[idx + 1] : null;
-      const nextSenderId = nextMsg 
-        ? (typeof nextMsg.fromUserId === 'object' 
-            ? (nextMsg.fromUserId._id || nextMsg.fromUserId.id) 
-            : nextMsg.fromUserId)
+      const nextSenderId = nextMsg
+        ? (typeof nextMsg.fromUserId === 'object'
+          ? (nextMsg.fromUserId._id || nextMsg.fromUserId.id)
+          : nextMsg.fromUserId)
         : null;
       const timeDiffNext = nextMsg
         ? (new Date(nextMsg.createdAt).getTime() - new Date(msg.createdAt).getTime()) / 60000
@@ -439,7 +364,7 @@ export function ChatPanel({
   if (isMinimized && !inline) {
     return (
       <div className="fixed bottom-4 right-4 w-80 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
-        <div 
+        <div
           className="bg-gray-50 border-b border-gray-200 p-3 flex items-center justify-between cursor-pointer rounded-t-lg"
           onClick={() => setIsMinimized(false)}
         >
@@ -480,7 +405,7 @@ export function ChatPanel({
   const containerClasses = inline
     ? `w-full max-w-full bg-white border border-gray-200 overflow-hidden flex flex-col`
     : `fixed ${isFullscreen ? 'inset-0' : 'bottom-4 right-4 w-96'} bg-white shadow-2xl z-50 border border-gray-200 rounded-lg flex flex-col min-h-0`;
-  
+
   const fixedHeight = isFullscreen ? '100vh' : `min(600px, calc(100vh - 2rem))`;
 
   return (
@@ -488,28 +413,28 @@ export function ChatPanel({
       className={containerClasses}
       style={
         inline
-          ? { 
-              display: 'flex', 
-              flexDirection: 'column', 
-              height: '100%',
-              maxHeight: '100%',
-              minHeight: 0,
-              overflow: 'hidden',
-              position: 'relative'
-            }
-          : (!isFullscreen ? { 
-              height: fixedHeight, 
-              display: 'flex', 
-              flexDirection: 'column', 
-              position: 'relative',
-              overflow: 'hidden'
-            } : { 
-              display: 'flex', 
-              flexDirection: 'column', 
-              height: '100vh', 
-              position: 'relative',
-              overflow: 'hidden'
-            })
+          ? {
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            maxHeight: '100%',
+            minHeight: 0,
+            overflow: 'hidden',
+            position: 'relative'
+          }
+          : (!isFullscreen ? {
+            height: fixedHeight,
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            overflow: 'hidden'
+          } : {
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100vh',
+            position: 'relative',
+            overflow: 'hidden'
+          })
       }
     >
       {/* Header - Fixed height */}
@@ -542,12 +467,12 @@ export function ChatPanel({
       </div>
 
       {/* Messages (scroll area) - Scrollable container with flex: 1 */}
-      <div 
+      <div
         ref={messagesContainerRef}
         className="bg-gray-50 overscroll-contain touch-pan-y chat-messages-scroll"
         tabIndex={0}
         aria-label="Chat messages"
-        style={{ 
+        style={{
           flex: '1 1 0%',
           minHeight: 0,
           height: 0, // Force flex child to respect parent height constraints
@@ -571,10 +496,10 @@ export function ChatPanel({
               <React.Fragment key={dateGroupIdx}>
                 {/* Date separator */}
                 <div className="flex items-center justify-center my-2">
-                <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
+                  <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
                     {formatDate(dateGroup.date)}
+                  </div>
                 </div>
-              </div>
 
                 {/* Message groups by sender - ALL IN NORMAL FLOW */}
                 {dateGroup.messageGroups.map((senderGroup, senderGroupIdx) => {
@@ -583,16 +508,16 @@ export function ChatPanel({
                   const showSenderName = !isFromMe;
 
                   return (
-                    <div 
+                    <div
                       key={`${senderGroup.senderId}-${senderGroupIdx}`}
                       className={`flex ${isFromMe ? 'justify-end' : 'justify-start'} items-end gap-2 px-4`}
                     >
                       {/* Avatar - only for others, show once per group */}
                       {!isFromMe && (
                         <div className="flex-shrink-0 self-end">
-                            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-medium">
+                          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-medium">
                             {senderGroup.senderName.charAt(0)}
-                            </div>
+                          </div>
                         </div>
                       )}
 
@@ -611,11 +536,10 @@ export function ChatPanel({
                             return (
                               <div
                                 key={message.id}
-                                className={`rounded-lg px-3 py-2 ${
-                                  isFromMe
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-white text-gray-900 border border-gray-200 shadow-sm'
-                                }`}
+                                className={`rounded-lg px-3 py-2 ${isFromMe
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white text-gray-900 border border-gray-200 shadow-sm'
+                                  }`}
                               >
                                 <div className="text-sm whitespace-pre-wrap break-words">{message.text}</div>
                                 <div className={`text-xs mt-1 ${isFromMe ? 'text-blue-100' : 'text-gray-500'}`}>
@@ -630,9 +554,9 @@ export function ChatPanel({
                       {/* Avatar for current user - show once per group */}
                       {isFromMe && (
                         <div className="flex-shrink-0 self-end">
-                            <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-medium">
-                              {currentUser.name.charAt(0)}
-                            </div>
+                          <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-medium">
+                            {currentUser.name.charAt(0)}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -641,16 +565,16 @@ export function ChatPanel({
               </React.Fragment>
             ))}
             <div ref={messagesEndRef} style={{ height: '1px', width: '100%', flexShrink: 0 }} />
-            </div>
+          </div>
         )}
       </div>
 
       {/* Input (fixed at bottom) - Fixed height row */}
-      <div 
-        className="border-t border-gray-200 px-4 py-3 bg-white" 
-        style={{ 
-          flexShrink: 0, 
-          flex: '0 0 auto', 
+      <div
+        className="border-t border-gray-200 px-4 py-3 bg-white"
+        style={{
+          flexShrink: 0,
+          flex: '0 0 auto',
           borderTop: '1px solid #e5e7eb',
           position: 'relative',
           zIndex: 10
@@ -675,11 +599,10 @@ export function ChatPanel({
           <button
             onClick={sendMessage}
             disabled={!newMessage.trim() || sending}
-            className={`p-2 rounded-lg transition-colors ${
-              newMessage.trim() && !sending
-                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
+            className={`p-2 rounded-lg transition-colors ${newMessage.trim() && !sending
+              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
             style={{ flexShrink: 0 }}
           >
             <Send className={`h-5 w-5 ${newMessage.trim() && !sending ? 'text-white' : 'text-gray-400'}`} />

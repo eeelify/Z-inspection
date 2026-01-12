@@ -219,7 +219,7 @@ CRITICAL: Base ALL statements on provided ERC values. Do NOT label as "high risk
 ## 📊 Dashboard Summary
 
 **Overall Ethical Risk (ERC-Based)**
-- Overall ERC Score: [use provided value] / 4.0
+- Overall ERC Score: [use provided value]
 - Risk Classification: [use provided label - DO NOT infer]
 - Interpretation: [explain what this score means in context]
 
@@ -335,9 +335,9 @@ For EACH of the top 5 risk drivers (use provided data exactly):
 ### [X]. [Question Code] - [Principle Name]
 
 **Risk Metrics** (use provided values exactly)
-- Question Importance: [provided value] / 4.0 (how critical this topic is in general)
+- Question Importance: [provided value] (how critical this topic is in general)
 - Answer Severity: [provided value] / 1.0 (observed risk in this system)
-- **Actual System Risk (ERC):** [provided value] / 4.0 → **[Risk Label]**
+- **Actual System Risk (ERC):** [provided value] → **[Risk Label]**
 
 **Evaluator Response**
 - Role(s): [list actual roles who answered this question]
@@ -450,7 +450,7 @@ For EACH of the 7 ethical principles:
 ### [Principle Name]
 
 **ERC Assessment**
-- ERC Score: [provided value] / 4.0
+- ERC Score: [provided value]
 - Risk Classification: [provided label]
 - Interpretation: [what this ERC value indicates about this principle's management]
 
@@ -755,7 +755,7 @@ RULES
     } catch (error) {
       console.error(`❌ Model ${modelName} başarısız:`, error.message);
       lastError = error;
-      
+
       // If it's not a 404 (model not found), don't try other models
       if (!error.message.includes("404") && !error.message.includes("not found")) {
         break;
@@ -769,7 +769,7 @@ RULES
   if (lastError) {
     const errorMsg = lastError.message || '';
     const errorMsgLower = errorMsg.toLowerCase();
-    
+
     // Check for API key expired or invalid (400 Bad Request)
     if (errorMsg.includes("400") || errorMsgLower.includes("expired") || errorMsgLower.includes("api_key_invalid") || errorMsgLower.includes("api key expired")) {
       throw new Error("❌ Gemini API Key süresi dolmuş veya geçersiz. Lütfen .env dosyanızdaki GEMINI_API_KEY değerini kontrol edin ve yeni bir API key oluşturun.");
@@ -809,12 +809,12 @@ function buildUserPrompt(data) {
   let prompt = `# AI ETHICS EVALUATION DATA\n\n`;
   prompt += `Analyze the following data using the Z-Inspection methodology.\n`;
   prompt += `**CRITICAL: ALL expert answers and ALL tensions MUST be fully analyzed and explained in the report.**\n\n`;
-  
+
   // E) Add dashboardMetrics JSON section
   if (reportMetrics.scoring) {
     prompt += `## DASHBOARD METRICS (CANONICAL - USE ONLY THESE NUMBERS)\n`;
     prompt += `**IMPORTANT: These numbers are pre-computed from scores collection. DO NOT recompute or reinterpret.**\n\n`;
-    
+
     if (reportMetrics.scoring.totalsOverall) {
       prompt += `### Overall Metrics\n`;
       prompt += `- Overall Risk: ${reportMetrics.scoring.totalsOverall.overallRisk || reportMetrics.scoring.totalsOverall.avg || 'N/A'}\n`;
@@ -822,7 +822,7 @@ function buildUserPrompt(data) {
       prompt += `- Risk Label: ${reportMetrics.scoring.totalsOverall.riskLabel || 'N/A'}\n`;
       prompt += `- Evaluator Count: ${reportMetrics.scoring.totalsOverall.uniqueEvaluatorCount || reportMetrics.scoring.totalsOverall.count || 'N/A'}\n\n`;
     }
-    
+
     if (reportMetrics.scoring.byPrincipleOverall) {
       prompt += `### Principle-Level Metrics\n`;
       Object.entries(reportMetrics.scoring.byPrincipleOverall).forEach(([principle, data]) => {
@@ -837,7 +837,7 @@ function buildUserPrompt(data) {
       });
       prompt += `\n`;
     }
-    
+
     // E) Add top drivers table
     if (topDriversTable && topDriversTable.length > 0) {
       prompt += `### Top Risk Drivers (from scores.byPrinciple[...].topDrivers)\n`;
@@ -869,7 +869,7 @@ function buildUserPrompt(data) {
   prompt += `**Description:** ${project.fullDescription || project.shortDescription || "N/A"}\n`;
   prompt += `**Status:** ${project.status || "N/A"}\n`;
   prompt += `**Progress:** ${project.progress || 0}%\n\n`;
-  
+
   /* EVALUATOR REPRESENTATION - MUST MATCH SUBMITTED EVALUATIONS (NO TEAM/ASSIGNMENT REQUIREMENT) */
   prompt += `## EVALUATOR REPRESENTATION\n`;
   prompt += `**CRITICAL: Evaluator counts/roles MUST match SUBMITTED evaluations (unique userId). Do not duplicate roles. Do NOT invent a "project" evaluator role.**\n`;
@@ -898,12 +898,12 @@ function buildUserPrompt(data) {
   } else {
     scores.forEach((s, i) => {
       prompt += `### Evaluator ${i + 1}${s.role ? ` (${s.role})` : ""}\n`;
-      prompt += `Average Score: ${s.totals?.avg?.toFixed(2) || "N/A"} / 4.0\n`;
+      prompt += `Average Score: ${s.totals?.avg?.toFixed(2) || "N/A"}\n`;
 
       if (s.byPrinciple) {
         Object.entries(s.byPrinciple).forEach(([p, v]) => {
           if (v?.avg !== undefined) {
-            prompt += `- ${p}: ${v.avg.toFixed(2)} / 4.0\n`;
+            prompt += `- ${p}: ${v.avg.toFixed(2)}\n`;
           }
         });
       }
@@ -922,21 +922,21 @@ function buildUserPrompt(data) {
       const qKey = a.questionnaireKey || 'unknown';
       answersByQuestionnaire[qKey] = (answersByQuestionnaire[qKey] || 0) + 1;
     });
-    
+
     prompt += `**Total Answers:** ${unifiedAnswers.length}\n`;
     prompt += `**Questionnaires Covered:** ${Object.keys(answersByQuestionnaire).length}\n`;
     Object.entries(answersByQuestionnaire).forEach(([qKey, count]) => {
-      const label = qKey === 'general-v1' ? 'General Questions' : 
-                    qKey.includes('expert') ? `Role-Specific (${qKey.replace('-v1', '')})` : 
-                    qKey;
+      const label = qKey === 'general-v1' ? 'General Questions' :
+        qKey.includes('expert') ? `Role-Specific (${qKey.replace('-v1', '')})` :
+          qKey;
       prompt += `  - ${label}: ${count} answers\n`;
     });
     prompt += `\n`;
-    
+
     // Group by principle for better organization
     const answersByPrinciple = {};
     const answersWithoutPrinciple = [];
-    
+
     unifiedAnswers.forEach((answer) => {
       const principle = answer.principle || 'UNCATEGORIZED';
       if (principle === 'UNCATEGORIZED' || !principle) {
@@ -948,7 +948,7 @@ function buildUserPrompt(data) {
         answersByPrinciple[principle].push(answer);
       }
     });
-    
+
     // Output by principle
     Object.entries(answersByPrinciple).forEach(([principle, answers]) => {
       prompt += `### ${principle}\n`;
@@ -957,9 +957,9 @@ function buildUserPrompt(data) {
         prompt += `- **Question ID/Code:** ${answer.questionId || answer.questionCode || 'N/A'}\n`;
         // Show questionnaire key to indicate if it's general or role-specific
         const qKey = answer.questionnaireKey || 'N/A';
-        const qKeyLabel = qKey === 'general-v1' ? 'General Questions' : 
-                         qKey.includes('expert') ? `Role-Specific (${qKey.replace('-v1', '')})` : 
-                         qKey;
+        const qKeyLabel = qKey === 'general-v1' ? 'General Questions' :
+          qKey.includes('expert') ? `Role-Specific (${qKey.replace('-v1', '')})` :
+            qKey;
         prompt += `- **Questionnaire:** ${qKeyLabel} (${qKey})\n`;
         if (answer.selectedOption) {
           prompt += `- **Selected Option:** ${answer.selectedOption}\n`;
@@ -981,7 +981,7 @@ function buildUserPrompt(data) {
         prompt += `\n`;
       });
     });
-    
+
     // Output uncategorized answers
     if (answersWithoutPrinciple.length > 0) {
       prompt += `### UNCATEGORIZED ANSWERS\n`;
@@ -1038,7 +1038,7 @@ function buildUserPrompt(data) {
       const createdBy = t.createdBy && t.createdBy !== 'unknown' ? t.createdBy : (t.createdBy || '');
       const reviewState = t.reviewState || t.status || 'Proposed';
       const severityLevel = t.severityLevel || t.severity || 'Unknown';
-      
+
       prompt += `### Tension ${i + 1}: ${t.principle1 || t.conflict?.principle1 || 'Unknown'} vs ${t.principle2 || t.conflict?.principle2 || 'Unknown'}\n`;
       prompt += `- **Tension ID:** ${t._id || t.tensionId || 'N/A'}\n`;
       prompt += `- **Claim Statement:** ${claim}\n`;
@@ -1053,7 +1053,7 @@ function buildUserPrompt(data) {
         prompt += `  ⚠️ CreatedBy is missing - check data mapping\n`;
       }
       prompt += `- **Created At:** ${t.createdAt ? new Date(t.createdAt).toISOString() : 'N/A'}\n\n`;
-      
+
       // Votes
       if (t.votes && t.votes.length > 0) {
         prompt += `- **Votes:**\n`;
@@ -1068,7 +1068,7 @@ function buildUserPrompt(data) {
       } else {
         prompt += `- **Votes:** No votes yet\n\n`;
       }
-      
+
       // Comments
       if (t.comments && t.comments.length > 0) {
         prompt += `- **Comments:**\n`;
@@ -1077,7 +1077,7 @@ function buildUserPrompt(data) {
         });
         prompt += `\n`;
       }
-      
+
       // Evidence
       if (t.evidences && t.evidences.length > 0) {
         prompt += `- **Evidence (${t.evidences.length} items):**\n`;
@@ -1104,11 +1104,11 @@ function buildUserPrompt(data) {
         prompt += `- **Evidence:** No evidence attached.\n`;
         prompt += `  ⚠️ State "No evidence attached" in report\n\n`;
       }
-      
+
       // Mitigation - F) Check if filled
       const hasMitigation = !!(t.mitigation?.proposedMitigations || t.mitigation?.proposed || t.mitigation?.tradeOffDecision || t.mitigation?.tradeoff?.decision);
       prompt += `- **Mitigation Filled:** ${hasMitigation ? 'Yes' : 'No'}\n`;
-      
+
       // Impact
       if (t.impact) {
         prompt += `- **Impact:**\n`;
@@ -1123,7 +1123,7 @@ function buildUserPrompt(data) {
         }
         prompt += `\n`;
       }
-      
+
       // Mitigation
       if (t.mitigation) {
         prompt += `- **Mitigation:**\n`;
@@ -1149,7 +1149,7 @@ function buildUserPrompt(data) {
         }
         prompt += `\n`;
       }
-      
+
       prompt += `\n`;
     });
   }

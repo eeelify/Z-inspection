@@ -325,19 +325,24 @@ export function AdminDashboardEnhanced({
     return date.toLocaleDateString();
   };
 
-  // Fetch unread message count (for notifications - includes all messages)
+  // Fetch unread count for ALERTS (Bell icon) - Should ONLY show system notifications
   const fetchUnreadCount = async () => {
     try {
       const response = await fetch(api(`/api/messages/unread-count?userId=${encodeURIComponent(currentUser.id)}`));
       if (response.ok) {
         const data = await response.json();
         const conversations = data.conversations || [];
-        // Calculate actual unread count from conversations to ensure consistency
-        // Backend uses 'count' field, not 'unreadCount'
-        const actualUnreadCount = conversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
-        // Only show badge if there are actual conversations with unread messages
+
+        // Filter FOR notification-only messages (Bell Icon)
+        const notificationConversations = conversations.filter((conv: any) => {
+          const lastMsg = String(conv.lastMessage || '');
+          const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
+          return isNotification;
+        });
+
+        const actualUnreadCount = notificationConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         setUnreadCount(actualUnreadCount);
-        setUnreadConversations(conversations);
+        setUnreadConversations(notificationConversations);
       } else {
         console.error('Admin failed to fetch unread count:', response.status, response.statusText);
       }
@@ -379,8 +384,12 @@ export function AdminDashboardEnhanced({
 
   // Poll for unread messages every 30 seconds
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // 30 seconds
+    fetchUnreadCount(); // Bell
+    fetchMessageUnreadCount(); // Messages
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+      fetchMessageUnreadCount();
+    }, 30000); // 30 seconds
 
     // Listen for message sent events to refresh immediately
     const handleMessageSent = () => {
@@ -426,18 +435,28 @@ export function AdminDashboardEnhanced({
 
   // Handle notification click - open chat panel
   const handleNotificationClick = async (conversation: any) => {
+    console.log('[DEBUG] Notification Clicked:', conversation);
+
     const project =
       projects.find(p => p.id === conversation.projectId) ||
       ({
         id: conversation.projectId,
         title: conversation.projectTitle || 'Project',
       } as any);
+
     const otherUser =
       users.find(u => u.id === conversation.fromUserId) ||
       ({
         id: conversation.fromUserId,
         name: conversation.fromUserName || 'User',
       } as any);
+
+    console.log('[DEBUG] Resolved Chat Context:', {
+      projectId: project?.id,
+      projectTitle: project?.title,
+      otherUserId: otherUser?.id,
+      otherUserName: otherUser?.name
+    });
 
     if (project && otherUser) {
       // Mark messages as read
@@ -452,6 +471,7 @@ export function AdminDashboardEnhanced({
           }),
         });
         fetchUnreadCount();
+        fetchMessageUnreadCount();
       } catch (error) {
         console.error('Error marking messages as read:', error);
       }
@@ -461,6 +481,7 @@ export function AdminDashboardEnhanced({
       setChatOtherUser(otherUser);
       setChatPanelOpen(true);
       setShowNotifications(false);
+      setShowMessageNotifications(false);
     }
   };
   const [selectedUseCaseForAssignment, setSelectedUseCaseForAssignment] = useState<UseCase | null>(null);
@@ -510,7 +531,7 @@ export function AdminDashboardEnhanced({
             className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
           >
-            <Folder className={`h-5 w-5 mr-3 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-blue-500'}`} />
+            <Folder className="h-5 w-5 mr-3 text-blue-600" />
             Dashboard
           </button>
           <button
@@ -518,7 +539,7 @@ export function AdminDashboardEnhanced({
             className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'use-case-assignments' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
           >
-            <UserPlus className={`h-5 w-5 mr-3 ${activeTab === 'use-case-assignments' ? 'text-orange-600' : 'text-orange-500'}`} />
+            <UserPlus className="h-5 w-5 mr-3 text-orange-600" />
             Assignments
           </button>
           <button
@@ -526,7 +547,7 @@ export function AdminDashboardEnhanced({
             className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'project-creation' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
           >
-            <Plus className={`h-5 w-5 mr-3 ${activeTab === 'project-creation' ? 'text-green-600' : 'text-green-500'}`} />
+            <Plus className="h-5 w-5 mr-3 text-green-600" />
             Create Project
           </button>
           <button
@@ -534,14 +555,14 @@ export function AdminDashboardEnhanced({
             className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'created-reports' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
           >
-            <FileText className={`h-5 w-5 mr-3 ${activeTab === 'created-reports' ? 'text-purple-600' : 'text-purple-500'}`} />
+            <FileText className="h-5 w-5 mr-3 text-purple-600" />
             Created Reports
           </button>
           <button
             onClick={() => onNavigate('other-members')}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <Users className="h-5 w-5 mr-3 text-teal-500" />
+            <Users className="h-5 w-5 mr-3 text-teal-600" />
             Members
           </button>
           <button
@@ -550,7 +571,7 @@ export function AdminDashboardEnhanced({
             }}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <MessageSquare className="h-5 w-5 mr-3 text-indigo-500" />
+            <MessageSquare className="h-5 w-5 mr-3 text-indigo-600" />
             Shared Area
           </button>
         </nav>
@@ -896,114 +917,120 @@ export function AdminDashboardEnhanced({
       </div>
 
       {/* Assign Experts Modal */}
-      {showAssignExpertsModal && selectedUseCaseForAssignment && (
-        <AssignExpertsModal
-          useCase={selectedUseCaseForAssignment}
-          users={users}
-          onClose={() => {
-            setShowAssignExpertsModal(false);
-            setSelectedUseCaseForAssignment(null);
-          }}
-          onAssign={async (expertIds, notes) => {
-            try {
-              const response = await fetch(api(`/api/use-cases/${selectedUseCaseForAssignment.id}/assign`), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  assignedExperts: expertIds,
-                  adminNotes: notes
-                })
-              });
+      {
+        showAssignExpertsModal && selectedUseCaseForAssignment && (
+          <AssignExpertsModal
+            useCase={selectedUseCaseForAssignment}
+            users={users}
+            onClose={() => {
+              setShowAssignExpertsModal(false);
+              setSelectedUseCaseForAssignment(null);
+            }}
+            onAssign={async (expertIds, notes) => {
+              try {
+                const response = await fetch(api(`/api/use-cases/${selectedUseCaseForAssignment.id}/assign`), {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    assignedExperts: expertIds,
+                    adminNotes: notes
+                  })
+                });
 
-              if (response.ok) {
-                // Reload projects to reflect updated assignments and progress
-                try {
-                  const userId = currentUser?.id || (currentUser as any)?._id;
-                  const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
-                  if (projectsRes.ok) {
-                    const data = await projectsRes.json();
-                    const formattedProjects = data.map((p: any) => {
-                      // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
-                      const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
-                        if (typeof user === 'string') return user;
-                        if (user && user._id) return user._id.toString();
-                        return user;
+                if (response.ok) {
+                  // Reload projects to reflect updated assignments and progress
+                  try {
+                    const userId = currentUser?.id || (currentUser as any)?._id;
+                    const projectsRes = await fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`));
+                    if (projectsRes.ok) {
+                      const data = await projectsRes.json();
+                      const formattedProjects = data.map((p: any) => {
+                        // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
+                        const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
+                          if (typeof user === 'string') return user;
+                          if (user && user._id) return user._id.toString();
+                          return user;
+                        });
+                        return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
                       });
-                      return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
-                    });
-                    // Update projects in parent component via window event
-                    window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
+                      // Update projects in parent component via window event
+                      window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
+                    }
+                  } catch (reloadError) {
+                    console.error("Error reloading projects:", reloadError);
                   }
-                } catch (reloadError) {
-                  console.error("Error reloading projects:", reloadError);
-                }
 
-                // Reload use cases to reflect updated assignments
-                try {
-                  const useCasesRes = await fetch(api('/api/use-cases'));
-                  if (useCasesRes.ok) {
-                    const useCasesData = await useCasesRes.json();
-                    const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
-                    // Update use cases in parent component via window event
-                    window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
+                  // Reload use cases to reflect updated assignments
+                  try {
+                    const useCasesRes = await fetch(api('/api/use-cases'));
+                    if (useCasesRes.ok) {
+                      const useCasesData = await useCasesRes.json();
+                      const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
+                      // Update use cases in parent component via window event
+                      window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
+                    }
+                  } catch (reloadError) {
+                    console.error("Error reloading use cases:", reloadError);
                   }
-                } catch (reloadError) {
-                  console.error("Error reloading use cases:", reloadError);
-                }
 
-                alert("Experts assigned successfully!");
-                setShowAssignExpertsModal(false);
-                setSelectedUseCaseForAssignment(null);
-              } else {
-                const errorData = await response.json().catch(() => ({}));
-                alert(`Failed to assign experts: ${errorData.error || 'Unknown error'}`);
+                  alert("Experts assigned successfully!");
+                  setShowAssignExpertsModal(false);
+                  setSelectedUseCaseForAssignment(null);
+                } else {
+                  const errorData = await response.json().catch(() => ({}));
+                  alert(`Failed to assign experts: ${errorData.error || 'Unknown error'}`);
+                }
+              } catch (error) {
+                console.error("Assignment error:", error);
+                alert("Failed to assign experts.");
               }
-            } catch (error) {
-              console.error("Assignment error:", error);
-              alert("Failed to assign experts.");
-            }
-          }}
-        />
-      )}
+            }}
+          />
+        )
+      }
 
       {/* CHAT PANEL - Always mounted when project/user exist, shown when chatPanelOpen and not in chats tab */}
-      {chatProject && chatOtherUser ? (
-        <div className={chatPanelOpen && activeTab !== 'chats' ? 'fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4' : 'hidden'}>
-          <div className="w-full max-w-4xl h-full max-h-[90vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
-            <ChatPanel
-              project={chatProject}
-              currentUser={currentUser}
-              otherUser={chatOtherUser}
-              inline={true}
-              defaultFullscreen={false}
-              onClose={() => {
-                setChatPanelOpen(false);
-                // Keep project/user so ChatPanel stays mounted
-              }}
-              onMessageSent={() => {
-                window.dispatchEvent(new Event('message-sent'));
-                fetchUnreadCount();
-              }}
-            />
+      {
+        chatProject && chatOtherUser ? (
+          <div className={chatPanelOpen && activeTab !== 'chats' ? 'fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4' : 'hidden'}>
+            <div className="w-full max-w-4xl h-full max-h-[90vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+              <ChatPanel
+                project={chatProject}
+                currentUser={currentUser}
+                otherUser={chatOtherUser}
+                inline={true}
+                defaultFullscreen={false}
+                onClose={() => {
+                  setChatPanelOpen(false);
+                  // Keep project/user so ChatPanel stays mounted
+                }}
+                onMessageSent={() => {
+                  window.dispatchEvent(new Event('message-sent'));
+                  fetchUnreadCount();
+                }}
+              />
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null
+      }
 
       {/* PROFILE MODAL */}
-      {showProfile && (
-        <ProfileModal
-          user={currentUser}
-          onClose={() => setShowProfile(false)}
-          onUpdate={(updatedUser) => {
-            if (onUpdateUser) {
-              onUpdateUser(updatedUser);
-            }
-            setShowProfile(false);
-          }}
-          onLogout={onLogout}
-        />
-      )}
-    </div>
+      {
+        showProfile && (
+          <ProfileModal
+            user={currentUser}
+            onClose={() => setShowProfile(false)}
+            onUpdate={(updatedUser) => {
+              if (onUpdateUser) {
+                onUpdateUser(updatedUser);
+              }
+              setShowProfile(false);
+            }}
+            onLogout={onLogout}
+          />
+        )
+      }
+    </div >
   );
 }
 
@@ -1107,12 +1134,34 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
       </div>
 
       <div className="flex items-center space-x-2 mb-4">
-        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status].bg} ${statusColors[project.status].text}`}>
-          {project.status.toUpperCase()}
-        </span>
-        <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
-          {stageLabels[project.stage]}
-        </span>
+        {/* Only show generic status if it's NOT 'ongoing' OR if derivedStatus is 'setup' */}
+        {(project.status.toLowerCase() !== 'ongoing' || (!project.derivedStatus || project.derivedStatus === 'setup')) && (
+          <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status]?.bg || 'bg-gray-100'} ${statusColors[project.status]?.text || 'text-gray-800'}`}>
+            {project.status.toUpperCase()}
+          </span>
+        )}
+        {(() => {
+          const derivedStatus = project.derivedStatus || 'setup';
+          if (derivedStatus === 'resolve') {
+            return (
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800 border border-green-200">
+                RESOLVE
+              </span>
+            );
+          } else if (derivedStatus === 'assess') {
+            return (
+              <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                ASSESS
+              </span>
+            );
+          } else {
+            return (
+              <span className="px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
+                SETUP
+              </span>
+            );
+          }
+        })()}
       </div>
 
       <div className="mb-4">
@@ -1134,7 +1183,7 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
         <span>Updated: {new Date(project.createdAt).toLocaleDateString()}</span>
         {project.isNew && <span className="text-blue-600 font-medium">New Project</span>}
       </div>
-    </div>
+    </div >
   );
 }
 
@@ -1705,83 +1754,7 @@ function CreatedReportsTab({ projects, currentUser }: any) {
     }
   };
 
-  // Download report as Word (DOCX)
-  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
 
-    const button = e?.currentTarget as HTMLButtonElement;
-    const originalText = button?.textContent;
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Downloading...';
-    }
-
-    try {
-      const userId = currentUser?.id || (currentUser as any)?._id;
-      if (!userId) {
-        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
-        return;
-      }
-
-      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        const expectedTypes = [
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/octet-stream',
-          'application/zip'
-        ];
-
-        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
-          const text = await response.text();
-          try {
-            const error = JSON.parse(text);
-            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
-          } catch {
-            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
-          }
-          return;
-        }
-
-        const blob = await response.blob();
-        if (blob.size === 0) {
-          alert('Word dosyası boş. Lütfen tekrar deneyin.');
-          return;
-        }
-
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } else {
-        let errorMessage = 'Bilinmeyen hata';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || error.message || errorMessage;
-        } catch {
-          const text = await response.text();
-          errorMessage = text.substring(0, 200) || errorMessage;
-        }
-        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
-      }
-    } catch (error: any) {
-      console.error('Error downloading Word:', error);
-      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
-    } finally {
-      if (button) {
-        button.disabled = false;
-        if (originalText) {
-          button.textContent = originalText;
-        }
-      }
-    }
-  };
 
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
@@ -1891,14 +1864,7 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                           <Download className="h-4 w-4" />
                           PDF
                         </button>
-                        <button
-                          onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download Word"
-                        >
-                          <Download className="h-4 w-4" />
-                          Word
-                        </button>
+
                         <button
                           onClick={(e) => handleDeleteReport(reportId, report.title, e)}
                           className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
@@ -1969,18 +1935,7 @@ function CreatedReportsTab({ projects, currentUser }: any) {
                   <Download className="h-4 w-4" />
                   Download PDF
                 </button>
-                <button
-                  onClick={(e) => {
-                    if (selectedReport) {
-                      const reportId = selectedReport._id || selectedReport.id;
-                      handleDownloadDOCX(reportId, selectedReport.title, e);
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download Word
-                </button>
+
                 <button
                   onClick={() => {
                     if (selectedReport) {
@@ -2142,83 +2097,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
   };
 
 
-  // Download report as Word (DOCX)
-  const handleDownloadDOCX = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
 
-    const button = e?.currentTarget as HTMLButtonElement;
-    const originalText = button?.textContent;
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Downloading...';
-    }
-
-    try {
-      const userId = currentUser?.id || (currentUser as any)?._id;
-      if (!userId) {
-        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
-        return;
-      }
-
-      const response = await fetch(api(`/api/reports/${reportId}/download-docx?userId=${userId}`));
-
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        const expectedTypes = [
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/octet-stream',
-          'application/zip'
-        ];
-
-        if (!contentType || !expectedTypes.some(type => contentType.includes(type))) {
-          const text = await response.text();
-          try {
-            const error = JSON.parse(text);
-            alert('Word indirilemedi: ' + (error.error || 'Sunucu DOCX formatında yanıt döndürmedi'));
-          } catch {
-            alert('Word indirilemedi: Sunucu DOCX formatında yanıt döndürmedi');
-          }
-          return;
-        }
-
-        const blob = await response.blob();
-        if (blob.size === 0) {
-          alert('Word dosyası boş. Lütfen tekrar deneyin.');
-          return;
-        }
-
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const fileName = `${(reportTitle || 'report').replace(/[^a-z0-9]/gi, '_')}_${reportId}.docx`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      } else {
-        let errorMessage = 'Bilinmeyen hata';
-        try {
-          const error = await response.json();
-          errorMessage = error.error || error.message || errorMessage;
-        } catch {
-          const text = await response.text();
-          errorMessage = text.substring(0, 200) || errorMessage;
-        }
-        alert(`Word indirilemedi (${response.status}): ${errorMessage}`);
-      }
-    } catch (error: any) {
-      console.error('Error downloading Word:', error);
-      alert('Word indirilemedi: ' + (error.message || 'Bağlantı hatası'));
-    } finally {
-      if (button) {
-        button.disabled = false;
-        if (originalText) {
-          button.textContent = originalText;
-        }
-      }
-    }
-  };
 
   // Delete report
   const handleDeleteReport = async (reportId: string, reportTitle: string, e?: React.MouseEvent) => {
@@ -2457,14 +2336,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
                           <Download className="h-4 w-4" />
                           PDF
                         </button>
-                        <button
-                          onClick={(e) => handleDownloadDOCX(reportId, report.title, e)}
-                          className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
-                          title="Download Word"
-                        >
-                          <Download className="h-4 w-4" />
-                          Word
-                        </button>
+
                         <button
                           onClick={(e) => handleDeleteReport(reportId, report.title, e)}
                           className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
@@ -2535,18 +2407,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
                   <Download className="h-4 w-4" />
                   Download PDF
                 </button>
-                <button
-                  onClick={(e) => {
-                    if (selectedReport) {
-                      const reportId = selectedReport._id || selectedReport.id;
-                      handleDownloadDOCX(reportId, selectedReport.title, e);
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download Word
-                </button>
+
                 <button
                   onClick={() => {
                     if (selectedReport) {

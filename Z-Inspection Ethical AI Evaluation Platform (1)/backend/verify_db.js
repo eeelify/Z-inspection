@@ -8,17 +8,25 @@ dotenv.config({ path: path.join(__dirname, 'env') });
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ethical-ai';
 
+const fs = require('fs');
+
 async function verifyDb() {
-    console.log('--- DB VERIFICATION START ---');
-    console.log('Node version:', process.version);
-    console.log('Attempting to connect to:', MONGO_URI.replace(/:([^:@]+)@/, ':****@')); // Hide password if any
+    const logBuffer = [];
+    const log = (...args) => {
+        console.log(...args);
+        logBuffer.push(args.join(' '));
+    };
+
+    log('--- DB VERIFICATION START ---');
+    log('Node version:', process.version);
+    log('Attempting to connect to:', MONGO_URI.replace(/:([^:@]+)@/, ':****@')); // Hide password if any
 
     try {
         await mongoose.connect(MONGO_URI, {
             serverSelectionTimeoutMS: 5000,
             connectTimeoutMS: 10000
         });
-        console.log('✅ Connected to MongoDB');
+        log('✅ Connected to MongoDB');
 
         const Response = mongoose.model('Response', new mongoose.Schema({}, { strict: false }));
         const Project = mongoose.model('Project', new mongoose.Schema({}, { strict: false }));
@@ -27,15 +35,15 @@ async function verifyDb() {
         // 1. Projects & Reports Check
         const projectCount = await Project.countDocuments();
         const projects = await Project.find({}).limit(5).select('title createdByAdmin').lean();
-        console.log(`Total Projects in DB: ${projectCount}`);
-        console.log('Sample Projects:', JSON.stringify(projects, null, 2));
+        log(`Total Projects in DB: ${projectCount}`);
+        log('Sample Projects:', JSON.stringify(projects, null, 2));
 
         const reportCount = await Report.countDocuments();
-        console.log(`Total Reports in DB: ${reportCount}`);
+        log(`Total Reports in DB: ${reportCount}`);
 
         // 2. MCQ Corruption Check
         const allResponses = await Response.find({}).lean();
-        console.log(`Total Responses in DB: ${allResponses.length}`);
+        log(`Total Responses in DB: ${allResponses.length}`);
 
         let corruptedCount = 0;
         let objectChoiceCount = 0;
@@ -49,22 +57,23 @@ async function verifyDb() {
             });
         });
 
-        console.log(`MCQ answers with "[object Object]" corruption: ${corruptedCount}`);
-        console.log(`MCQ answers preserved as objects (incorrect for DB): ${objectChoiceCount}`);
+        log(`MCQ answers with "[object Object]" corruption: ${corruptedCount}`);
+        log(`MCQ answers preserved as objects (incorrect for DB): ${objectChoiceCount}`);
 
         // Inspect one healthy response if possible
         const healthy = allResponses.find(r => r.answers && r.answers.length > 0);
         if (healthy) {
-            console.log('Sample Healthy Response Answer Schema:', JSON.stringify(healthy.answers[0].answer, null, 2));
+            log('Sample Healthy Response Answer Schema:', JSON.stringify(healthy.answers[0].answer, null, 2));
         }
 
         // 3. Question Count Sanity
         const sampleReport = await Report.findOne({ 'scoring': { $exists: true } }).sort({ createdAt: -1 }).lean();
         if (sampleReport && sampleReport.scoring) {
-            console.log('Sample Report Scoring Structure (Top-level keys):', Object.keys(sampleReport.scoring));
+            log('Sample Report Scoring Structure (Top-level keys):', Object.keys(sampleReport.scoring));
         }
 
-        console.log('--- DB VERIFICATION END ---');
+        log('--- DB VERIFICATION END ---');
+        fs.writeFileSync('verify_output.txt', logBuffer.join('\n'));
         process.exit(0);
     } catch (err) {
         console.error('❌ Verification Script Failed');

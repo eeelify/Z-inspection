@@ -1,0 +1,41 @@
+--- DB VERIFICATION START ---
+Node version: v22.17.1
+Attempting to connect to: mongodb+srv://admin_merve:****@cluster0.tg8voq1.mongodb.net/zinspection?retryWrites=true&w=majority&appName=Cluster0
+✅ Connected to MongoDB
+Total Projects in DB: 5
+Sample Projects: [
+  {
+    "_id": "6956d6aeb5077cc07cd80e2e",
+    "title": "test case 2",
+    "createdByAdmin": "69341d48615b6b905833f341"
+  },
+  {
+    "_id": "6956d89774afe2aeaea423d7",
+    "title": "test use case deneme",
+    "createdByAdmin": "69341d48615b6b905833f341"
+  },
+  {
+    "_id": "695d560382d4754a7272e0de",
+    "title": "test case 3",
+    "createdByAdmin": "69341d48615b6b905833f341"
+  },
+  {
+    "_id": "6963f8cb021c31c8026db6aa",
+    "title": "soruların cevapları gözüküyo mu",
+    "createdByAdmin": "69341d48615b6b905833f341"
+  },
+  {
+    "_id": "6964d4e9d7a6755353c39e4b",
+    "title": "AI DESTEKLİ CV TARAMA SİSTEMİ",
+    "createdByAdmin": "69341d48615b6b905833f341"
+  }
+]
+Total Reports in DB: 90
+Total Responses in DB: 91
+MCQ answers with "[object Object]" corruption: 0
+MCQ answers preserved as objects (incorrect for DB): 0
+Sample Healthy Response Answer Schema: {
+  "choiceKey": "completely_unclear",
+  "multiChoiceKeys": []
+}
+--- DB VERIFICATION END ---

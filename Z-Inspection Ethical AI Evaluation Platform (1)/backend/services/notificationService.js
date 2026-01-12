@@ -93,21 +93,21 @@ async function createNotifications(recipients, payload, options = {}) {
 async function getAssignedExperts(projectId) {
   try {
     // First try ProjectAssignment collection (preferred)
-    const assignments = await ProjectAssignment.find({ 
+    const assignments = await ProjectAssignment.find({
       projectId,
       status: { $in: ['assigned', 'in_progress', 'submitted'] }
     }).select('userId').lean();
-    
+
     if (assignments && assignments.length > 0) {
       // Get all user IDs from assignments
       const userIds = assignments.map(a => a.userId).filter(Boolean);
-      
+
       // Check user roles in bulk to exclude admins
-      const users = await User.find({ 
+      const users = await User.find({
         _id: { $in: userIds },
         role: { $ne: 'admin' } // Exclude admins
       }).select('_id').lean();
-      
+
       return users.map(u => u._id);
     }
 
@@ -123,7 +123,7 @@ async function getAssignedExperts(projectId) {
     if (userIds.length === 0) return [];
 
     // Check user roles in bulk to exclude admins
-    const users = await User.find({ 
+    const users = await User.find({
       _id: { $in: userIds },
       role: { $ne: 'admin' } // Exclude admins
     }).select('_id').lean();
@@ -337,7 +337,7 @@ async function notifyTensionVoted(tension, voteType, actorId, actorRole) {
 async function notifyEvaluationStarted(projectId, userId, questionnaireKey, questionnaireVersion, actorRole, userName) {
   try {
     const dedupeKey = `evaluation_started_${projectId}_${userId}_${questionnaireKey}_${questionnaireVersion || 1}`;
-    
+
     // Check if already notified for this combination using dedupeKey
     const existing = await Notification.findOne({
       dedupeKey
@@ -399,7 +399,7 @@ async function notifyProjectCreated(projectId, userIds, actorId, actorRole) {
       }
 
       const dedupeKey = `project_created_${projectId}_${userId}`;
-      
+
       // Check if already notified
       const existing = await Notification.findOne({ dedupeKey });
       if (existing) continue;
@@ -437,7 +437,7 @@ async function notifyProjectCreated(projectId, userIds, actorId, actorRole) {
 async function notifyProjectAssigned(projectId, userId, assignmentId, role, actorId, actorRole) {
   try {
     const dedupeKey = `project_assigned_${projectId}_${userId}_${assignmentId}`;
-    
+
     // Check if already notified
     const existing = await Notification.findOne({
       dedupeKey
@@ -480,7 +480,7 @@ async function notifyProjectAssigned(projectId, userId, assignmentId, role, acto
 async function notifyEvaluationCompleted(projectId, userId, questionnaireKey, questionnaireVersion, actorRole, userName) {
   try {
     const dedupeKey = `evaluation_completed_${projectId}_${userId}_${questionnaireKey}_${questionnaireVersion || 1}`;
-    
+
     // Check if already notified
     const existing = await Notification.findOne({
       dedupeKey
@@ -527,7 +527,7 @@ async function notifyEvaluationCompleted(projectId, userId, questionnaireKey, qu
 async function checkAndNotifyAllExpertsCompleted(projectId, questionnaireKey, questionnaireVersion) {
   try {
     const dedupeKey = `project_all_completed_${projectId}_${questionnaireKey}_${questionnaireVersion || 1}`;
-    
+
     // Check if already notified
     const existing = await Notification.findOne({
       dedupeKey
@@ -538,7 +538,7 @@ async function checkAndNotifyAllExpertsCompleted(projectId, questionnaireKey, qu
     }
 
     // Get all assigned experts for this project
-    const assignments = await ProjectAssignment.find({ 
+    const assignments = await ProjectAssignment.find({
       projectId,
       status: { $in: ['assigned', 'in_progress', 'submitted'] }
     }).select('userId role questionnaires').lean();
@@ -599,6 +599,40 @@ async function checkAndNotifyAllExpertsCompleted(projectId, questionnaireKey, qu
   }
 }
 
+/**
+ * Notify admins when an expert comments on a report review
+ */
+async function notifyAdminReview(projectId, reportId, actorId, actorName, commentText) {
+  try {
+    const admins = await getAllAdmins();
+    if (admins.length === 0) return;
+
+    const project = await getProject().findById(projectId);
+    const projectTitle = project?.title || 'Project';
+
+    const payload = {
+      projectId,
+      entityType: 'report',
+      entityId: reportId,
+      type: 'report_commented',
+      title: 'Expert Report Review',
+      message: `${actorName || 'Expert'} commented on the report for "${projectTitle}": "${commentText.substring(0, 50)}${commentText.length > 50 ? '...' : ''}"`,
+      actorId,
+      actorRole: 'expert',
+      metadata: {
+        reportId,
+        commentPreview: commentText.substring(0, 100)
+      },
+      url: `/admin/projects/${projectId}/reports`,
+      dedupeKey: `report_comment_${reportId}_${Date.now()}` // Unique per comment
+    };
+
+    await createNotifications(admins, payload, { dedupeWindow: 0 });
+  } catch (error) {
+    console.error('Error notifying admin review:', error);
+  }
+}
+
 module.exports = {
   createNotifications,
   getAssignedExperts,
@@ -612,6 +646,7 @@ module.exports = {
   notifyProjectCreated,
   notifyProjectAssigned,
   notifyEvaluationCompleted,
-  checkAndNotifyAllExpertsCompleted
+  checkAndNotifyAllExpertsCompleted,
+  notifyAdminReview
 };
 

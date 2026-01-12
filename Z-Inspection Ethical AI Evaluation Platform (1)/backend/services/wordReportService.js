@@ -137,8 +137,9 @@ async function generateWordFromData(analysisData, outputPath) {
 
             new Paragraph({
               children: [
-                new TextRun({ text: 'Overall ERC Score: ', bold: true }),
-                new TextRun({ text: `${reportMetrics?.scoring?.totalsOverall?.overallERC?.toFixed(2) || 'N/A'} / 4.0` })
+                new TextRun({ text: 'Overall Ethical Risk Score: ', bold: true }),
+                // Use safeToFixed + fallback to totals.overallAvg
+                new TextRun({ text: `${(reportMetrics?.scoring?.totals?.overallAvg || 0).toFixed(2)}` })
               ],
               spacing: { after: 100 }
             }),

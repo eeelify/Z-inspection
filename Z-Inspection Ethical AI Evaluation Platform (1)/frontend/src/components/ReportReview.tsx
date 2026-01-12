@@ -28,6 +28,13 @@ type ReportDoc = {
   projectId?: { _id?: string; id?: string; title?: string } | string;
   content?: string; // legacy
   sections?: ReportSection[];
+  summary?: string;
+  expertComments?: Array<{
+    userId?: string;
+    userName?: string;
+    text: string;
+    createdAt?: string;
+  }>;
 };
 
 const getRoleCategory = (role: string | undefined): RoleCategory => {
@@ -35,13 +42,6 @@ const getRoleCategory = (role: string | undefined): RoleCategory => {
   if (r.includes("admin")) return "admin";
   if (r.includes("viewer")) return "viewer";
   return "expert";
-};
-
-const pickDisplayText = (section?: ReportSection): string => {
-  if (!section) return "";
-  const expert = String(section.expertEdit || "").trim();
-  if (expert.length > 0) return expert;
-  return String(section.aiDraft || "");
 };
 
 export function ReportReview({
@@ -58,19 +58,21 @@ export function ReportReview({
   const [commenting, setCommenting] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [report, setReport] = useState<ReportDoc | null>(null);
-  const [activePrinciple, setActivePrinciple] = useState<string>("FULL_REPORT");
+  const [activePrinciple, setActivePrinciple] = useState<string>("SUMMARY");
   const [commentText, setCommentText] = useState<string>("");
 
   const isLocked = report?.status === "final";
-  const canComment = roleCategory !== "viewer" && !isLocked;
+  // Allow comments even if locked (final), as long as not archived (or just allow always for experts)
+  // modifying to allow experts/admins to comment on Final reports
+  const canComment = (roleCategory === "expert" || roleCategory === "admin") && report?.status !== "archived";
   const canFinalize = roleCategory === "admin" && !isLocked;
 
   const activeSection = useMemo(() => {
     const sections = report?.sections;
+    if (activePrinciple === "SUMMARY") return null;
     if (Array.isArray(sections) && sections.length > 0) {
       return sections.find((s) => s.principle === activePrinciple) || sections[0];
     }
-    // Legacy fallback
     return {
       principle: "FULL_REPORT",
       aiDraft: report?.content || "",
@@ -90,9 +92,15 @@ export function ReportReview({
       const data = (await res.json()) as ReportDoc;
       setReport(data);
 
-      const sections = Array.isArray(data.sections) ? data.sections : [];
-      const firstPrinciple = sections[0]?.principle || "FULL_REPORT";
-      setActivePrinciple((prev) => prev || firstPrinciple);
+      if (activePrinciple === "SUMMARY") {
+        // keep summary active
+      } else {
+        const sections = Array.isArray(data.sections) ? data.sections : [];
+        if (sections.length > 0 && activePrinciple === "FULL_REPORT") {
+          // if we were on full report but loaded sections, stay on summary or switch
+          // Default to Summary
+        }
+      }
     } catch (e: any) {
       alert(e?.message || "Report could not be loaded");
     } finally {
@@ -111,17 +119,25 @@ export function ReportReview({
     if (!text) return;
     setCommenting(true);
     try {
-      const res = await fetch(
-        api(`/api/reports/${reportId}/sections/${encodeURIComponent(activePrinciple)}/comments`),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: currentUser.id,
-            text,
-          }),
-        }
-      );
+      let url = "";
+      let body = {};
+
+      if (activePrinciple === "SUMMARY") {
+        // General Report Comment
+        url = `/api/reports/${reportId}/comments`;
+        body = { userId: currentUser.id, text };
+      } else {
+        // Section Comment
+        url = `/api/reports/${reportId}/sections/${encodeURIComponent(activePrinciple)}/comments`;
+        body = { userId: currentUser.id, text };
+      }
+
+      const res = await fetch(api(url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({} as any));
         throw new Error(err.error || "Failed to add comment");
@@ -250,6 +266,18 @@ export function ReportReview({
               <div className="bg-white border border-gray-200 rounded-2xl p-4">
                 <div className="text-sm font-semibold text-gray-900 mb-3">Sections</div>
                 <div className="space-y-2">
+                  <button
+                    onClick={() => setActivePrinciple("SUMMARY")}
+                    className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${activePrinciple === "SUMMARY"
+                      ? "border-purple-600 bg-purple-50 text-purple-900 font-medium"
+                      : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                      }`}
+                  >
+                    Report Summary
+                  </button>
+
+                  <div className="h-px bg-gray-100 my-2" />
+
                   {(() => {
                     const sections = Array.isArray(report?.sections) && report!.sections!.length > 0
                       ? report!.sections!
@@ -262,11 +290,10 @@ export function ReportReview({
                         <button
                           key={p}
                           onClick={() => setActivePrinciple(p)}
-                          className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
-                            active
-                              ? "border-blue-600 bg-blue-50 text-blue-900"
-                              : "border-gray-200 hover:bg-gray-50 text-gray-700"
-                          }`}
+                          className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${active
+                            ? "border-blue-600 bg-blue-50 text-blue-900"
+                            : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                            }`}
                         >
                           {p}
                         </button>
@@ -279,74 +306,148 @@ export function ReportReview({
 
             {/* Main content */}
             <div className="lg:col-span-3 space-y-6">
-              {/* AI Draft */}
-              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                  <div className="text-sm font-semibold text-gray-900">AI Draft (read-only)</div>
-                  <div className="text-xs text-gray-500">
-                    Section: <span className="font-medium">{activeSection?.principle}</span>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
-                    {String(activeSection?.aiDraft || report?.content || "").trim() || "No AI draft content."}
-                  </div>
-                </div>
-              </div>
+              {activePrinciple === "SUMMARY" ? (
+                <>
 
-              {/* Placeholder */}
-              <div></div>
 
-              {/* Comments */}
-              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-gray-600" />
-                    <div className="text-sm font-semibold text-gray-900">Comments</div>
-                  </div>
-                </div>
-                <div className="p-5 space-y-4">
-                  {Array.isArray(activeSection?.comments) && activeSection!.comments!.length > 0 ? (
-                    <div className="space-y-3">
-                      {activeSection!.comments!.map((c, idx) => (
-                        <div key={idx} className="border border-gray-200 rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="text-sm font-semibold text-gray-900">
-                              {c.userName || "User"}
+                  {/* GENERAL COMMENTS */}
+                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-gray-600" />
+                        <div className="text-sm font-semibold text-gray-900">General Feedback</div>
+                      </div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                      <div className="text-xs text-gray-500 mb-2">
+                        Use this section to provide general feedback on the entire report. Your comments will be notified to the Admin.
+                      </div>
+
+                      {Array.isArray(report?.expertComments) && report!.expertComments!.length > 0 ? (
+                        <div className="space-y-3">
+                          {report!.expertComments!.map((c, idx) => (
+                            <div key={idx} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="text-sm font-semibold text-gray-900">
+                                  {c.userName || "User"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}
+                                </div>
+                              </div>
+                              <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.text}</div>
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}
-                            </div>
-                          </div>
-                          <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.text}</div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-500">No comments yet.</div>
-                  )}
+                      ) : (
+                        <div className="text-sm text-gray-500 italic">No general comments yet.</div>
+                      )}
 
-                  <div className="border-t border-gray-200 pt-4">
-                    <div className="flex items-start gap-2">
-                      <textarea
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        disabled={!canComment || commenting}
-                        rows={3}
-                        className="flex-1 border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 disabled:bg-gray-50"
-                        placeholder={canComment ? "Add a comment..." : "Comments are locked."}
-                      />
-                      <button
-                        onClick={handleAddComment}
-                        disabled={!canComment || commenting || !commentText.trim()}
-                        className="px-4 py-3 rounded-xl bg-gray-900 hover:bg-black text-white text-sm font-semibold disabled:opacity-60"
-                      >
-                        {commenting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Post"}
-                      </button>
+                      <div className="border-t border-gray-200 pt-4">
+                        <div className="flex flex-col gap-3">
+                          <textarea
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            disabled={!canComment || commenting}
+                            rows={3}
+                            className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 disabled:bg-gray-50"
+                            placeholder={canComment ? "Add a general comment..." : "Commenting is restricted."}
+                          />
+                          <div className="flex justify-end">
+                            <button
+                              onClick={handleAddComment}
+                              disabled={!canComment || commenting || !commentText.trim()}
+                              className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+                            >
+                              {commenting ? (
+                                <div className="flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>Sending...</span>
+                                </div>
+                              ) : "Send Comment"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                </>
+              ) : (
+                <>
+                  {/* AI Draft (Section specific) */}
+                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-gray-900">AI Draft (read-only)</div>
+                      <div className="text-xs text-gray-500">
+                        Section: <span className="font-medium">{activeSection?.principle}</span>
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
+                        {String(activeSection?.aiDraft || report?.content || "").trim() || "No AI draft content."}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section Comments */}
+                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-gray-600" />
+                        <div className="text-sm font-semibold text-gray-900">Section Comments</div>
+                      </div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                      {Array.isArray(activeSection?.comments) && activeSection!.comments!.length > 0 ? (
+                        <div className="space-y-3">
+                          {activeSection!.comments!.map((c, idx) => (
+                            <div key={idx} className="border border-gray-200 rounded-xl p-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="text-sm font-semibold text-gray-900">
+                                  {c.userName || "User"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}
+                                </div>
+                              </div>
+                              <div className="text-sm text-gray-800 whitespace-pre-wrap">{c.text}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No comments yet.</div>
+                      )}
+
+                      <div className="border-t border-gray-200 pt-4">
+                        <div className="flex flex-col gap-3">
+                          <textarea
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            disabled={!canComment || commenting}
+                            rows={3}
+                            className="w-full border border-gray-200 rounded-xl p-3 text-sm text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 disabled:bg-gray-50"
+                            placeholder={canComment ? "Add a specific comment..." : "Commenting is restricted."}
+                          />
+                          <div className="flex justify-end">
+                            <button
+                              onClick={handleAddComment}
+                              disabled={!canComment || commenting || !commentText.trim()}
+                              className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+                            >
+                              {commenting ? (
+                                <div className="flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>Sending...</span>
+                                </div>
+                              ) : "Send Comment"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

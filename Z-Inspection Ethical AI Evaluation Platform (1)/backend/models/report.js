@@ -131,6 +131,20 @@ const ReportSchema = new mongoose.Schema(
       timestamp: Date
     },
 
+    // Generated summary of the report
+    summary: {
+      type: String,
+      default: null
+    },
+
+    // Comments from experts/reviewers
+    expertComments: [{
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+      userName: { type: String, required: true },
+      text: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
+
     // User who triggered generation (optional)
     generatedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -156,7 +170,7 @@ ReportSchema.index({ status: 1 });
 /**
  * Static method: Get the latest report for a project
  */
-ReportSchema.statics.getLatestReport = async function(projectId) {
+ReportSchema.statics.getLatestReport = async function (projectId) {
   return this.findOne({
     projectId,
     latest: true,
@@ -167,12 +181,12 @@ ReportSchema.statics.getLatestReport = async function(projectId) {
 /**
  * Static method: Get next version number for a project
  */
-ReportSchema.statics.getNextVersion = async function(projectId) {
+ReportSchema.statics.getNextVersion = async function (projectId) {
   const latestReport = await this.findOne({ projectId })
     .sort({ version: -1 })
     .select('version')
     .lean();
-  
+
   return latestReport ? latestReport.version + 1 : 1;
 };
 
@@ -180,7 +194,7 @@ ReportSchema.statics.getNextVersion = async function(projectId) {
  * Static method: Mark a report as latest (and unmark all others)
  * CRITICAL: This ensures only ONE report per project has latest = true
  */
-ReportSchema.statics.markAsLatest = async function(reportId, projectId) {
+ReportSchema.statics.markAsLatest = async function (reportId, projectId) {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -212,7 +226,7 @@ ReportSchema.statics.markAsLatest = async function(reportId, projectId) {
 /**
  * Instance method: Validate that both PDF and Word exist
  */
-ReportSchema.methods.validateFiles = function() {
+ReportSchema.methods.validateFiles = function () {
   if (!this.pdfPath || !this.wordPath) {
     throw new Error(
       `Report ${this._id} is incomplete: ` +
@@ -225,7 +239,7 @@ ReportSchema.methods.validateFiles = function() {
 /**
  * Instance method: Get file paths as absolute URLs
  */
-ReportSchema.methods.getFileUrls = function(baseUrl = '') {
+ReportSchema.methods.getFileUrls = function (baseUrl = '') {
   return {
     pdf: this.pdfPath ? `${baseUrl}/api/reports/${this._id}/pdf` : null,
     word: this.wordPath ? `${baseUrl}/api/reports/${this._id}/word` : null
@@ -235,7 +249,7 @@ ReportSchema.methods.getFileUrls = function(baseUrl = '') {
 /**
  * Pre-save validation: Ensure version is set
  */
-ReportSchema.pre('save', async function(next) {
+ReportSchema.pre('save', async function (next) {
   if (this.isNew && !this.version) {
     this.version = await this.constructor.getNextVersion(this.projectId);
   }
@@ -245,7 +259,7 @@ ReportSchema.pre('save', async function(next) {
 /**
  * Virtual: Human-readable version label
  */
-ReportSchema.virtual('versionLabel').get(function() {
+ReportSchema.virtual('versionLabel').get(function () {
   return `v${this.version}${this.latest ? ' (Latest)' : ''}`;
 });
 

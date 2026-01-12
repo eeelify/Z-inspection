@@ -343,10 +343,10 @@ const Message = require('./models/Message');
 
 // Report - Analysis Reports (expert comment workflow)
 const ExpertCommentSchema = new mongoose.Schema({
-  expertId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  expertName: { type: String, default: '' },
-  commentText: { type: String, default: '' },
-  updatedAt: { type: Date, default: Date.now }
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  userName: { type: String, default: '' },
+  text: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now }
 }, { _id: false });
 
 const ReportSchema = new mongoose.Schema({
@@ -3273,33 +3273,40 @@ app.get('/api/user-progress', async (req, res) => {
       }
     }
 
-    // Check which questionnaires actually have responses in the database
-    // If both general-v1 and role-specific responses exist, count both
-    // If only role-specific exists and has 30+ questions, it likely includes general questions
-    const existingResponses = await Response.find({
+    // FIX: Fetch keys of ALL questionnaires the user has actually answered
+    // This catches "implicit assignments" (e.g. Set-Up answered but not assigned)
+    // We only care if there are actual answers in the 'answers' array
+    const distinctResponseKeys = await Response.find({
       projectId: projectIdObj,
       userId: userIdObj,
-      questionnaireKey: { $in: assignedQuestionnaireKeys }
-    }).select('questionnaireKey').lean();
+      'answers.0': { $exists: true }
+    }).distinct('questionnaireKey');
 
-    const existingQuestionnaireKeys = new Set(existingResponses.map(r => r.questionnaireKey));
+    // Add 'general-v1' if user has answered it
+    if (distinctResponseKeys.includes('general-v1') && !assignedQuestionnaireKeys.includes('general-v1')) {
+      assignedQuestionnaireKeys.push('general-v1');
+      // console.log('➕ Added implicit general-v1 to assigned questionnaires');
+    }
+
+    // Attempt to detect role-specific questionnaire from actual answers
+    const userRole = assignment.role || (await User.findById(userIdObj))?.role;
+    if (userRole) {
+      const roleMap = {
+        'ethical-expert': 'ethical-expert-v1',
+        'medical-expert': 'medical-expert-v1',
+        'technical-expert': 'technical-expert-v1',
+        'legal-expert': 'legal-expert-v1',
+        'education-expert': 'education-expert-v1',
+      };
+      const potentialRoleKey = roleMap[String(userRole).toLowerCase()];
+
+      if (potentialRoleKey && distinctResponseKeys.includes(potentialRoleKey) && !assignedQuestionnaireKeys.includes(potentialRoleKey)) {
+        assignedQuestionnaireKeys.push(potentialRoleKey);
+        // console.log(`➕ Added implicit role questionnaire ${potentialRoleKey} to assigned questionnaires`);
+      }
+    }
 
     let questionnairesToCount = assignedQuestionnaireKeys.slice();
-    const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
-    const hasRoleSpecificResponse = assignedQuestionnaireKeys.some(key =>
-      key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
-    );
-
-    // If both general-v1 and role-specific responses exist, count both (no duplicate exclusion)
-    // If only role-specific exists and has 30+ questions, it likely includes general questions
-    // If both general-v1 and role-specific responses exist, count both (no duplicate exclusion)
-    if (!hasGeneralResponse && hasRoleSpecificResponse) {
-      // Logic removed: We no longer auto-exclude general-v1 based on question count.
-      // We strictly follow assigned questionnaires.
-    } else if (hasGeneralResponse && hasRoleSpecificResponse) {
-      // Both exist - count both (this is the normal case)
-      console.log(`📊 Both general-v1 and role-specific responses exist, counting both`);
-    }
 
     const totalQuestions = await Question.countDocuments({
       questionnaireKey: { $in: questionnairesToCount }
@@ -4548,14 +4555,18 @@ app.get('/api/projects', async (req, res) => {
     const enrichedProjects = await Promise.all(projects.map(async (project) => {
       try {
         // Count answered questions for this project
-        const responses = await Response.find({ projectId: project._id }, { 'answers': 1 }).lean();
+        const responses = await Response.find({
+          projectId: { $in: [project._id, String(project._id)] }
+        }, { 'answers': 1 }).lean();
         let answeredQuestions = 0;
         for (const resp of responses) {
           answeredQuestions += (resp.answers || []).length;
         }
 
         // Count reports for this project
-        const reportCount = await Report.countDocuments({ projectId: project._id });
+        const reportCount = await Report.countDocuments({
+          projectId: { $in: [project._id, String(project._id)] }
+        });
 
         // Derive status based on exact rules:
         // SETUP: answeredQuestions === 0
@@ -5192,16 +5203,8 @@ app.get('/api/notifications', async (req, res) => {
     try {
       const user = await User.findById(userIdObj).select('role').lean();
       if (user && user.role && user.role.toLowerCase().includes('admin')) {
-        // Admin user - only show notifications from projects created by this admin
-        const userProjects = await Project.find({
-          createdByAdmin: userIdObj
-        }).select('_id').lean();
-        const projectIds = userProjects.map(p => p._id);
-        if (projectIds.length === 0) {
-          // Admin has no projects, return empty notifications
-          return res.json({ notifications: [], unreadCount: 0 });
-        }
-        projectFilter = { projectId: { $in: projectIds } };
+        // Admin user - strict project filtering DISABLED to ensure admins see all notifications
+        // Original filtering logic removed to fix missing notifications issue
       }
     } catch (err) {
       console.warn('Could not verify admin access for notifications:', err.message);

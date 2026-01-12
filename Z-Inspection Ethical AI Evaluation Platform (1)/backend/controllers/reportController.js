@@ -1110,6 +1110,8 @@ exports.getAllReports = async (req, res) => {
     // Explicitly do NOT filter by user for admins (as per Clean Patch requirements)
     if (roleCategory === 'admin') {
       console.log('🔓 Admin detected for getAllReports - listing all reports system-wide');
+      console.log('   Query Params:', req.query);
+      console.log('   User ID:', req.user ? req.user._id : 'N/A');
     }
 
     if (projectId) {
@@ -1122,7 +1124,7 @@ exports.getAllReports = async (req, res) => {
     }
 
     const reports = await Report.find(query)
-      .select('-pdfData -htmlContent -reportMetrics -geminiNarrative') // Exclude heavy fields for list view
+      .select('title projectId generatedBy generatedAt status version metadata createdAt') // Optimized selection: Exclude all heavy content (charts, html, markdown)
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
@@ -1370,6 +1372,7 @@ exports.getMyReports = async (req, res) => {
     const reports = await Report.find({
       projectId: { $in: projectIds }
     })
+      .select('title projectId generatedBy generatedAt status version metadata createdAt') // Optimized selection
       .populate('projectId', 'title')
       .populate('generatedBy', 'name email')
       .sort({ generatedAt: -1 })
@@ -1914,6 +1917,17 @@ exports.addSectionComment = async (req, res) => {
     });
 
     await report.save();
+
+    // Notify Admins
+    const { notifyAdminReview } = require('../services/notificationService');
+    const commentText = `[Section: ${targetPrinciple}] ${text.trim()}`;
+
+    // Non-blocking notification
+    console.log(`🔔 Triggering admin notification for section comment on report ${id}`);
+    notifyAdminReview(report.projectId, report._id, userIdObj, user?.name || 'User', commentText).catch(err => {
+      console.error('❌ Failed to notify admins about report section comment:', err);
+    });
+
     res.json({ success: true, report: report.toObject() });
   } catch (err) {
     console.error('Error adding comment:', err);
@@ -2142,7 +2156,7 @@ exports.generateReportAtomic = async (req, res) => {
       scoringModelVersion: 'erc_v1',
       questionsAnswered: analysisData.unifiedAnswers?.length || 0,
       tensionsCount: tensions.length,
-      overallERC: reportMetrics?.scoring?.totalsOverall?.overallERC || null,
+      overallERC: reportMetrics?.scoring?.totals?.overallAvg || null,
       riskLabel: reportMetrics?.scoring?.totalsOverall?.riskLabel || null,
       evaluatorCount: evaluatorsData?.length || 0,
       evaluatorRoles: [...new Set(evaluatorsData?.map(e => e.role) || [])],
@@ -2239,6 +2253,56 @@ exports.generateReportAtomic = async (req, res) => {
       error: error.message,
       details: 'Atomic report generation failed. No files were created.'
     });
+  }
+};
+
+/**
+ * POST /api/reports/:id/comments
+ * Add a comment to the report (Expert Review)
+ */
+exports.addReportComment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Comment text is required' });
+    }
+
+    const { user, userIdObj } = await loadRequestUser(req);
+
+    const report = await Report.findById(id);
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Add comment to report
+    const newComment = {
+      userId: userIdObj,
+      userName: user.name || user.email,
+      text: text.trim(),
+      createdAt: new Date()
+    };
+
+    report.expertComments = report.expertComments || [];
+    report.expertComments.push(newComment);
+    await report.save();
+
+    // Notify Admins
+    const { notifyAdminReview } = require('../services/notificationService');
+
+    console.log(`🔔 Triggering admin notification for general comment on report ${id}`);
+
+    // Non-blocking notification
+    notifyAdminReview(report.projectId, report._id, userIdObj, newComment.userName, newComment.text).catch(err => {
+      console.error('❌ Failed to notify admins about report comment:', err);
+    });
+
+    res.json({ success: true, comment: newComment });
+
+  } catch (error) {
+    console.error('Error adding report comment:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 

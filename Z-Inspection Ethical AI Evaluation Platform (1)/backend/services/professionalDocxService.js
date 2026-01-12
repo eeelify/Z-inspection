@@ -18,17 +18,23 @@ const {
 } = require("docx");
 const { riskLabel } = require('../utils/riskLabel');
 
+// Safe toFixed helper to prevent crashes
+const safeToFixed = (val, digits = 2, fallback = 'N/A') => {
+  if (typeof val !== 'number' || isNaN(val)) return fallback;
+  return val.toFixed(digits);
+};
+
 /**
  * Generate professional DOCX report from reportMetrics and geminiNarrative
  * This creates a structured, verifiable report with tables, charts, and proper formatting
  */
 async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generatedAt = new Date(), chartBuffers = null) {
   const children = [];
-  
+
   // Helper to add chart image to document with caption, legend, and threshold explanation
   const addChartImage = async (chartBuffer, title, width = 500, height = 300, options = {}) => {
     if (!chartBuffer) return;
-    
+
     try {
       // Create image run from buffer (docx library format)
       const imageRun = new ImageRun({
@@ -38,26 +44,26 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
           height: height * 9525
         }
       });
-      
+
       children.push(createParagraph(''));
-      
+
       // Add chart title/caption
       if (title) {
         children.push(createParagraph(`Figure: ${title}`, { bold: true, italics: true }));
       }
-      
+
       // Add the chart image
       children.push(new Paragraph({
         children: [imageRun],
         alignment: AlignmentType.CENTER,
         spacing: { after: 240 }
       }));
-      
+
       // Add legend text if provided
       if (options.legend) {
         children.push(createParagraph(options.legend, { italics: true, alignment: AlignmentType.CENTER }));
       }
-      
+
       // Add threshold explanation if provided (for principle charts)
       if (options.thresholdExplanation) {
         children.push(createParagraph('Thresholds:', { bold: true }));
@@ -69,12 +75,12 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
           children.push(createParagraph(options.thresholdExplanation));
         }
       }
-      
+
       // Add note if provided
       if (options.note) {
         children.push(createParagraph(options.note, { italics: true }));
       }
-      
+
       children.push(createParagraph(''));
     } catch (error) {
       console.warn(`Failed to add chart image: ${error.message}`);
@@ -97,12 +103,12 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // Helper to create a heading with bookmark
   const createHeading = (text, level = 1, bookmarkId = null) => {
     const headingLevel = level === 1 ? HeadingLevel.HEADING_1 :
-                        level === 2 ? HeadingLevel.HEADING_2 :
-                        HeadingLevel.HEADING_3;
-    
+      level === 2 ? HeadingLevel.HEADING_2 :
+        HeadingLevel.HEADING_3;
+
     // Create bookmark ID from text (sanitize for bookmark name)
     const bookmarkName = bookmarkId || text.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-    
+
     const children = [];
     if (bookmarkId || level === 1) {
       // Add bookmark at start of heading
@@ -112,7 +118,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       }));
     }
     children.push(new TextRun({ text, bold: true }));
-    
+
     return new Paragraph({
       heading: headingLevel,
       children: children,
@@ -179,7 +185,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   children.push(createParagraph(''));
   children.push(createParagraph('Risk Percentage Formula: Percentage of evaluator scores with score > 2.5 (scores ≤ 2.5 are treated as safe)'));
   children.push(createParagraph(''));
-  
+
   // Data Integrity Checks
   const consistencyChecks = reportMetrics.consistencyChecks || {};
   if (consistencyChecks && (consistencyChecks.errors?.length > 0 || consistencyChecks.warnings?.length > 0)) {
@@ -189,13 +195,13 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       hasErrors ? '⚠ Data mismatch detected' : '⚠ Data Integrity Warnings',
       { bold: true, color: hasErrors ? 'dc2626' : 'f59e0b' }
     ));
-    
+
     if (hasErrors && consistencyChecks.errors.length > 0) {
       consistencyChecks.errors.forEach(err => {
         children.push(createParagraph(`• ${err}`, { color: '991b1b' }));
       });
     }
-    
+
     if (consistencyChecks.warnings && consistencyChecks.warnings.length > 0) {
       consistencyChecks.warnings.forEach(warn => {
         children.push(createParagraph(`• ${warn}`, { color: '92400e' }));
@@ -212,7 +218,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // ============================================================
   children.push(createHeading('Evaluation Coverage', 1));
   children.push(createParagraph(`Submitted Evaluators: ${reportMetrics.coverage.expertsSubmittedCount}`));
-  
+
   // Deterministic role breakdown (submitted-only)
   if (reportMetrics.coverage && reportMetrics.coverage.roles) {
     const roleCounts = Object.entries(reportMetrics.coverage.roles)
@@ -222,7 +228,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       children.push(createParagraph(`Evaluators by Role: ${roleCounts.map(r => `${r.submitted} ${r.role}`).join(', ')}`));
     }
   }
-  
+
   // CRITICAL: Show evaluators who actually submitted (no duplicates)
   if (reportMetrics.evaluators && reportMetrics.evaluators.submitted.length > 0) {
     children.push(createParagraph(''));
@@ -231,7 +237,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       children.push(createParagraph(`• ${e.name} (${e.role})`));
     });
   }
-  
+
   // Data quality notes (missing scores)
   if (reportMetrics.dataQuality && reportMetrics.dataQuality.notes && reportMetrics.dataQuality.notes.length > 0) {
     children.push(createParagraph(''));
@@ -240,7 +246,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       children.push(createParagraph(`⚠️ ${note}`, { italics: true }));
     });
   }
-  
+
   children.push(createParagraph(''));
 
   // Team completion chart intentionally omitted: reports are based on submitted evaluators only.
@@ -248,7 +254,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // Role breakdown table (submitted-only)
   if (Object.keys(reportMetrics.coverage.roles).length > 0) {
     children.push(createParagraph('Role Breakdown:', { bold: true }));
-    
+
     const roleTableRows = [
       new TableRow({
         children: [
@@ -286,17 +292,17 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // 4) EXECUTIVE SUMMARY
   // ============================================================
   children.push(createHeading('Executive Summary', 1));
-  
+
   if (geminiNarrative && Array.isArray(geminiNarrative.executiveSummary)) {
     geminiNarrative.executiveSummary.forEach(point => {
       children.push(createParagraph(`• ${point}`));
     });
   } else {
     // Fallback: generate from metrics
-    const overallAvg = reportMetrics.scoring.totalsOverall?.avg || 0;
+    const overallAvg = reportMetrics.scoring.totals?.overallAvg || 0;
     // Use riskLabel function for consistent mapping (0 = minimal risk, 4 = critical risk)
     const riskLevel = riskLabel(overallAvg);
-    children.push(createParagraph(`• Overall ethical risk level: ${riskLevel} (Average score: ${overallAvg.toFixed(2)}/4.0)`));
+    children.push(createParagraph(`• Overall ethical risk level: ${riskLevel} (Average score: ${safeToFixed(overallAvg, 2)})`));
     children.push(createParagraph(`• ${reportMetrics.coverage.expertsSubmittedCount} evaluator(s) submitted evaluations`));
     children.push(createParagraph(`• ${reportMetrics.tensions.summary.total} ethical tensions identified`));
   }
@@ -348,9 +354,9 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         new TableRow({
           children: [
             new TableCell({ children: [createParagraph(principle)] }),
-            new TableCell({ children: [createParagraph(principleData.avgScore.toFixed(2))] }),
-            new TableCell({ children: [createParagraph(`${principleData.riskPct.toFixed(1)}%`)] }),
-            new TableCell({ children: [createParagraph(`${principleData.safePct.toFixed(1)}%`)] }),
+            new TableCell({ children: [createParagraph(safeToFixed(principleData.avgScore, 2))] }),
+            new TableCell({ children: [createParagraph(`${safeToFixed(principleData.riskPct, 1, '0.0')}%`)] }),
+            new TableCell({ children: [createParagraph(`${safeToFixed(principleData.safePct, 1, '0.0')}%`)] }),
             new TableCell({ children: [createParagraph(`${principleData.safeCount}/${principleData.notSafeCount}`)] }),
             new TableCell({ children: [createParagraph(notes[0] || '')] })
           ]
@@ -384,7 +390,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     children.push(createParagraph('• 1.5–2.5 = Medium'));
     children.push(createParagraph('• 2.5–3.5 = High'));
     children.push(createParagraph('• 3.5–4.0 = Critical'));
-    
+
     // Calculate and show evaluator counts and N/A excluded
     const principles = Object.keys(reportMetrics.scoring.byPrincipleOverall);
     const totalEvaluators = principles.reduce((sum, p) => {
@@ -404,7 +410,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   if (reportMetrics.topRiskDrivers && reportMetrics.topRiskDrivers.questions.length > 0) {
     children.push(createHeading('Top Risky Questions (Summary)', 2));
     children.push(createParagraph('See "Risks" section for detailed view with answer snippets.', { italics: true }));
-    
+
     const shortRiskTableRows = [
       new TableRow({
         children: [
@@ -423,7 +429,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
           children: [
             new TableCell({ children: [createParagraph(q.questionCode || q.questionId)] }),
             new TableCell({ children: [createParagraph(q.principle)] }),
-            new TableCell({ children: [createParagraph(q.avgRiskScore.toFixed(2))] }),
+            new TableCell({ children: [createParagraph(safeToFixed(q.avgRiskScore, 2))] }),
             new TableCell({ children: [createParagraph(questionType)] })
           ]
         })
@@ -466,7 +472,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       new TableRow({
         children: [
           new TableCell({ children: [createParagraph('Principle', { bold: true })] }),
-          ...evaluatorList.map(e => 
+          ...evaluatorList.map(e =>
             new TableCell({ children: [createParagraph(`${e.name}\n(${e.role})`, { bold: true })] })
           ),
           new TableCell({ children: [createParagraph('Range\n(Min-Max)', { bold: true })] }),
@@ -484,8 +490,8 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       // Add evaluator scores (or N/A if they don't have a score for this principle)
       evaluatorList.forEach(evaluator => {
         const evaluatorScore = principleData.evaluators.find(e => e.userId === evaluator.userId);
-        const scoreText = evaluatorScore 
-          ? evaluatorScore.score.toFixed(2)
+        const scoreText = evaluatorScore
+          ? safeToFixed(evaluatorScore.score, 2)
           : 'N/A';
         rowCells.push(
           new TableCell({ children: [createParagraph(scoreText)] })
@@ -494,8 +500,8 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
 
       // Add range and average
       rowCells.push(
-        new TableCell({ children: [createParagraph(`${principleData.range.min.toFixed(2)} - ${principleData.range.max.toFixed(2)}`)] }),
-        new TableCell({ children: [createParagraph(principleData.average.toFixed(2))] })
+        new TableCell({ children: [createParagraph(`${safeToFixed(principleData.range.min, 2)} - ${safeToFixed(principleData.range.max, 2)}`)] }),
+        new TableCell({ children: [createParagraph(safeToFixed(principleData.average, 2))] })
       );
 
       dynamicTableRows.push(new TableRow({ children: rowCells }));
@@ -550,9 +556,9 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       let excerpt = '';
       if (q.answerExcerpts && q.answerExcerpts.length > 0) {
         // Find longest excerpt
-        const longestExcerpt = q.answerExcerpts.reduce((longest, current) => 
+        const longestExcerpt = q.answerExcerpts.reduce((longest, current) =>
           current.length > longest.length ? current : longest
-        , '');
+          , '');
         // Check if it's the empty marker
         if (longestExcerpt === '[Answer is empty / not captured]') {
           excerpt = 'Answer is empty / not captured';
@@ -565,29 +571,29 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         // Skip questions without submitted text answers (should not appear in table)
         return;
       }
-      
+
       // Use questionText if available, otherwise fallback to questionCode or questionId
       const questionDisplay = q.questionText || q.questionCode || q.questionId;
-      
+
       // Determine question type (first 12 = common/core)
-      const questionType = q.isCommonQuestion !== undefined 
+      const questionType = q.isCommonQuestion !== undefined
         ? (q.isCommonQuestion ? 'Common (Core)' : 'Role-Specific')
         : (q.questionOrder && q.questionOrder <= 12 ? 'Common (Core)' : 'Role-Specific');
-      
+
       // Get roles who answered (prefer rolesWhoAnswered if available, fallback to rolesMostAtRisk)
       const rolesLabel = (q.rolesWhoAnswered && q.rolesWhoAnswered.length > 0)
         ? q.rolesWhoAnswered.join(', ')
         : (q.rolesMostAtRisk && q.rolesMostAtRisk.length > 0)
           ? q.rolesMostAtRisk.join(', ')
           : 'N/A';
-      
+
       riskTableRows.push(
         new TableRow({
           children: [
             new TableCell({ children: [createParagraph(q.questionId || q.questionCode || 'N/A')] }), // Question ID
             new TableCell({ children: [createParagraph(questionDisplay)] }), // Question Text
             new TableCell({ children: [createParagraph(q.principle)] }), // Principle
-            new TableCell({ children: [createParagraph(q.avgRiskScore.toFixed(2))] }), // Avg Risk Score
+            new TableCell({ children: [createParagraph(safeToFixed(q.avgRiskScore, 2))] }), // Avg Risk Score
             new TableCell({ children: [createParagraph(questionType)] }), // Type (Common/Role-Specific)
             new TableCell({ children: [createParagraph(rolesLabel)] }), // Role(s) Who Answered
             new TableCell({ children: [createParagraph(excerpt)] }) // Answer Snippet
@@ -638,7 +644,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         }
       );
     }
-    
+
     if (chartBuffers.evidenceCoverageDonut) {
       await addChartImage(
         chartBuffers.evidenceCoverageDonut,
@@ -650,7 +656,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         }
       );
     }
-    
+
     if (chartBuffers.severityChart) {
       await addChartImage(
         chartBuffers.severityChart,
@@ -662,7 +668,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         }
       );
     }
-    
+
     if (chartBuffers.evidenceTypeChart) {
       await addChartImage(
         chartBuffers.evidenceTypeChart,
@@ -681,7 +687,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // ============================================================
   if (reportMetrics.tensions.list.length > 0) {
     children.push(createHeading('Tensions Summary Table', 2));
-    
+
     const tensionsTableRows = [
       new TableRow({
         children: [
@@ -701,12 +707,12 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     reportMetrics.tensions.list.forEach(tension => {
       const conflictLabel = `${tension.conflict.principle1} ↔ ${tension.conflict.principle2}`;
       const votesLabel = `${tension.consensus.agreeCount}/${tension.consensus.disagreeCount}`;
-      const evidenceTypesLabel = tension.evidence.types.length > 0 
+      const evidenceTypesLabel = tension.evidence.types.length > 0
         ? tension.evidence.types.join(', ')
         : 'N/A';
-      const claimOneLine = (tension.claim || 'Not provided').substring(0, 80) + 
+      const claimOneLine = (tension.claim || 'Not provided').substring(0, 80) +
         ((tension.claim && tension.claim.length > 80) ? '...' : '');
-      
+
       tensionsTableRows.push(
         new TableRow({
           children: [
@@ -714,7 +720,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
             new TableCell({ children: [createParagraph(tension.severityLevel || 'Unknown')] }),
             new TableCell({ children: [createParagraph(tension.consensus.reviewState)] }),
             new TableCell({ children: [createParagraph(votesLabel)] }),
-            new TableCell({ children: [createParagraph(`${tension.consensus.agreePct.toFixed(1)}%`)] }),
+            new TableCell({ children: [createParagraph(`${safeToFixed(tension.consensus.agreePct, 1, '0.0')}%`)] }),
             new TableCell({ children: [createParagraph(String(tension.evidence.count))] }),
             new TableCell({ children: [createParagraph(evidenceTypesLabel)] }),
             new TableCell({ children: [createParagraph(String(tension.discussionCount || 0))] }),
@@ -740,15 +746,15 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // ============================================================
   if (reportMetrics.tensions.list.length > 0) {
     children.push(createHeading('Tensions Detailed View', 2));
-    
+
     reportMetrics.tensions.list.forEach((tension, idx) => {
       const header = `Conflict: ${tension.conflict.principle1} ↔ ${tension.conflict.principle2} | Severity: ${tension.severityLevel} | Review State: ${tension.consensus.reviewState}`;
       children.push(createHeading(`Tension ${idx + 1}: ${header}`, 2));
-      
+
       children.push(createParagraph('Claim:', { bold: true }));
       children.push(createParagraph(tension.claim || 'Not provided'));
       children.push(createParagraph(''));
-      
+
       if (tension.argument) {
         children.push(createParagraph('Argument:', { bold: true }));
         children.push(createParagraph(tension.argument));
@@ -804,8 +810,8 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       // Consensus
       children.push(createParagraph('Consensus:', { bold: true }));
       children.push(createParagraph(`Votes: ${tension.consensus.agreeCount} agree, ${tension.consensus.disagreeCount} disagree`));
-      children.push(createParagraph(`Participation: ${tension.consensus.votesTotal}/${tension.consensus.assignedExpertsCount} (${tension.consensus.participationPct.toFixed(1)}%)`));
-      children.push(createParagraph(`Agree %: ${tension.consensus.agreePct.toFixed(1)}%`));
+      children.push(createParagraph(`Participation: ${tension.consensus.votesTotal}/${tension.consensus.assignedExpertsCount} (${safeToFixed(tension.consensus.participationPct, 1, '0.0')}%)`));
+      children.push(createParagraph(`Agree %: ${safeToFixed(tension.consensus.agreePct, 1, '0.0')}%`));
       children.push(createParagraph(''));
 
       // Next step from narrative
@@ -852,7 +858,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     geminiNarrative.recommendations.forEach(rec => {
       // Owner person: use ownerPerson if available, otherwise "Assign owner"
       const ownerPerson = rec.ownerPerson || 'Assign owner';
-      
+
       actionTableRows.push(
         new TableRow({
           children: [
@@ -884,23 +890,23 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // 9) LIMITATIONS & ASSUMPTIONS (DETERMINISTIC - from dataQuality)
   // ============================================================
   children.push(createHeading('Limitations & Assumptions', 1));
-  
+
   // Build deterministic limitations from dataQuality (NOT from Gemini)
   const dataQuality = reportMetrics.dataQuality || {};
   const limitations = [];
-  
+
   // 1. Submitted count check (reports are based on submitted evaluators only)
   const submittedCount = reportMetrics.team?.submittedCount || reportMetrics.coverage?.expertsSubmittedCount || 0;
-  
+
   if (submittedCount === 0) {
     limitations.push('No evaluators have submitted their responses. This report is based on incomplete data.');
   }
-  
+
   // 2. Missing scores
   if (dataQuality.missingScores && dataQuality.missingScores.count > 0) {
     limitations.push(`${dataQuality.missingScores.count} evaluator(s) submitted responses but have no canonical scores in MongoDB. Scores may need to be recomputed.`);
   }
-  
+
   // 3. Missing answer texts
   if (dataQuality.answerTexts) {
     if (dataQuality.answerTexts.submittedCountWithMissingText > 0) {
@@ -911,27 +917,27 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
       }
     }
   }
-  
+
   // 4. Missing evidence
   if (dataQuality.evidence && dataQuality.evidence.tensionsWithoutEvidenceCount > 0) {
     limitations.push(`${dataQuality.evidence.tensionsWithoutEvidenceCount} tension(s) lack evidence attachments (evidence coverage: ${dataQuality.evidence.evidenceCoveragePct}%).`);
   }
-  
+
   // 5. Missing mitigations
   if (dataQuality.mitigation && dataQuality.mitigation.missingCount > 0) {
     limitations.push(`${dataQuality.mitigation.missingCount} tension(s) lack proposed mitigations (${dataQuality.mitigation.missingPct}% without mitigation).`);
   }
-  
+
   // 6. Incomplete responses
   if (dataQuality.incompleteResponses && dataQuality.incompleteResponses.count > 0) {
     limitations.push(`${dataQuality.incompleteResponses.count} response(s) are incomplete (less than 80% of required questions answered).`);
   }
-  
+
   // 7. Missing answers
   if (dataQuality.missingAnswers && dataQuality.missingAnswers.count > 0) {
     limitations.push(`${dataQuality.missingAnswers.count} required question(s) have no answers from any evaluator.`);
   }
-  
+
   // Display limitations
   if (limitations.length > 0) {
     limitations.forEach(limitation => {
