@@ -28,19 +28,27 @@ MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/zinspection?retryW
 NODE_ENV=production
 ```
 
-#### Email Configuration (E-posta gönderimi için):
+#### Email Configuration (E-posta gönderimi için - Resend API):
 
 ```env
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASS=your-16-digit-gmail-app-password
+RESEND_API_KEY=re_xxxxxxxxxxxxx
+EMAIL_FROM=Z-Inspection <noreply@yourdomain.com>
+WELCOME_ATTACHMENTS_ENABLED=true
 ```
 
-**Gmail App Password Nasıl Oluşturulur:**
-1. Google hesabınıza giriş yapın
-2. https://myaccount.google.com/security
-3. "2-Step Verification" açık olmalı
-4. "App passwords" → "Mail" → Custom name → Generate
-5. 16 haneli şifreyi kopyalayın (boşluksuz)
+**Resend API Key Nasıl Alınır:**
+1. https://resend.com adresine gidin ve hesap oluşturun
+2. Dashboard → API Keys → Create API Key
+3. API key'i kopyalayın ve Railway'e ekleyin
+4. Domain'inizi Resend'de verify edin (EMAIL_FROM için gerekli)
+
+**Welcome Email PDF Attachments:**
+- Welcome emails include role-based PDF guides
+- PDF files must be placed in `backend/assets/guides/`:
+  - `admin-guide.pdf` - Admin user guide
+  - `experts-guide.pdf` - Expert roles guide (shared)
+  - `usecase-owner-guide.pdf` - Use-case-owner guide
+- Set `WELCOME_ATTACHMENTS_ENABLED=false` to disable attachments
 
 #### Optional Variables:
 
@@ -123,9 +131,10 @@ Bu dosyalar Railway tarafından otomatik olarak kullanılır.
 
 ### Email Configuration
 
+- Email service uses Resend API (not Gmail SMTP)
+- Production'da mutlaka `RESEND_API_KEY` ve `EMAIL_FROM` ayarlayın
+- Welcome emails include role-based PDF attachments (see `backend/docs/WELCOME_EMAIL_GUIDE.md`)
 - Email credentials yoksa, kod console'da log'lanır (production'da mail gönderilemez)
-- Production'da mutlaka `EMAIL_USER` ve `EMAIL_PASS` ayarlayın
-- Gmail App Password kullanmanız önerilir
 
 ## 🔄 Güncelleme Süreci
 
@@ -150,9 +159,11 @@ Bu dosyalar Railway tarafından otomatik olarak kullanılır.
 
 ### Email Gönderilemiyor
 
-1. `EMAIL_USER` ve `EMAIL_PASS` variable'larının eklendiğinden emin olun
-2. Gmail App Password kullandığınızdan emin olun (normal şifre değil)
-3. Logları kontrol edin: `📧 Email service: ✅ Configured` görünüyor mu?
+1. `RESEND_API_KEY` ve `EMAIL_FROM` variable'larının eklendiğinden emin olun
+2. Resend API key'in geçerli olduğundan emin olun
+3. Domain'inizin Resend'de verify edildiğinden emin olun (EMAIL_FROM için)
+4. Logları kontrol edin: `📧 Email service: ✅ Configured` görünüyor mu?
+5. Welcome email PDF attachments için `backend/assets/guides/` klasöründeki PDF dosyalarını kontrol edin
 
 ### Port Hatası
 
