@@ -4377,22 +4377,11 @@ app.post('/api/auth/verify-code-and-register', async (req, res) => {
     emailVerification.isUsed = true;
     await emailVerification.save();
 
-    // Send welcome email (non-blocking, log error if fails but don't fail registration)
+    // Send welcome email with role-based PDF attachment (non-blocking, log error if fails but don't fail registration)
     try {
       if (process.env.RESEND_API_KEY) {
-        const { sendEmail } = require('./services/emailService');
-        await sendEmail(
-          email,
-          'Welcome to Z-Inspection Platform',
-          `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #1F2937; margin-bottom: 20px;">Welcome!</h2>
-              <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hello ${name},</p>
-              <p style="color: #374151; font-size: 16px; line-height: 1.6;">Welcome to Z-Inspection Ethical AI Evaluation Platform.</p>
-              <p style="color: #374151; font-size: 16px; line-height: 1.6;">You can now sign in with your account and start adding your projects.</p>
-            </div>
-          `
-        );
+        const { sendWelcomeEmail } = require('./services/emailService');
+        await sendWelcomeEmail(email, name, role);
       } else {
         console.warn('Welcome email not sent: RESEND_API_KEY not configured');
       }
