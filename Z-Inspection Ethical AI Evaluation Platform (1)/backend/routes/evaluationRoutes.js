@@ -29,12 +29,49 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 router.post('/assignments', async (req, res) => {
   try {
     const { projectId, userId, role, questionnaires, actorId, actorRole } = req.body;
+
+    // PHASE 4/5: Role Cardinality Guard
+    if (role === 'ethical-expert') {
+      const { ETHICAL_EXPERT_CARDINALITY } = require('../config/roles.config');
+      const mongoose = require('mongoose');
+
+      console.log(`🔒 [PHASE 4/5] Checking ethical-expert cardinality for project ${projectId}...`);
+
+      const projectIdObj = mongoose.Types.ObjectId(projectId);
+      const existingCount = await ProjectAssignment.countDocuments({
+        projectId: projectIdObj,
+        role: 'ethical-expert'
+      });
+
+      console.log(`📊 [PHASE 4/5] Current ethical-expert count: ${existingCount}`);
+      console.log(`📏 [PHASE 4/5] Maximum allowed: ${ETHICAL_EXPERT_CARDINALITY.max}`);
+
+      if (existingCount >= ETHICAL_EXPERT_CARDINALITY.max) {
+        console.log(`❌ [PHASE 4/5] BLOCKED: Cannot assign duplicate ethical-expert`);
+
+        return res.status(400).json({
+          success: false,
+          error: 'ROLE_CARDINALITY_EXCEEDED',
+          message: `Only ${ETHICAL_EXPERT_CARDINALITY.max} ethical-expert allowed per project (Z-Inspection methodology requirement)`,
+          details: {
+            role: 'ethical-expert',
+            currentCount: existingCount,
+            maxAllowed: ETHICAL_EXPERT_CARDINALITY.max,
+            projectId: projectId
+          },
+          action: 'Remove existing ethical-expert before assigning a new one, or assign a different role'
+        });
+      }
+
+      console.log(`✅ [PHASE 4/5] Cardinality check PASSED - proceeding with assignment`);
+    }
+
     // actorId and actorRole are optional - if not provided, assume it's an admin action
     // In a real scenario, you'd get this from req.user (authentication middleware)
     const assignment = await createAssignment(
-      projectId, 
-      userId, 
-      role, 
+      projectId,
+      userId,
+      role,
       questionnaires,
       actorId || null,
       actorRole || 'admin'
@@ -80,11 +117,11 @@ router.post('/responses/submit', async (req, res) => {
 router.get('/responses', async (req, res) => {
   try {
     const { projectId, userId, questionnaireKey } = req.query;
-    
+
     if (!projectId || !userId || !questionnaireKey) {
       return res.status(400).json({ error: 'projectId, userId, and questionnaireKey are required' });
     }
-    
+
     const mongoose = require('mongoose');
     const isValidObjectId = (id) => {
       if (!id) return false;
@@ -94,21 +131,21 @@ router.get('/responses', async (req, res) => {
         return false;
       }
     };
-    
+
     // Convert to ObjectId if valid
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
     const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
-    
+
     console.log(`📥 GET /api/evaluations/responses: projectId=${projectId}, userId=${userId}, questionnaireKey=${questionnaireKey}`);
-    
-    const response = await Response.findOne({ 
-      projectId: projectIdObj, 
-      userId: userIdObj, 
-      questionnaireKey: questionnaireKey 
+
+    const response = await Response.findOne({
+      projectId: projectIdObj,
+      userId: userIdObj,
+      questionnaireKey: questionnaireKey
     })
       .populate('answers.questionId', 'code text answerType options')
       .lean();
-    
+
     if (response) {
       console.log(`✅ Found response with ${response.answers?.length || 0} answers`);
       // Ensure answers array exists
@@ -118,7 +155,7 @@ router.get('/responses', async (req, res) => {
     } else {
       console.log(`⚠️ No response found for projectId=${projectId}, userId=${userId}, questionnaireKey=${questionnaireKey}`);
     }
-    
+
     res.json(response || null);
   } catch (error) {
     console.error('❌ Error fetching response:', error);
@@ -157,7 +194,7 @@ router.get('/questions', async (req, res) => {
 router.post('/questions/clear-cache', (req, res) => {
   try {
     const { questionnaireKey } = req.body;
-    
+
     if (questionnaireKey) {
       // Clear specific questionnaire cache
       const keysToDelete = [];

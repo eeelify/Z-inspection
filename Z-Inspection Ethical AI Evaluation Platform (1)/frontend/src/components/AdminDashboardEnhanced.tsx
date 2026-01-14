@@ -166,6 +166,8 @@ export function AdminDashboardEnhanced({
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const [allSystemNotifications, setAllSystemNotifications] = useState<any[]>([]);
+  const [showNotificationHistory, setShowNotificationHistory] = useState(false);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [messageUnreadConversations, setMessageUnreadConversations] = useState<any[]>([]);
   const [showMessageNotifications, setShowMessageNotifications] = useState(false);
@@ -348,6 +350,19 @@ export function AdminDashboardEnhanced({
       }
     } catch (error) {
       console.error('Error fetching unread count:', error);
+    }
+  };
+
+  // Fetch all system notifications (for history view)
+  const fetchAllNotifications = async () => {
+    try {
+      const response = await fetch(api(`/api/messages/history?userId=${encodeURIComponent(currentUser.id)}&limit=100`));
+      if (response.ok) {
+        const data = await response.json();
+        setAllSystemNotifications(data.messages || []);
+      }
+    } catch (error) {
+      console.error('Error fetching notification history:', error);
     }
   };
 
@@ -696,7 +711,7 @@ export function AdminDashboardEnhanced({
                   className="absolute top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] overflow-hidden flex flex-col"
                   style={{
                     right: '0',
-                    width: 'min(320px, calc(100vw - 2rem))',
+                    width: 'min(360px, calc(100vw - 2rem))',
                     maxHeight: 'min(500px, calc(100vh - 100px))',
                     maxWidth: 'calc(100vw - 1rem)'
                   }}
@@ -710,45 +725,105 @@ export function AdminDashboardEnhanced({
                       <X className="h-4 w-4 text-gray-500" />
                     </button>
                   </div>
+                  {/* Tab Toggle */}
+                  <div className="flex border-b border-gray-200 flex-shrink-0">
+                    <button
+                      onClick={() => setShowNotificationHistory(false)}
+                      className={`flex-1 py-2 text-sm font-medium ${!showNotificationHistory ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Unread ({unreadCount})
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNotificationHistory(true);
+                        fetchAllNotifications();
+                      }}
+                      className={`flex-1 py-2 text-sm font-medium ${showNotificationHistory ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      History
+                    </button>
+                  </div>
                   <div className="overflow-y-auto flex-1 min-h-0">
-                    {unreadConversations.length === 0 ? (
-                      <div className="p-6 text-center text-gray-500">
-                        <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm">No unread messages</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-gray-200">
-                        {unreadConversations.map((conv, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleNotificationClick(conv)}
-                            className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center space-x-2 mb-1">
-                                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-medium">
-                                    {conv.fromUserName?.charAt(0) || 'U'}
+                    {!showNotificationHistory ? (
+                      /* Unread View */
+                      unreadConversations.length === 0 ? (
+                        <div className="p-6 text-center text-gray-500">
+                          <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm">No unread notifications</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-200">
+                          {unreadConversations.map((conv, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleNotificationClick(conv)}
+                              className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-medium">
+                                      {conv.fromUserName?.charAt(0) || 'U'}
+                                    </div>
+                                    <div className="font-medium text-gray-900 text-sm truncate">
+                                      {conv.fromUserName}
+                                    </div>
                                   </div>
-                                  <div className="font-medium text-gray-900 text-sm truncate">
-                                    {conv.fromUserName}
+                                  <div className="text-xs text-gray-500 line-clamp-2">
+                                    {String(conv.lastMessage || '').startsWith('[NOTIFICATION]')
+                                      ? String(conv.lastMessage).replace(/^\[NOTIFICATION\]\s*/, '')
+                                      : conv.lastMessage}
                                   </div>
                                 </div>
-                                <div className="text-xs text-gray-500 line-clamp-2">
-                                  {String(conv.lastMessage || '').startsWith('[NOTIFICATION]')
-                                    ? String(conv.lastMessage).replace(/^\[NOTIFICATION\]\s*/, '')
-                                    : conv.lastMessage}
+                                {conv.count > 1 && (
+                                  <span className="ml-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                                    {conv.count}
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    ) : (
+                      /* History View */
+                      allSystemNotifications.length === 0 ? (
+                        <div className="p-6 text-center text-gray-500">
+                          <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm">No notification history</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-200">
+                          {allSystemNotifications.map((notif, idx) => (
+                            <div
+                              key={notif._id || idx}
+                              className={`p-4 hover:bg-gray-50 transition-colors ${notif.isRead ? 'bg-white' : 'bg-blue-50'}`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <div className={`w-8 h-8 rounded-full ${notif.isRead ? 'bg-gray-400' : 'bg-blue-600'} text-white flex items-center justify-center text-xs font-medium`}>
+                                      {notif.actorId?.name?.charAt(0) || 'S'}
+                                    </div>
+                                    <div className="font-medium text-gray-900 text-sm truncate">
+                                      {notif.actorId?.name || 'System'}
+                                    </div>
+                                    {!notif.isRead && (
+                                      <span className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded">New</span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm font-medium text-gray-800 mb-0.5">{notif.title}</div>
+                                  <div className="text-xs text-gray-500 line-clamp-2">{notif.message}</div>
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    {notif.projectId?.title && <span className="mr-2">📁 {notif.projectId.title}</span>}
+                                    {notif.createdAt && formatTime(notif.createdAt)}
+                                  </div>
                                 </div>
                               </div>
-                              {conv.count > 1 && (
-                                <span className="ml-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                                  {conv.count}
-                                </span>
-                              )}
                             </div>
-                          </button>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )
                     )}
                   </div>
                 </div>

@@ -1,0 +1,62 @@
+{
+  "responseId": "69652acc14fb35723fdd387a",
+  "userId": "69341f3a77e89c5de5ae6484",
+  "questionnaireKey": "general-v1",
+  "totalAnswers": 12,
+  "sampleAnswers": [
+    {
+      "questionCode": "T1",
+      "questionId": "695d814a205aa3b04599f597",
+      "keys": [
+        "questionId",
+        "questionCode",
+        "answer",
+        "score",
+        "answerSeverity",
+        "notes",
+        "evidence"
+      ],
+      "answerSeverity": null,
+      "answer": {
+        "choiceKey": "mostly_clear",
+        "multiChoiceKeys": []
+      }
+    },
+    {
+      "questionCode": "T2",
+      "questionId": "695d814a205aa3b04599f5a6",
+      "keys": [
+        "questionId",
+        "questionCode",
+        "answer",
+        "score",
+        "answerSeverity",
+        "notes",
+        "evidence"
+      ],
+      "answerSeverity": null,
+      "answer": {
+        "choiceKey": "partially",
+        "multiChoiceKeys": []
+      }
+    },
+    {
+      "questionCode": "H1",
+      "questionId": "693c6b9366f16d2d4966357c",
+      "keys": [
+        "questionId",
+        "questionCode",
+        "answer",
+        "score",
+        "answerSeverity",
+        "notes",
+        "evidence"
+      ],
+      "answerSeverity": null,
+      "answer": {
+        "choiceKey": "not_at_all",
+        "multiChoiceKeys": []
+      }
+    }
+  ]
+}

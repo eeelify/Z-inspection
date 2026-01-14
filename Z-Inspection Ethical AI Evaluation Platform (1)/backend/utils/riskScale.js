@@ -183,11 +183,12 @@ function colorForScore(score) {
 
   // CORRECT SCALE: 0 = green (safe), 4 = red (critical)
   // Use canonical thresholds for consistent colors
-  if (clamped < 0.5) return "#10b981";   // Green - MINIMAL
-  if (clamped < 1.5) return "#84cc16";   // Light green - LOW
-  if (clamped < 2.5) return "#fbbf24";   // Yellow/Amber - MEDIUM
-  if (clamped < 3.5) return "#f97316";   // Orange - HIGH
-  return "#ef4444";                      // Red - CRITICAL
+  // PALETTE UPDATE (Jan 2026): Minimal=Green, Low=LightGreen, Moderate=Amber, High=Red
+  if (clamped < 0.5) return "#4CAF50";   // Green - MINIMAL
+  if (clamped < 1.6) return "#edbf4bff";   // Yellow - LOW (User Request: Sarı)
+  if (clamped < 2.5) return "#EF6C00";   // Dark Orange - MEDIUM (User Request: Koyu Turuncu)
+  if (clamped < 3.5) return "#D32F2F";   // Dark Red - HIGH (User Request)
+  return "#B71C1C";                      // Very Dark Red - CRITICAL
 }
 
 /**
@@ -273,11 +274,11 @@ function colorForCumulativeRisk(cumulativeScore, questionCount) {
 
   const normalizedRisk = cumulativeScore / questionCount;
 
-  if (normalizedRisk < 0.5) return "#10b981";   // Green - MINIMAL
-  if (normalizedRisk < 1.5) return "#84cc16";   // Light green - LOW
-  if (normalizedRisk < 2.5) return "#fbbf24";   // Yellow/Amber - MEDIUM
-  if (normalizedRisk < 3.5) return "#f97316";   // Orange - HIGH
-  return "#ef4444";                             // Red - CRITICAL
+  if (normalizedRisk < 0.5) return "#4CAF50";   // Green - MINIMAL
+  if (normalizedRisk < 1.5) return "#FBC02D";   // Yellow - LOW
+  if (normalizedRisk < 2.5) return "#EF6C00";   // Dark Orange - MEDIUM
+  if (normalizedRisk < 3.5) return "#D32F2F";   // Dark Red - HIGH
+  return "#B71C1C";                             // Very Dark Red - CRITICAL
 }
 
 module.exports = {

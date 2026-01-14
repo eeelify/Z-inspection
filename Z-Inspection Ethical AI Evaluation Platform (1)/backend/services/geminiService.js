@@ -101,503 +101,182 @@ async function testApiKey() {
 async function generateReport(analysisData) {
   const userPrompt = buildUserPrompt(analysisData);
 
+
   const systemInstruction = `
-You are an ENTERPRISE-GRADE AI GOVERNANCE ANALYST generating a professional ethical risk assessment report.
+You are tasked with IMPROVING (not rewriting from scratch)
+the qualitative analysis, recommendations, and conclusion sections
+of an existing Ethical AI Evaluation Report.
 
-🔒 CRITICAL GUARDRAILS (MANDATORY - VIOLATION = REPORT REJECTION)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL CONSTRAINTS (DO NOT VIOLATE):
+- DO NOT change any numeric values.
+- DO NOT change ERC calculations or thresholds.
+- DO NOT change risk levels or classifications.
+- DO NOT add new metrics.
+- DO NOT alter report structure or section order.
 
-You are NOT a scoring engine. You are a narrative analyst ONLY.
+Your task is LIMITED to:
+- Making qualitative insights more principle-specific
+- Increasing clarity, depth, and audit-readiness
+- Improving recommendations with project-specific actions
+- Strengthening the conclusion narrative
 
-ABSOLUTELY FORBIDDEN:
-❌ DO NOT recompute, infer, normalize, or adjust ANY numeric scores
-❌ DO NOT recalculate Risk Score, Answer Severity, or ERC values
-❌ DO NOT infer missing values or fill gaps with assumptions
-❌ DO NOT "correct" inconsistencies numerically
-❌ DO NOT label anything as "high risk" unless explicitly supported by provided ERC values
-❌ DO NOT generate, modify, or validate any quantitative metrics
+--------------------------------------------------
+SECTION 5 – Qualitative Analysis of Open-Text Responses
+--------------------------------------------------
+
+IMPROVEMENT REQUIREMENTS:
+- Remove generic, repeated language.
+- Each ethical principle MUST contain unique insights.
+- For each principle:
+  1. Reference at least one concrete concern or observation.
+  2. Explain why it matters in this project context.
+  3. Explicitly link the insight to the existing quantitative risk level.
+
+You MUST:
+- Demonstrate that expert open-text responses were interpreted.
+- Use principle-specific terminology
+  (e.g. bias for fairness, explainability for transparency).
+
+EXAMPLE OUTPUT FOR ONE PRINCIPLE (Transparency):
+---
+Expert evaluators emphasized that transparency is partially addressed through internal documentation; however, several noted that explanations provided to candidates regarding automated screening outcomes remain limited.
+
+A recurring theme was the absence of clear, user-facing communication on how automated decisions influence candidate progression. While this does not constitute a systemic transparency failure, experts warned that insufficient disclosure could undermine stakeholder trust over time.
+
+These qualitative observations align with the quantitative assessment, which indicates a moderate transparency risk that could be mitigated through improved communication practices.
+---
+
+You MUST NOT:
+- Use placeholder language.
+- Repeat the same phrasing across principles.
+- Claim lack of data or generation failure.
+
+--------------------------------------------------
+SECTION 6 – Ethical Tensions and Trade-Offs
+--------------------------------------------------
 
 YOU MUST:
-✅ Use ONLY the provided pre-computed ERC metrics
-✅ Treat Question Importance and Actual System Risk as separate concepts
-✅ Explain inconsistencies rather than fix them
-✅ Base ALL risk statements on provided data only
-✅ Generate narrative text that interprets and synthesizes provided metrics
-
-CRITICAL: Charts are ALREADY GENERATED. You MUST NOT:
-- Mention chart generation
-- Say "Imagine a chart here"
-- Create placeholder text for charts
-- Describe what charts should show
-- Output chart data or tables
-
-Your ONLY job is to write INTERPRETIVE NARRATIVE TEXT that explains the provided data.
-
-🧠 CORE CONCEPTS (MUST EXPLAIN IN REPORT)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-You MUST include a clear explanatory section stating:
-
-**Question Importance (Risk Score 0-4)**
-- Represents how ethically critical a topic is IN GENERAL
-- Does NOT indicate a system failure
-- Expert-provided assessment of question criticality
-
-**Observed System Risk (Answer Severity 0-1)**
-- Represents risk observed in THIS SPECIFIC SYSTEM
-- Based on evaluator answers and evidence
-- 0 = safe/well-managed, 0.5 = partial, 1 = risky
-
-**Actual System Performance (Score = Performance Score)**
-- Score = Question Importance × Answer Quality
-- Range: 0-4 scale (HIGHER = BETTER)
-- Uses weighted scoring logic
-- THIS IS THE METRIC for assessing actual system performance
-
-CRITICAL DISTINCTION:
-- A question can be HIGHLY IMPORTANT (Risk Score = 4) but system shows LOW ACTUAL RISK (ERC = 0.8) if well-managed
-- Conversely, a less critical question (Risk Score = 2) with poor management (Severity = 1) yields MEDIUM ACTUAL RISK (ERC = 2)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-AVAILABLE PRE-COMPUTED DATA (READ-ONLY)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1) ERC Metrics (CANONICAL - DO NOT MODIFY)
-- Overall ERC: Single aggregate score (0-4)
-- Per-Principle ERC: 7 ethical principles, each with ERC (0-4)
-- Per-Role ERC: Role × Principle matrix
-- All values are FINAL and PRE-COMPUTED
-
-2) Top Risk Drivers (PRE-IDENTIFIED)
-- Top 5 questions by ERC contribution
-- Each includes: questionId, principle, questionImportance, answerSeverity, ERC, answerSnippet, roles
-- If answerSnippet is null: state "No qualitative explanation was provided"
-- DO NOT fabricate explanations
-
-3) Evaluator Assignments (ACTUAL PROJECT DATA)
-- Role assignments reflect ACTUAL project team
-- Number of evaluators per role is EXACT, not estimated
-- DO NOT duplicate roles or create placeholder evaluators
-
-4) Ethical Tensions (IDENTIFIED CONFLICTS)
-- Each tension includes: conflicting principles, severityLevel, reviewState, claim, evidence (count + types), consensus metrics
-- Review states: Proposed/SingleReview/UnderReview/Accepted/Disputed
-- If tension has no evidence: state "No evidence attached"
-- If claim is "Not provided": state "Claim not provided in submissions"
-
-5) Evidence Metadata (COVERAGE ONLY)
-- Evidence type distribution: Policy/Test/Feedback/Log/Incident/Other
-- Coverage percentage: tensions with evidence / total tensions
-- Evidence counts per tension
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT (ENTERPRISE-GRADE MARKDOWN)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Generate a professional, audit-ready report in markdown. Use this EXACT structure:
-
-
-
-
----
-
-## Executive Summary
-
-Provide 4-6 concise bullet points:
-- Overall ERC score and risk classification (use provided label)
-- Number of evaluators and completion status
-- Number of ethical tensions identified and their review status
-- Top 3 risk areas by ERC contribution
-- Key governance strengths or gaps
-- Critical action items
-
-CRITICAL: Base ALL statements on provided ERC values. Do NOT label as "high risk" unless ERC supports it.
-
----
-
-<a name="dashboard"></a>
-## Dashboard Summary
-
-**Overall Ethical Risk (ERC-Based)**
-- Overall ERC Score: [use provided value]
-- Risk Classification: [use provided label - DO NOT infer]
-- Interpretation: [explain what this score means in context]
-
-**Evaluation Coverage**
-- Total Evaluators: [exact count of SUBMITTED evaluators (unique userId)]
-- Evaluators by Role: [list actual SUBMITTED evaluator roles with counts - DO NOT duplicate]
-- Questions Answered: [provided count]
-- Completion Rate: [provided percentage]
-
-**Ethical Tensions Overview**
-- Total Tensions: [provided count]
-- Review Status Distribution: Accepted/Under Review/Disputed [use provided counts]
-- Evidence Coverage: [provided percentage]
-
-CRITICAL: All numbers must match provided data exactly. Do NOT estimate or infer.
-
----
-
-## Understanding the ERC Model
-
-**CRITICAL: Include this explanatory section to distinguish concepts**
-
-**Question Importance (Risk Score 0-4)**
-- Represents how ethically critical a topic is IN GENERAL
-- Expert assessment of question criticality
-- Does NOT indicate a failure in this specific system
-- Example: "Does the AI make life-critical decisions?" is always highly important (Risk Score = 4)
-
-**Observed System Risk (Answer Severity 0-1)**
-- Represents risk observed in THIS SPECIFIC SYSTEM based on evaluator answers
-- 0 = Safe/well-managed, 0.5 = Partial concerns, 1 = Risky/poorly managed
-- Example: If the system HAS safeguards for life-critical decisions, Answer Severity might be 0.2
-
-**Actual System Risk (ERC = Ethical Risk Contribution)**
-- Formula: ERC = Question Importance × Answer Severity
-- Range: 0-4 scale (0 = No Risk, 1 = Low, 2 = Medium, 3 = High, 4 = Critical)
-- Uses Risk Priority Number (RPN) logic from risk management
-- THIS IS THE PRIMARY METRIC for assessing actual system risk
-
-**Key Insight:**
-A highly important question (Risk Score = 4) can have low actual risk (ERC = 0.8) if the system manages it well (Answer Severity = 0.2). Conversely, a less critical question (Risk Score = 2) with poor management (Answer Severity = 1) yields medium actual risk (ERC = 2).
-
-**ERC Scale Interpretation:**
-- 0.0-0.9: Minimal Risk (well-managed, no significant concerns)
-- 1.0-1.9: Low Risk (acceptable with minor concerns)
-- 2.0-2.9: Medium Risk (requires monitoring and improvements)
-- 3.0-3.6: High Risk (requires immediate attention and mitigation)
-- 3.7-4.0: Critical Risk (requires urgent intervention)
-
-**Disclosure:** All ERC scores are pre-computed from the scores collection. This narrative analysis does not generate, modify, or validate any quantitative metrics.
-
----
-
-## Ethical Principles Assessment
-
-**Summary by Principle** (using provided ERC values)
-
-For each of the 7 principles, state:
-- Principle name
-- ERC value [use provided number exactly]
-- Risk classification [use provided label]
-- Brief interpretation (1-2 sentences based on ERC and answer patterns)
-
-DO NOT recompute or adjust any values. Use provided ERC scores only.
-
----
-
-
-
----
-
-<a name="evidence-coverage-analysis"></a>
-## 📁 Evidence Coverage Analysis
-
-**Coverage Metrics** (use provided values)
-- Evidence Coverage: [provided percentage]% ([X] of [Y] tensions have attached evidence)
-- Tensions Without Evidence: [calculated from provided data]
-
-**Evidence Type Distribution** (use provided counts)
-- Policy Documents: [count] ([percentage]%)
-- Test Reports: [count] ([percentage]%)
-- User Feedback: [count] ([percentage]%)
-- System Logs: [count] ([percentage]%)
-- Incident Reports: [count] ([percentage]%)
-- Other: [count] ([percentage]%)
-
-**Evidence Diversity Assessment**
-- Assess whether evidence types are diverse or concentrated in one category
-- Identify gaps (e.g., missing policy documents, no test reports, lack of user feedback)
-- Note whether evidence is sufficient for high-severity tensions
-- State explicitly if evidence coverage is insufficient for governance maturity
-
-DO NOT infer evidence that wasn't provided. State gaps clearly.
-
----
-
-
-*** TOP RISK DRIVERS SECTION REMOVED ***
-
-
-<a name="ethical-tensions-analysis"></a>
-## ⚖️ Ethical Tensions Analysis
-
-**Tensions Overview** (use provided counts)
-- Total Tensions Identified: [provided count]
-- Review Status Distribution:
-  - Accepted: [count]
-  - Under Review: [count]
-  - Disputed: [count]
-  - Proposed: [count]
-- Overall Evidence Coverage: [provided percentage]%
-- Average Consensus Level: [provided percentage]% (agreement across evaluators)
-
----
-
-
-*** DETAILED TENSION ANALYSIS REMOVED ***
-
-
-
-*** PRINCIPLE DEEP DIVE REMOVED ***
-
-
-If ERC < 1.0 and no tensions: State "No major ethical concerns identified for this principle based on available data. Current safeguards appear effective."
-
----
-
-<a name="methodology-disclosure"></a>
-## 🔬 Methodology & Data Sources
-
-**Assessment Framework**
-This report is based on the **Z-Inspection™ methodology** for trustworthy AI assessment, which evaluates AI systems across 7 ethical principles through multi-stakeholder expert evaluation.
-
-**Scoring Model: ERC (Ethical Risk Contribution)**
-
-The Ethical Risk Contribution (ERC) model uses Risk Priority Number (RPN) logic:
-
-**ERC = Question Importance × Answer Severity**
-
-Where:
-- **Question Importance (0-4):** Expert-provided assessment of how critical this ethical topic is in general
-- **Answer Severity (0-1):** Observed risk level in this specific system based on evaluator responses
-  - 0.0 = Safe/well-managed
-  - 0.5 = Partial concerns
-  - 1.0 = Risky/poorly managed
-- **ERC (0-4):** Actual system risk for this question
-- **Principle ERC:** Average of all question ERCs within that principle
-- **Overall ERC:** Average of all principle ERCs (weighted by answered questions)
-
-**Critical Distinction:**
-ERC separates "question importance" from "actual system risk." A highly important question (4) with strong safeguards (severity 0.2) yields LOW actual risk (ERC 0.8). This prevents false alarms and focuses attention on genuine system weaknesses.
-
-**Data Sources**
-1. **Scores Collection** (Canonical Quantitative Metrics)
-   - All ERC values, risk classifications, and aggregations
-   - Pre-computed outside the LLM pipeline
-   - Read-only source for this report
-
-2. **Responses Collection** (Qualitative Evidence)
-   - Expert evaluator answers to ethical questions
-   - Free-text explanations and justifications
-   - Answer snippets included in Top Risk Drivers
-
-3. **Tensions Collection** (Ethical Conflicts)
-   - Identified conflicts between ethical principles
-   - Evidence attachments, consensus metrics, review status
-   - Governance maturity indicators
-
-4. **Evidence Metadata**
-   - Document types, coverage percentages
-   - Attachment counts per tension
-
----
-
-## 🤖 LLM Disclosure (MANDATORY)
-
-**Role of AI in This Report:**
-
-This report uses Google Gemini EXCLUSIVELY for:
-✅ Narrative synthesis and interpretation
-✅ Explaining pre-computed metrics in natural language
-✅ Identifying patterns across provided data
-✅ Generating recommendations based on observed ERC and tensions
-
-Gemini does NOT:
-❌ Compute, infer, or modify any ERC scores
-❌ Calculate question importance or answer severity
-❌ Generate, validate, or adjust any quantitative metrics
-❌ Create missing data or fill gaps with assumptions
-
-**All quantitative metrics in this report are pre-computed by deterministic algorithms in the scores collection and provided to Gemini as read-only input.**
-
-This approach ensures:
-- Reproducibility (same data → same scores)
-- Auditability (scores can be independently verified)
-- Transparency (LLM cannot alter numeric assessments)
-- Compliance (quantitative risk assessment is algorithm-based, not LLM-generated)
-
----
-
----
-
-## 🎯 Actionable Recommendations
-
-**CRITICAL: All recommendations MUST be grounded in observed ERC values and tensions. Do NOT provide generic AI ethics advice.**
-
-### 🚨 Short-Term Mitigations (0-3 Months)
-
-**Priority 1: Address Top Risk Drivers**
-For EACH of the top 3 ERC contributors:
-- [Specific risk identified]: [Concrete mitigation action]
-- [Responsible role]: [Which evaluator role should lead]
-- [Success metric]: [How to verify risk reduction]
-
-**Priority 2: Close Evidence Gaps**
-For tensions with High/Critical severity and <2 evidence items:
-- [Specific tension]: [Type of evidence needed - Policy/Test/Feedback]
-- [Collection method]: [How to obtain this evidence]
-- [Timeline]: [Target completion date]
-
-**Priority 3: Immediate Documentation Fixes**
-- [List 2-3 quick transparency or documentation improvements based on evaluator feedback]
-
-**Expected Outcome:** Reduce overall ERC by [estimated reduction based on top drivers]
-
----
-
-### 🔧 Medium-Term Governance Improvements (3-9 Months)
-
-**Governance Structure**
-- [Specific role accountability adjustments based on evaluator disagreements]
-- [Review workflow improvements based on tension review status distribution]
-- [Stakeholder engagement enhancements based on consensus gaps]
-
-**Policy & Process Updates**
-- [Specific policy revisions based on high-ERC questions]
-- [Process improvements for evidence collection and attachment]
-- [Training or awareness initiatives for identified knowledge gaps]
-
-**Monitoring & Controls**
-- [Enhanced monitoring for principles with ERC > 2.0]
-- [New safeguards for questions with high importance + high severity]
-
-**Expected Outcome:** Elevate tensions from "Proposed" to "Accepted" status, increase evidence coverage to >70%
-
----
-
-### 📊 Long-Term Monitoring Strategy (9-18 Months)
-
-**ERC Trend Tracking**
-- Establish baseline: Current overall ERC = [provided value]
-- Target: Reduce overall ERC to <1.5 within 12 months
-- Track per-principle ERC monthly for principles currently >2.0
-
-**Periodic Reassessment**
-- Re-evaluate using Z-Inspection methodology every [6/12] months
-- Compare ERC trends to identify improvement or regression
-- Update risk drivers list based on system changes
-
-**KPIs for Ethical Governance Maturity**
-- Evidence coverage target: >80%
-- Tension consensus target: >70% agreement on all tensions
-- Review completion: All tensions move to "Accepted" or "Resolved" within 6 months
-
-**Continuous Improvement**
-- Integrate ERC monitoring into existing risk management dashboards
-- Establish ethical review board with defined responsibilities per principle
-- Create incident response protocols for ERC spikes
-
-**Expected Outcome:** Mature governance structure with proactive ethical risk management
-
----
-
----
-
-## ⚠️ Report Limitations & Caveats
-
-**Data Coverage Limitations**
-[List ONLY actual limitations present in the provided data:]
-- Evaluator Participation: [if completion <100%, state specific gap]
-- Evidence Coverage: [if <50%, flag as significant limitation]
-- Unresolved Tensions: [count and severity of tensions still under review]
-- Missing Evidence Types: [if certain evidence types are completely absent, list them]
-- Temporal Scope: [this assessment is a point-in-time snapshot]
-
-**Methodological Constraints**
-- ERC model assumes expert assessments are accurate and unbiased
-- Answer Severity is based on evaluator interpretation, not direct system testing
-- Some questions may not apply to all system contexts (marked as N/A)
-- Tensions represent identified conflicts, not necessarily all potential conflicts
-
-**Interpretation Boundaries**
-- This report interprets provided metrics; it does not audit underlying systems
-- Recommendations are guidance, not compliance mandates
-- Actual risk mitigation requires system-specific implementation
-- ERC scores are relative; absolute risk depends on deployment context
-
-CRITICAL: If completion rate >90%, evidence coverage >70%, and all tensions reviewed, state: "Data coverage is comprehensive. No significant methodological limitations affect report validity."
-
-DO NOT write "No limitations identified" if clear gaps exist in data.
-
----
-
-## 📌 Report Metadata
-
-**Assessment Scope**
-- Project: [project name]
-- Evaluation Period: [timeframe]
-- Questionnaires Covered: General + Role-Specific (All evaluator groups)
-- Total Questions Assessed: [provided count]
-
-**Evaluation Team**
-- Total Evaluators: [count]
-- Roles Represented: [list actual roles]
-- Completion Rate: [percentage]
-
-**Report Generation**
-- Generated: [date/time]
-- Methodology: Z-Inspection™
-- Scoring Model: ERC (Ethical Risk Contribution)
-- LLM Used: Google Gemini (narrative synthesis only)
-- Report Version: [version if applicable]
-
-**Intended Audience**
-- Executive leadership and board oversight
-- Risk & compliance committees
-- Internal audit and governance functions
-- External regulators and stakeholders
-
----
-
-**End of Report**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRITICAL — RISK INTERPRETATION RULE (MANDATORY)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚠️ GEMINI SAFETY BOUNDARY - YOU MUST NEVER INTERPRET RAW SCORES ⚠️
-
-All numeric scores you receive are ALREADY CLASSIFIED.
-You MUST use the provided risk classifications, NOT interpret scores yourself.
-
-CORRECT RISK SCALE (for reference only - DO NOT INTERPRET):
-- Score 0 = MINIMAL/NO RISK (well-managed, no concerns)
-- Score 1 = LOW RISK (acceptable with minor concerns)
-- Score 2 = MEDIUM RISK (requires monitoring)
-- Score 3 = HIGH RISK (requires immediate attention)
-- Score 4 = MAX/CRITICAL RISK (requires urgent intervention)
-
-CRITICAL RULES:
-1. You receive scores ALREADY classified (e.g., "HIGH_RISK", "MINIMAL_RISK")
-2. NEVER infer risk levels from numeric scores
-3. NEVER say "score 0.33 indicates high risk" - use the provided classification
-4. If classification contradicts your understanding, use the provided classification
-
-Examples:
-- You receive: score=0.33, classification="LOW_RISK" → Say "Low risk concern"
-- You receive: score=4.0, classification="MAX_RISK" → Say "Critical risk requiring urgent attention"
-- NEVER compute: "0.33 < 1 therefore high risk" - WRONG
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-- Write concise, dashboard-style narrative
-- Do NOT write long academic essays
-- Do NOT leave sections empty if data exists
-- Do NOT write "No text answer provided" if textAnswer exists
-- Do NOT mention charts (they are already generated)
-- Do NOT create placeholders
-- Focus on EXPLAINING the data, not visualizing it
-- ALWAYS apply the risk interpretation rule above when discussing scores
+- Identify at least 2 ethical tensions or trade-offs
+- Explain WHY these tensions exist in this system
+- Relate tensions to automation, fairness, transparency, efficiency, or human oversight
+
+YOU MUST NOT:
+- State that no tensions exist
+- Use generic filler language
+
+--------------------------------------------------
+SECTION 7 – Improvement Recommendations
+--------------------------------------------------
+
+IMPROVEMENT REQUIREMENTS:
+- Keep the Short / Medium / Long-term structure unchanged.
+- For each time horizon:
+  - Ensure at least one recommendation is clearly linked
+    to a specific ethical principle or risk area.
+  - Make recommendations concrete and actionable
+    (avoid purely procedural statements).
+
+You MUST NOT:
+- Remove existing recommendations.
+- Introduce new risk categories.
+- Repeat the same recommendation across horizons.
+
+--------------------------------------------------
+SECTION 8 – Conclusion
+--------------------------------------------------
+
+IMPROVEMENT REQUIREMENTS:
+- Strengthen linkage between:
+  quantitative results (ERC values)
+  and qualitative insights.
+- Clearly articulate:
+  - key strengths
+  - key areas requiring attention
+- End with a forward-looking governance statement
+  tailored to this system.
+
+The conclusion MUST be 2-3 substantive paragraphs.
+
+You MUST NOT:
+- Introduce new data.
+- Recalculate or reinterpret scores.
+
+--------------------------------------------------
+OUTPUT FORMAT (STRICT JSON)
+--------------------------------------------------
+Return a RAW JSON OBJECT. No markdown formatting. No code blocks.
+
+FINAL GOAL:
+Produce a more insightful, project-specific, and audit-ready narrative
+WITHOUT changing any calculations or conclusions.
+
+==================================================
+OUTPUT FORMAT (STRICT JSON)
+==================================================
+Return a RAW JSON OBJECT. No markdown formatting. No code blocks.
+
+{
+  "executiveSummary": [
+    "First paragraph must strictly state: 'The assessment identified a Cumulative Risk Volume of [X] across [Y] evaluated quantitative questions.'",
+    "Second paragraph: 'The Normalized Average ERC is [Z] / 4, classified as [Label].'",
+    "Bullet point 1 (Key risk driver)",
+    "Bullet point 2 (Key strength)",
+    "Bullet point 3 (Context)"
+  ],
+  "principleFindings": [
+    {
+      "principleName": "Transparency",
+      "riskLevel": "Low",
+      "analysis": "Detailed analysis text..."
+    }
+  ],
+  "qualitativeAnalysis": {
+    "methodology": "In addition to quantitative scoring, expert evaluators provided open-text responses...",
+    "interpretation": "Insights are grouped by ethical principle and interpreted as complementary context...",
+    "insights": [
+      {
+        "principle": "Transparency",
+        "insight": "Experts noted..."
+      }
+    ],
+    "disclaimer": "The qualitative insights presented above are intended to provide contextual understanding..."
+  },
+  "topRiskDriversNarrative": [
+    {
+      "questionId": "Q123",
+      "whyRisky": "Reason...",
+      "recommendedAction": "Action..."
+    }
+  ],
+  "tensionsNarrative": [
+    {
+      "tensionId": "T1",
+      "analysis": "Why it exists...",
+      "mitigationStatus": "Proposed"
+    }
+  ],
+  "improvementRecommendations": {
+    "shortTerm": ["Detailed action 1 with What/Why/How", "Detailed action 2", "Detailed action 3", "Detailed action 4"],
+    "mediumTerm": ["Strategic action 1 with justification", "Strategic action 2", "Strategic action 3", "Strategic action 4"],
+    "longTerm": ["Governance action 1 with impact", "Governance action 2", "Governance action 3", "Governance action 4"]
+  },
+  "conclusion": [
+    "First paragraph: Overall assessment of ethical risk synthesizing quantitative AND qualitative findings.",
+    "Second paragraph: Areas of strength and areas needing improvement.",
+    "Third paragraph: Final verdict on system readiness and future governance outlook."
+  ],
+  "limitations": [
+    "Qualitative questions capture contextual, ethical nuance...",
+    "Limitation 2..."
+  ]
+}
 `;
 
   const modelNamesToTry = [
     "models/gemini-2.5-flash",
     "gemini-2.5-flash"
   ];
+
 
   let lastError = null;
 
@@ -615,14 +294,26 @@ RULES
         generationConfig
       });
 
-      const report = result.response.text();
+      const reportText = result.response.text();
+      let reportData;
 
-      if (!report) {
+      try {
+        // Attempt to parse JSON
+        // Remove potential markdown code blocks if Gemini mimics them
+        const jsonString = reportText.replace(/```json\n?|```/g, '').trim();
+        reportData = JSON.parse(jsonString);
+      } catch (e) {
+        console.warn('⚠️ Gemini returned invalid JSON, attempting fallback parse or returning raw text if needed:', e.message);
+        // Fallback: If parsing fails, we might have to throw or return partial data
+        throw new Error("Failed to parse Gemini JSON response");
+      }
+
+      if (!reportData) {
         throw new Error("❌ Gemini boş yanıt döndü.");
       }
 
       console.log(`✅ Rapor başarıyla oluşturuldu (${modelName}).`);
-      return report;
+      return reportData;
 
     } catch (error) {
       console.error(`❌ Model ${modelName} başarısız:`, error.message);
@@ -677,10 +368,19 @@ function buildUserPrompt(data) {
   const evaluations = data.evaluations || [];
   const reportMetrics = data.reportMetrics || {}; // E) Include dashboardMetrics
   const topDriversTable = data.topDriversTable || []; // E) Include top drivers with snippets
+  const scoringDisclosure = reportMetrics.scoringDisclosure || null; // NEW: Question Breakdown
 
   let prompt = `# AI ETHICS EVALUATION DATA\n\n`;
   prompt += `Analyze the following data using the Z-Inspection methodology.\n`;
   prompt += `**CRITICAL: ALL expert answers and ALL tensions MUST be fully analyzed and explained in the report.**\n\n`;
+
+  // NEW: Scoring Disclosure Injection
+  if (scoringDisclosure) {
+    prompt += `## METHODOLOGY CONTEXT (USE AS FACT)\n`;
+    prompt += `Quantitative Scoring is based on ${scoringDisclosure.quantitativeQuestions || 'N/A'} quantitative questions.\n`;
+    prompt += `Qualitative Analysis covers ${scoringDisclosure.qualitativeQuestions || 'N/A'} open-text questions.\n`;
+    prompt += `Methodology: ${scoringDisclosure.methodology || 'N/A'}\n\n`;
+  }
 
   // E) Add dashboardMetrics JSON section
   if (reportMetrics.scoring) {
@@ -1126,11 +826,133 @@ Generate a comprehensive PDF-ready report with the following structure:
   return prompt;
 }
 
+/**
+ * Analyze qualitative (open-text) responses to derive numeric severity
+ * @param {Array} answers - Array of { responseId, text, questionText }
+ * @returns {Promise<Array>} Array of { responseId, derivedSeverity, justification }
+ */
+async function analyzeQualitativeSeverity(answers) {
+  if (!answers || answers.length === 0) return [];
+
+  // Construct the prompt
+  const itemsText = answers.map((a, i) =>
+    `ITEM #${i + 1} (ID: ${a.responseId}):
+    Question: "${a.questionText}"
+    Expert Response: "${a.text}"`
+  ).join('\n\n');
+
+  const systemInstruction = `
+You are tasked with DERIVING NUMERIC SEVERITY SIGNALS from OPEN-TEXT expert responses for inclusion in an ERC-based ethical risk assessment.
+
+CRITICAL CONTEXT (DO NOT VIOLATE):
+- ERC = Importance (0–4) × Severity (0–1) is LOCKED.
+- Importance scores are already assigned by experts and MUST NOT be changed.
+- Quantitative multiple-choice scoring is FINAL.
+- This task applies ONLY to OPEN-TEXT responses.
+
+Your role is NOT to interpret importance.
+Your role is NOT to rewrite the report.
+Your role is NOT to infer new ethical principles.
+
+Your ONLY task is to assign a SEVERITY value to each open-text response using STRICT RULES.
+
+--------------------------------------------------
+HARD CONSTRAINTS (NON-NEGOTIABLE)
+--------------------------------------------------
+
+1. You MUST assign ONLY one of the following severity values:
+   - 0.0 → No ethical risk indicated
+   - 0.5 → Ambiguous, partial, or potential ethical risk
+   - 1.0 → Clear ethical risk explicitly indicated
+
+2. You MUST base severity ONLY on the content of the open-text response.
+
+3. You MUST NOT:
+   - Modify importanceScore
+   - Invent numeric values other than {0, 0.5, 1}
+   - Average, normalize, or label risk
+   - Introduce new metrics or explanations
+
+--------------------------------------------------
+SEVERITY DECISION GUIDELINES
+--------------------------------------------------
+
+Assign severity = 1.0 IF the response:
+- Explicitly states a risk, harm, bias, or ethical violation
+- Describes concrete negative outcomes
+- Indicates lack of safeguards, transparency, or accountability
+
+Assign severity = 0.5 IF the response:
+- Expresses uncertainty, partial concern, or conditional risk
+- Uses cautious language (“may”, “could”, “depends”)
+- Indicates mitigation exists but is incomplete
+
+Assign severity = 0.0 IF the response:
+- Explicitly states no ethical concern
+- Describes strong safeguards or positive practices
+- Clearly rejects the presence of risk
+
+--------------------------------------------------
+OUTPUT FORMAT (STRICT JSON)
+--------------------------------------------------
+Return a RAW JSON ARRAY. No markdown formatting. No code blocks.
+
+[
+  {
+    "responseId": "<id>",
+    "derivedSeverity": 0, // or 0.5 or 1
+    "justification": "<one short sentence explaining why>"
+  }
+]
+
+Justification must:
+- Be factual
+- Be neutral
+- Avoid moral judgment
+
+--------------------------------------------------
+IMPORTANT DISCLAIMERS (MANDATORY)
+--------------------------------------------------
+Derived severity values are used exclusively to enable controlled inclusion of qualitative responses in the ERC model. They do not replace expert judgment.
+
+--------------------------------------------------
+FINAL RULE
+--------------------------------------------------
+If a response is unclear, default to severity = 0.5.
+When in doubt, choose the MORE CONSERVATIVE interpretation.
+`;
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-pro", // Use Pro for complex reasoning
+      systemInstruction: systemInstruction,
+      generationConfig: {
+        temperature: 0.2, // Low temperature for deterministic/strict output
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json"
+      }
+    });
+
+    const result = await model.generateContent(`Process the following ${answers.length} items:\n\n${itemsText}`);
+    const responseText = result.response.text();
+
+    console.log('🤖 Gemini Qualitative Analysis Complete');
+    return JSON.parse(responseText);
+
+  } catch (error) {
+    console.error('❌ Gemini Qualitative Analysis Failed:', error.message);
+    // Return empty array to allow graceful degradation (manual review required)
+    return [];
+  }
+}
+
 /* ============================================================
    EXPORTS
 ============================================================ */
 
 module.exports = {
   generateReport,
-  testApiKey
+  generateReportNarrative: generateReport, // ALIAS to fix pdfReportService import
+  testApiKey,
+  analyzeQualitativeSeverity
 };

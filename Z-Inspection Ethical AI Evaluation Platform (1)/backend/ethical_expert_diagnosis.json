@@ -1,0 +1,84 @@
+{
+  "users": [
+    {
+      "userId": "69341f3a77e89c5de5ae6484",
+      "name": "ethical",
+      "email": "ethical@zinspection.com",
+      "accountRole": "ethical-expert",
+      "responseRoles": [
+        "ethical-expert"
+      ],
+      "questionnaires": [
+        "general-v1",
+        "ethical-expert-v1"
+      ]
+    },
+    {
+      "userId": "69652b9214fb35723fdd3ce7",
+      "name": "ethical",
+      "email": "taskiranmerve2002@gmail.com",
+      "accountRole": "ethical-expert",
+      "responseRoles": [
+        "ethical-expert"
+      ],
+      "questionnaires": [
+        "general-v1"
+      ]
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "name": "UGUR YAYAN",
+      "email": "uguryayan@gmail.com",
+      "accountRole": "technical-expert",
+      "responseRoles": [
+        "technical-expert"
+      ],
+      "questionnaires": [
+        "general-v1",
+        "technical-expert-v1"
+      ]
+    },
+    {
+      "userId": "69651f3414fb35723fdd2f6b",
+      "name": "Pelin KARAASLAN",
+      "email": "pgkaraaslan@gmail.com",
+      "accountRole": "legal-expert",
+      "responseRoles": [
+        "legal-expert"
+      ],
+      "questionnaires": [
+        "general-v1",
+        "legal-expert-v1"
+      ]
+    }
+  ],
+  "ethicalExperts": [
+    {
+      "userId": "69341f3a77e89c5de5ae6484",
+      "name": "ethical",
+      "email": "ethical@zinspection.com",
+      "accountRole": "ethical-expert",
+      "responseRoles": [
+        "ethical-expert"
+      ],
+      "questionnaires": [
+        "general-v1",
+        "ethical-expert-v1"
+      ]
+    },
+    {
+      "userId": "69652b9214fb35723fdd3ce7",
+      "name": "ethical",
+      "email": "taskiranmerve2002@gmail.com",
+      "accountRole": "ethical-expert",
+      "responseRoles": [
+        "ethical-expert"
+      ],
+      "questionnaires": [
+        "general-v1"
+      ]
+    }
+  ],
+  "ethicalExpertCount": 2,
+  "isValid": false
+}

@@ -1,0 +1,17 @@
+{
+  "success": false,
+  "legitimateEthicalExpert": {
+    "userId": "69341f3a77e89c5de5ae6484",
+    "name": "ethical",
+    "email": "ethical@zinspection.com"
+  },
+  "reassignedUser": {
+    "userId": "69652b9214fb35723fdd3ce7",
+    "name": "ethical",
+    "email": "taskiranmerve2002@gmail.com",
+    "newRole": "evaluator"
+  },
+  "scoresRecomputed": 0,
+  "validityStatus": "invalid_missing_scores",
+  "isValid": false
+}

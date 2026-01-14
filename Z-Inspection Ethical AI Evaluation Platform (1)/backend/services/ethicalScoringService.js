@@ -141,63 +141,61 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         if (!pKey) continue; // Skip if no valid principle
 
         // DATA EXTRACTION (STRICT)
-        // 1. answerScore (0.0 - 1.0)
-        let answerScore = ans.answerScore;
-
-        // Allow null for optional questions that are unanswered, BUT valid answers must have scores.
-        if (answerScore === undefined || answerScore === null) {
-          // Check if ignored/unanswered
-          const hasResponse = ans.answer && (ans.answer.choiceKey || ans.answer.text || (ans.answer.multiChoiceKeys && ans.answer.multiChoiceKeys.length > 0));
-          if (!hasResponse) continue; // Skip unanswered
-
-          // If answer exists but no score:
-          if (question.answerType === 'open_text') {
-            // Open text might not have score yet. Skip calculation but maybe log.
-            console.warn(`[EthicalScoring] Missing answerScore for open_text '${question.code}'. Skipping risk calculation.`);
-            continue;
-          } else {
-            // Select question missing score -> DATA CORRUPTION
-            console.error(`[EthicalScoring] STRICT VIOLATION: Question ${question.code} has answer but missing 'answerScore'.`);
-            // We could throw, but to allow report generation for partial data, we might skip or default?
-            // User requested strictness, but failing entire report is harsh if one question is bad.
-            // Let's SKIP and Log Error.
-            continue;
-          }
-        }
-
-        // 2. questionImportance (1-4)
+        // 1. questionImportance (1-4) -- EXPERT PRIORITY
         // CHECK ORDER: Response Override -> Question Definition -> Default
         let importance = 2; // Default
-
-        // Check if answer has specific importance override (rare)
         if (ans.importanceScore !== undefined && ans.importanceScore !== null) {
           importance = ans.importanceScore;
-        } else if (ans.importance !== undefined && ans.importance !== null) {
-          importance = ans.importance;
         } else if (question.riskScore !== undefined && question.riskScore !== null) {
           importance = question.riskScore;
         } else if (question.importance !== undefined && question.importance !== null) {
           importance = question.importance;
         }
 
-        // Validate Ranges
         importance = Number(importance);
         if (isNaN(importance)) importance = 2;
-        importance = Math.max(1, Math.min(4, Math.round(importance)));
+        importance = Math.max(0, Math.min(4, Math.round(importance))); // 0 is VALID (Low Priority)
 
-        answerScore = Number(answerScore);
-        if (isNaN(answerScore)) {
-          console.warn(`Invalid answerScore used for ${question.code}, skipping.`);
+        // 2. answerSeverity (0.0 - 1.0) -- OBSERVED RISK
+        // CHECK ORDER: Response Override -> Question Definition (if any) -> FAIL
+        let severity = null;
+
+        if (ans.answerSeverity !== undefined && ans.answerSeverity !== null) {
+          severity = Number(ans.answerSeverity);
+        } else if (ans.answerScore !== undefined && ans.answerScore !== null) {
+          // LEGACY MAPPING: Only if strictly necessary and annotated
+          // console.warn(`Mapping legacy answerScore to severity for ${question.code}`);
+          // severity = 1 - ans.answerScore; // INVERTED LEGACY LOGIC
+          // STRICT MODE: REFUSE TO GUESS. 
+          // If we must handle legacy, we should do it explicitly. 
+          // User Requirement: "answerScore MUST NOT EXIST" / "Legacy data MUST render report INVALID"
+          // So here we leave severity as null.
+        }
+
+        // Check if question is unanswered (optional check)
+        const hasResponse = ans.answer && (ans.answer.choiceKey || ans.answer.text || (ans.answer.multiChoiceKeys && ans.answer.multiChoiceKeys.length > 0));
+
+        if (severity === null) {
+          if (hasResponse && question.answerType !== 'open_text') {
+            // Answer exists but NO severity -> DATA INVALIDITY
+            // We will skip this question but NOT fail the whole process yet.
+            // The Report Validator will catch the low question count / missing scores.
+            console.warn(`[EthicalScoring] STRICT: Question ${question.code} has answer but missing 'answerSeverity'. Skipping.`);
+            continue;
+          } else {
+            // Open text or unanswered, skip normally
+            continue;
+          }
+        }
+
+        if (isNaN(severity) || severity < 0 || severity > 1) {
+          console.warn(`[EthicalScoring] Invalid severity ${severity} for ${question.code}. Skipping.`);
           continue;
         }
-        if (answerScore < 0 || answerScore > 1) {
-          // Allow slight float error or clamp? User said 0-1 strict.
-          answerScore = Math.max(0, Math.min(1, answerScore));
-        }
 
-        // CALCULATION (THE ONLY ALLOWED FORMULA)
-        // FinalRiskContribution = importance * (1 - answerScore)
-        const riskContribution = importance * (1 - answerScore);
+        // CALCULATION (STRICT ERC)
+        // FinalRiskContribution = importance * severity
+        const riskContribution = importance * severity;
 
         // Aggregation
         principleStats[pKey].sumRisk += riskContribution;
@@ -214,7 +212,8 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
           questionId: question._id,
           principle: pKey,
           importance: importance,
-          answerScore: answerScore,
+          answerSeverity: severity, // Storing strict field
+          answerScore: undefined,   // REMOVED
           finalRiskContribution: riskContribution,
           code: question.code
         };
@@ -238,7 +237,7 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         const highImportanceRatio = stats.count > 0 ? (stats.highImportanceCount / stats.count) : 0;
 
         byPrinciple[p] = {
-          risk: Math.round(totalRisk * 100) / 100, // Cumulative Risk (Main Metric)
+          risk: Math.round(totalRisk * 100) / 100, // Cumulative Risk
           n: stats.count,
 
           // NEW EXPLICIT METRICS
@@ -262,6 +261,7 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         questionnaireKey: group.questionnaireKey,
         computedAt: new Date(),
         scoringModelVersion: 'strict_ethical_v3_cumulative',
+        thresholdsVersion: 'erc-v1',  // Versioned threshold metadata for audit trail
         totals: {
           overallRisk: Math.round(overallRisk * 100) / 100,
           n: totalAnswers

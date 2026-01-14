@@ -22,18 +22,18 @@ function computeReviewState(votes, createdBy) {
   if (!votes || !Array.isArray(votes)) {
     return 'Proposed';
   }
-  
+
   // Filter out creator's votes (owner cannot vote)
   const validVotes = votes.filter(v => v.userId && v.userId.toString() !== createdBy?.toString());
-  
+
   const totalVotes = validVotes.length;
   if (totalVotes < 2) {
     return totalVotes === 0 ? 'Proposed' : 'SingleReview'; // F) Normalized enum
   }
-  
+
   const agreeCount = validVotes.filter(v => v.voteType === 'agree').length;
   const agreePct = agreeCount / totalVotes;
-  
+
   if (agreePct >= 0.67) return 'Accepted';
   if (agreePct <= 0.33) return 'Disputed';
   return 'UnderReview'; // F) Normalized enum
@@ -61,7 +61,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
     projectId: projectIdObj,
     ...(questionnaireKey ? { questionnaireKey } : {}) // Only filter if questionnaireKey is provided
   }).lean();
-  
+
   // Get unique evaluators from scores (canonical source)
   // Filter out project-aggregate scores (userId=null) before mapping
   const evaluatorUserIds = [...new Set(
@@ -72,9 +72,9 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   const evaluatorUsers = await User.find({ _id: { $in: evaluatorUserIds } })
     .select('_id name email role')
     .lean();
-  
+
   const userMap = new Map(evaluatorUsers.map(u => [u._id.toString(), u]));
-  
+
   // Build evaluator list from scores (only submitted evaluators, exclude project-aggregate)
   const evaluatorsFromScores = scores
     .filter(score => score.userId !== null && score.userId !== undefined)
@@ -85,10 +85,10 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
         userId: userIdStr,
         name: user?.name || 'Unknown',
         email: user?.email || '',
-      role: score.role || user?.role || 'unknown'
-    };
-  });
-  
+        role: score.role || user?.role || 'unknown'
+      };
+    });
+
   // Get unique evaluators (by userId)
   const uniqueEvaluators = [];
   const seenUserIds = new Set();
@@ -98,7 +98,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
       uniqueEvaluators.push(e);
     }
   });
-  
+
   // Also get assigned evaluators for participation metrics
   // Lazy load to avoid circular dependency
   const { getProjectEvaluators } = require('./reportMetricsService');
@@ -127,7 +127,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   // ============================================================
   const assignedCount = evaluators.assigned.length;
   const submittedCount = evaluators.submitted.length;
-  
+
   const byRole = {};
   evaluators.assigned.forEach(e => {
     const role = e.role || 'unknown';
@@ -145,7 +145,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   // ============================================================
   const principleBar = [];
   const principleScores = {};
-  
+
   scores.forEach(score => {
     if (score.byPrinciple) {
       Object.entries(score.byPrinciple).forEach(([principleKey, data]) => {
@@ -172,7 +172,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
     if (avgScore > 3) statusBucket = 'Critical';
     else if (avgScore > 2) statusBucket = 'High';
     else if (avgScore > 1) statusBucket = 'Moderate';
-    
+
     principleBar.push({
       principleKey,
       avgScore: parseFloat(avgScore.toFixed(2)),
@@ -208,7 +208,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   });
   const roles = Array.from(roleSet).sort();
   const principles = principleOrder;
-  
+
   // Build evaluator-to-role mapping for heatmap labels
   const evaluatorRoleMap = new Map();
   uniqueEvaluators.forEach(e => {
@@ -217,17 +217,17 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
 
   const matrix = [];
   const nMatrix = [];
-  
+
   roles.forEach(role => {
     const roleRow = [];
     const roleNRow = [];
-    
+
     principles.forEach(principle => {
       const roleScores = scores
         .filter(s => s.role === role && s.byPrinciple && s.byPrinciple[principle])
         .map(s => s.byPrinciple[principle].avg)
         .filter(v => typeof v === 'number');
-      
+
       if (roleScores.length > 0) {
         const avg = roleScores.reduce((a, b) => a + b, 0) / roleScores.length;
         roleRow.push(parseFloat(avg.toFixed(2)));
@@ -237,7 +237,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
         roleNRow.push(0);
       }
     });
-    
+
     matrix.push(roleRow);
     nMatrix.push(roleNRow);
   });
@@ -246,12 +246,12 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   // TOP RISKY QUESTIONS
   // ============================================================
   const questionScores = {};
-  
+
   scores.forEach(score => {
     if (score.byQuestion && Array.isArray(score.byQuestion)) {
       score.byQuestion.forEach(qScore => {
         if (qScore.isNA) return;
-        
+
         const qId = qScore.questionId.toString();
         if (!questionScores[qId]) {
           questionScores[qId] = {
@@ -278,7 +278,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
             const qId = answer.questionId.toString();
             const question = questionMap.get(qId);
             if (!question) return;
-            
+
             if (!questionScores[qId]) {
               questionScores[qId] = {
                 questionId: qId,
@@ -319,7 +319,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   // ============================================================
   const topQuestionIds = new Set(topRiskyQuestions.map(q => q.questionId));
   const topRiskyQuestionContext = [];
-  
+
   // Only process submitted responses for answer snippets
   responses.filter(r => r.status === 'submitted').forEach(response => {
     if (response.answers && Array.isArray(response.answers)) {
@@ -365,10 +365,10 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   };
 
   const tensionsTable = [];
-  
+
   tensions.forEach(tension => {
     const reviewState = computeReviewState(tension.votes, tension.createdBy);
-    
+
     if (reviewState === 'Accepted') tensionsSummary.accepted++;
     else if (reviewState === 'Under review') tensionsSummary.underReview++;
     else if (reviewState === 'Disputed') tensionsSummary.disputed++;
@@ -381,7 +381,7 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
     else tensionsSummary.bySeverity.medium++;
 
     // Votes
-    const validVotes = (tension.votes || []).filter(v => 
+    const validVotes = (tension.votes || []).filter(v =>
       v.userId && v.userId.toString() !== tension.createdBy?.toString()
     );
     const agreeCount = validVotes.filter(v => v.voteType === 'agree').length;
@@ -463,6 +463,32 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
   }));
 
   // ============================================================
+  // OVERALL TOTALS (CUMULATIVE RISK VOLUME)
+  // ============================================================
+  let cumulativeRiskVolume = 0;
+
+  // Sum cumulative risk from all scores (using 'risk' field if available, fallback to avg*n)
+  scores.forEach(s => {
+    // Only count individual evaluator scores (not project aggregates if any)
+    if (s.userId && s.byPrinciple) {
+      Object.values(s.byPrinciple).forEach(data => {
+        if (data) {
+          if (typeof data.risk === 'number') {
+            cumulativeRiskVolume += data.risk;
+          } else if (typeof data.avg === 'number' && typeof data.n === 'number') {
+            // Fallback approximation: avg * n (if risk not stored)
+            cumulativeRiskVolume += (data.avg * data.n);
+          }
+        }
+      });
+    }
+  });
+
+  // Calculate quantitative questions (total possible questions that contribute to score)
+  // Filter questions that are NOT open_text
+  const quantitativeQuestionsCount = questions.filter(q => q.answerType !== 'open_text').length;
+
+  // ============================================================
   // BUILD FINAL RESPONSE
   // ============================================================
   return {
@@ -500,6 +526,11 @@ async function getProjectAnalytics(projectId, questionnaireKey = 'general-v1') {
       coveragePct: parseFloat(evidenceMetrics.coveragePct.toFixed(1)),
       totalEvidenceCount: evidenceMetrics.totalEvidenceCount,
       typeDistribution: evidenceMetrics.typeDistribution
+    },
+    // NEW: Overall totals for Dashboard Context
+    overallTotals: {
+      cumulativeRiskVolume: parseFloat(cumulativeRiskVolume.toFixed(2)),
+      quantitativeQuestions: quantitativeQuestionsCount
     }
   };
 }

@@ -688,7 +688,7 @@ async function calculateProjectProgress(projectId) {
     // Pre-fetch all questions for all questionnaires (optimization)
     const allQuestions = await Question.find({
       questionnaireKey: { $in: Array.from(allQuestionnaireKeys) }
-    }).lean();
+    }).select('questionnaireKey').lean();
 
     // Group questions by questionnaire key
     const questionsByQuestionnaire = {};
@@ -704,7 +704,7 @@ async function calculateProjectProgress(projectId) {
     const allResponses = await Response.find({
       projectId: projectIdObj,
       userId: { $in: assignedUserIds }
-    }).lean();
+    }).select('userId questionnaireKey answers').lean();
 
     // Group responses by userId and questionnaireKey
     const responsesByUser = {};
@@ -714,6 +714,26 @@ async function calculateProjectProgress(projectId) {
         responsesByUser[userIdStr] = {};
       }
       responsesByUser[userIdStr][r.questionnaireKey] = r;
+    });
+
+    // OPTIMIZATION: Batch fetch all Evaluations for custom questions (Avoid N+1 query in loop)
+    let Evaluation;
+    try {
+      Evaluation = mongoose.model('Evaluation');
+    } catch (e) {
+      Evaluation = require('../models/evaluation');
+    }
+
+    const allEvaluations = await Evaluation.find({
+      projectId: projectIdObj,
+      userId: { $in: assignedUserIds }
+    }).select('userId customQuestions answers').lean();
+
+    const evaluationsByUser = {};
+    allEvaluations.forEach(e => {
+      if (e.userId) {
+        evaluationsByUser[e.userId.toString()] = e;
+      }
     });
 
     // Calculate individual progress for each assigned user
@@ -740,25 +760,15 @@ async function calculateProjectProgress(projectId) {
       const existingQuestionnaireKeys = new Set(Object.keys(userResponses).filter(key => userResponses[key]));
 
       let questionnairesToCount = questionnaires.slice();
-      const hasGeneralResponse = existingQuestionnaireKeys.has('general-v1');
-      const hasRoleSpecificResponse = questionnaires.some(key =>
-        key.includes('-expert-v1') && existingQuestionnaireKeys.has(key)
-      );
 
-      // If both general-v1 and role-specific responses exist, count both
-      // If only role-specific exists and has 30+ questions, it likely includes general questions
-      // Logic removed: We no longer auto-exclude general-v1 based on question count.
-      // Strict questionnaire scoping applies.
-
-      // Count questions and answers for all questionnaires (use questionnairesToCount for question count)
+      // Count questions and answers for all questionnaires
       for (const qKey of questionnairesToCount) {
         // Get total questions for this questionnaire
         const questions = questionsByQuestionnaire[qKey] || [];
         totalQuestions += questions.length;
       }
 
-      // Count answered questions from ALL assigned questionnaires (not just questionnairesToCount)
-      // This ensures we count answers from both general-v1 and role-specific responses
+      // Count answered questions from ALL assigned questionnaires
       for (const qKey of questionnaires) {
         const response = userResponses[qKey];
         if (response && response.answers && Array.isArray(response.answers)) {
@@ -775,20 +785,8 @@ async function calculateProjectProgress(projectId) {
         }
       }
 
-      // Also check custom questions from Evaluation
-      // Evaluation model is defined in server.js, we need to get it from mongoose
-      // Try to get it from mongoose models, fallback to require if needed
-      let Evaluation;
-      try {
-        Evaluation = mongoose.model('Evaluation');
-      } catch (e) {
-        // If model not registered, try to require it
-        Evaluation = require('../models/evaluation');
-      }
-      const evaluation = await Evaluation.findOne({
-        projectId: projectIdObj,
-        userId: userId
-      }).select('customQuestions answers').lean();
+      // Get custom questions from pre-fetched map (Optimized)
+      const evaluation = evaluationsByUser[userIdStr];
 
       const customQuestions = evaluation?.customQuestions || [];
       let customQuestionsTotal = 0;

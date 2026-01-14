@@ -5,6 +5,8 @@
  */
 
 const { getRiskLabel, colorForScore } = require('../utils/riskScale');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * Generate HTML report template with dashboard layout
@@ -35,7 +37,20 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
   });
 
   const overallRisk = scoring.totalsOverall?.overallRisk ?? (scoring.totalsOverall?.avg || 0);
-  const riskTier = getRiskTier(overallRisk);
+
+  // PHASE 6 FIX: Use normalized fields from reportEnrichmentService
+  const overallTotals = reportMetrics.overallTotals || {};
+  const scoringDisclosure = reportMetrics.scoringDisclosure || {};
+
+  // Use pre-calculated normalized values
+  // "displayRisk" here is the CUMULATIVE VOLUME, not a risk level
+  const cumulativeRiskVolume = overallTotals.cumulativeRiskVolume ?? 0;
+
+  // Normalized Average is what determines the label
+  const normalizedAverage = overallTotals.averageERC ?? 0;
+  const displayLabel = overallTotals.normalizedLabel || 'Unknown';
+  // FORCE RECALCULATION of color to ensure new palette matches code
+  const displayColor = colorForScore(normalizedAverage);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -83,8 +98,12 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     .dashboard-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1cm; margin-bottom: 1cm; }
     .dashboard-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.8cm; page-break-inside: avoid; }
     .dashboard-card h3 { font-size: 14pt; color: #374151; margin-bottom: 0.4cm; border-bottom: 1px solid #d1d5db; padding-bottom: 0.2cm; }
-    .stat-value { font-size: 30pt; font-weight: bold; color: #1f2937; margin-bottom: 0.2cm; }
-    .stat-label { font-size: 11pt; color: #6b7280; }
+    
+    .metric-row { display: flex; align-items: baseline; margin-bottom: 0.5cm; }
+    .metric-value { font-size: 24pt; font-weight: bold; color: #1f2937; margin-right: 0.5cm; }
+    .metric-label { font-size: 10pt; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    .sub-metric { font-size: 11pt; color: #4b5563; margin-top: 5px; }
     
     /* Tables */
     table { width: 100%; border-collapse: collapse; margin: 0.8cm 0; page-break-inside: avoid; font-size: 10pt; }
@@ -99,6 +118,22 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     
     .risk-badge { display: inline-block; padding: 0.2cm 0.5cm; border-radius: 4px; font-size: 9pt; font-weight: 600; color: white; }
     .footer { position: fixed; bottom: 1cm; left: 1.5cm; right: 1.5cm; text-align: center; font-size: 9pt; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 0.3cm; }
+    
+    .disclosure-box {
+      background-color: #f8fafc;
+      border-left: 4px solid #64748b;
+      padding: 15px;
+      margin: 20px 0;
+      font-size: 10pt;
+      color: #334155;
+    }
+    
+    .methodology-note {
+      font-size: 9pt;
+      color: #6b7280;
+      font-style: italic;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -113,28 +148,72 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       </div>
     </div>
 
+    ${reportMetrics.validityStatus !== 'valid' ? `
+    <div style="background-color: #fef2f2; border: 1px solid #ef4444; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: #b91c1c;">
+      <strong>⚠️ DATA QUALITY NOTICE:</strong> The following data integrity issues were detected. Scores may be suppressed.
+      <ul style="margin-left: 20px; margin-top: 5px;">
+        ${(reportMetrics.validationErrors || []).map(e => `<li>${e}</li>`).join('')}
+      </ul>
+    </div>
+    ` : ''}
+
     <div class="dashboard-grid">
+      <!-- Cumulative Risk Volume Card -->
       <div class="dashboard-card">
-        <h3>Overall Ethical Risk</h3>
-        <div class="stat-value" style="color: ${riskTier.color}">
-          ${overallRisk.toFixed(2)}
-        </div>
-        <div class="stat-label">
-          <span class="risk-badge" style="background-color: ${riskTier.color}">${riskTier.label}</span>
-        </div>
-        <div style="margin-top: 0.3cm; font-size: 10pt; color: #6b7280;">
-          Cumulative risk volume across all evaluators.
-        </div>
+        <h3>Cumulative Risk Volume</h3>
+        ${reportMetrics.overallTotals?._suppressed ? `
+          <div class="metric-value" style="color: #9ca3af; font-size: 20pt;">Scores Suppressed</div>
+          <div class="sub-metric">Data Validity Issue</div>
+        ` : `
+          <!-- Volume Display (Sum) -->
+          <div class="metric-row">
+            <div class="metric-value" style="color: #1f2937">
+              ${cumulativeRiskVolume.toFixed(2)}
+            </div>
+          </div>
+
+          <!-- MANDATORY CONTEXT -->
+          <div style="font-size: 0.9em; color: #6b7280; margin-bottom: 10px;">
+            Based on ${scoringDisclosure.quantitativeQuestions || 'N/A'} quantitative questions<br>
+            (Maximum possible cumulative volume: ${scoringDisclosure.quantitativeQuestions ? (scoringDisclosure.quantitativeQuestions * 4).toFixed(2) : 'N/A'})
+          </div>
+          
+          <!-- Normalized Average Display -->
+          <div class="sub-metric">
+            <strong>Normalized Average ERC:</strong> ${normalizedAverage.toFixed(2)} / 4
+          </div>
+          <div style="font-size: 0.8em; color: #9ca3af;">
+            (ERC values are normalized on a 0–4 scale)
+          </div>
+          
+          <!-- Risk Level Display based on NORMALIZED average -->
+          <div class="sub-metric" style="margin-top: 10px;">
+            Risk Level: 
+            <span class="risk-badge" style="background-color: ${displayColor}">${displayLabel}</span>
+          </div>
+        `}
       </div>
 
+      <!-- Ethical Tensions Card -->
       <div class="dashboard-card">
         <h3>Ethical Tensions</h3>
-        <div class="stat-value">${tensions.summary?.total || 0}</div>
-        <div class="stat-label">Total Tensions</div>
-        <div style="margin-top: 0.3cm; font-size: 10pt; color: #6b7280;">
+        <div class="metric-row">
+          <div class="metric-value">${tensions.summary?.total || 0}</div>
+          <div class="metric-label">Identified</div>
+        </div>
+        <div class="sub-metric">
           ${tensions.summary?.accepted || 0} Accepted, ${tensions.summary?.underReview || 0} Under Review
         </div>
       </div>
+    </div>
+
+    <!-- MANDATORY Qualitative Questions Disclosure -->
+    <div class="disclosure-box">
+      <strong>Total Questions Assessed:</strong> ${scoringDisclosure.totalQuestions || 93} total (${scoringDisclosure.quantitativeQuestions || 59} Quantitative, ${scoringDisclosure.qualitativeQuestions || 34} Qualitative)
+      <br><br>
+      ${scoringDisclosure.qualitativeQuestions || 34} qualitative (open-text) questions are excluded from quantitative risk scoring.
+      These questions provide narrative insights that complement the quantitative analysis.
+      ${scoringDisclosure.text ? `<br><br><span class="methodology-note">Note: ${scoringDisclosure.text}</span>` : ''}
     </div>
 
     <!-- RESTORED: Ethical Principles Risk Overview Table -->
@@ -144,9 +223,10 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         <thead>
           <tr>
             <th>Ethical Principle</th>
-            <th>Cumulative Risk</th>
+            <th>Cumulative Risk Volume</th>
+            <th>Question Count</th>
+            <th>Average ERC ( / 4 )</th>
             <th>Risk Level</th>
-            <th>Interpretation</th>
           </tr>
         </thead>
         <tbody>
@@ -154,55 +234,62 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       const byPrinciple = scoring.byPrincipleOverall || {};
       const principles = Object.keys(byPrinciple);
       if (principles.length === 0) {
-        return '<tr><td colspan="4">No principle data available.</td></tr>';
+        return '<tr><td colspan="5">No principle data available.</td></tr>';
       }
       return principles.map(principle => {
         const data = byPrinciple[principle];
         if (data === null) {
-          return '<tr><td>' + principle + '</td><td>N/A</td><td>Not Evaluated</td><td>No data submitted.</td></tr>';
-        }
-        const risk = data.risk !== undefined ? data.risk : (data.avg !== undefined ? data.avg : 0);
-        const questionCount = typeof data.n === 'number' ? data.n : 0;
-        const expertCount = typeof data.count === 'number' && data.count > 0 ? data.count : 1;
-
-        // NORMALIZED LABELING logic
-        // Verify not dividing by zero
-        const denominator = (questionCount > 0 ? questionCount : 1) * expertCount;
-        const normalizedRisk = risk / denominator;
-
-        let riskLevel = 'Minimal';
-        let interpretation = 'No significant ethical concerns identified.';
-        if (normalizedRisk >= 3.5) {
-          riskLevel = 'Critical';
-          interpretation = 'Severe ethical issues identified. Immediate action required.';
-        } else if (normalizedRisk >= 2.5) {
-          riskLevel = 'High';
-          interpretation = 'Significant ethical concerns requiring attention.';
-        } else if (normalizedRisk >= 1.5) {
-          riskLevel = 'Medium';
-          interpretation = 'Multiple issues identified under this principle.';
-        } else if (normalizedRisk >= 0.5) {
-          riskLevel = 'Low';
-          interpretation = 'Minor ethical concerns identified. Monitor as needed.';
+          return '<tr><td>' + principle + '</td><td>N/A</td><td>N/A</td><td>N/A</td><td>Not Evaluated</td></tr>';
         }
 
-        let riskColor = '#10b981'; // Green
-        if (normalizedRisk >= 3.5) riskColor = '#dc2626'; // Red
-        else if (normalizedRisk >= 2.5) riskColor = '#f97316'; // Orange
-        else if (normalizedRisk >= 1.5) riskColor = '#f59e0b'; // Amber
-        else if (normalizedRisk >= 0.5) riskColor = '#84cc16'; // Light green
+        // PHASE 6 FIX: Use correct fields from Phase 3 normalization
+        const cumulativeRisk = data.cumulativeRisk ?? (data.risk || 0);
+        // Average Risk IS the normalized ERC
+        const averageRisk = data.averageRisk ?? 0;
+        const normalizedLabel = data.normalizedLabel || data.riskLabel || 'Unknown';
 
-        const qLabel = questionCount === 1 ? '1 Question' : `${questionCount} Questions`;
+        // FORCE RECALCULATION of color to ensure new palette matches code
+        const normalizedColor = colorForScore(averageRisk);
 
-        return '<tr><td>' + principle + '</td>' +
-          '<td style="font-weight: bold; color: ' + riskColor + ';">' + risk.toFixed(2) + ' <span style="font-size: 8pt; font-weight: normal; color: #6b7280;">(' + qLabel + ')</span></td>' +
-          '<td><span class="risk-badge" style="background-color: ' + riskColor + '; color: white;">' + riskLevel + '</span></td>' +
-          '<td style="font-size: 10pt;">' + interpretation + '</td></tr>';
+        const questionCount = data.questionCount || 0;
+
+        return '<tr>' +
+          '<td>' + principle + '</td>' +
+          '<td style="font-weight: bold; color: #4b5563;">' + cumulativeRisk.toFixed(2) + '</td>' +
+          '<td>' + questionCount + '</td>' +
+          '<td>' + averageRisk.toFixed(2) + ' / 4</td>' +
+          '<td><span class="risk-badge" style="background-color: ' + normalizedColor + '; color: white;">' + normalizedLabel + '</span></td>' +
+          '</tr>';
       }).join('');
     })()}
         </tbody>
       </table>
     </div>
+
+    <!-- NEW: QUALITATIVE ANALYSIS SECTION -->
+    ${geminiNarrative?.qualitativeAnalysis ? `
+    <div class="section" style="page-break-before: always;">
+      <h2>Qualitative Analysis of Open-Text Responses</h2>
+      
+      <div style="background: #f8fafc; padding: 15px; border-left: 4px solid #3b82f6; margin-bottom: 20px;">
+        <h4 style="margin-top: 0; color: #1e40af;">Methodology</h4>
+        <p style="margin-bottom: 10px; font-size: 10pt;">${geminiNarrative.qualitativeAnalysis.methodology || 'Qualitative analysis methodology.'}</p>
+        <p style="margin-bottom: 0px; font-size: 10pt; font-style: italic;">${geminiNarrative.qualitativeAnalysis.interpretation || ''}</p>
+      </div>
+
+      ${geminiNarrative.qualitativeAnalysis.insights ? geminiNarrative.qualitativeAnalysis.insights.map(item => `
+        <div style="margin-bottom: 15px;">
+          <h3 style="font-size: 12pt; color: #374151; margin-bottom: 5px;">${item.principle} – Qualitative Insights</h3>
+          <p>${item.insight}</p>
+        </div>
+      `).join('') : '<p>No specific qualitative insights recorded.</p>'}
+
+      <div style="margin-top: 20px; padding: 10px; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; font-size: 9pt; border-radius: 4px;">
+        <strong>Disclaimer:</strong> ${geminiNarrative.qualitativeAnalysis.disclaimer || 'Qualitative insights are for context only.'}
+      </div>
+    </div>
+    ` : ''}
+
     ${geminiNarrative?.executiveSummary && geminiNarrative.executiveSummary.length > 0 ? `
     <div class="section">
       <h2>Executive Summary</h2>
@@ -249,7 +336,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
             <th>Evidence</th>
           </tr>
         </thead>
-        <tbody>
+      <tbody>
           ${(options.analytics?.tensionsTable || tensions.list || []).map(t => {
         const conflictLabel = `${t.conflict?.principle1 || t.principle1 || ''} <-> ${t.conflict?.principle2 || t.principle2 || ''}`;
         const agreePct = t.agreePct || t.consensus?.agreePct || 0;
@@ -257,7 +344,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         return `
             <tr>
               <td>${conflictLabel}</td>
-              <td><span class="risk-badge" style="background:${t.severityLevel === 'Critical' ? '#dc2626' : (t.severityLevel === 'High' ? '#f97316' : '#f59e0b')}">${t.severityLevel || 'Unknown'}</span></td>
+              <td><span class="risk-badge" style="background:${t.severityLevel === 'Critical' ? '#b91c1c' : (t.severityLevel === 'High' ? '#ef4444' : '#f59e0b')}">${t.severityLevel || 'Unknown'}</span></td>
               <td>${t.reviewState || 'Proposed'}</td>
               <td>${agreePct.toFixed(0)}%</td>
               <td>${evidenceCount} items</td>
@@ -266,11 +353,100 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
       }).join('')}
         </tbody>
       </table>
-      ` : '<p>No ethical tensions identified.</p>'}
+      ` : '<p>No explicit ethical tensions were formally flagged within the scoring model. However, qualitative considerations highlight areas that warrant continued attention.</p>'}
     </div>
 
-    ${geminiNarrative?.recommendations && geminiNarrative.recommendations.length > 0 ? `
-    <div class="section" id="section-recommendations">
+  </div>
+
+  <!-- PAGE 3: METHODOLOGY & APPENDIX -->
+  <div class="page">
+    <div class="section">
+      <h2>Methodology & Data Sources</h2>
+      <p>This report matches the Z-Inspection methodology for ethical AI evaluation.</p>
+      
+      <h3>Risk Calculation</h3>
+      <ul>
+        <li><strong>Question Risk:</strong> Importance (0-4) x Unmitigated Ethical Risk (0-1).</li>
+        <li><strong>Cumulative Risk Volume:</strong> Sum of all ERC contributions. Used to understand total magnitude of risk.</li>
+        <li><strong>Normalized Ethical Risk Level:</strong> Average ERC per question compared to 0-4 scale. This determines the Low/High/Critical label.</li>
+      </ul>
+      <p><em>Note: All numeric metrics are deterministic and traceable to MongoDB data.</em></p>
+    </div>
+    
+    <div class="section">
+      <h2>Appendix: Evaluators</h2>
+      <p style="font-size: 10pt; color: #666; margin-bottom: 20px;">
+        The ethical risk metrics aggregate all expert responses at the question level.
+        While individual experts may differ, the normalized score reflects the combined
+        judgment across evaluators rather than any single opinion.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+           ${(() => {
+      // PHASE 6 FIX: Deduplicate evaluators by name to hide reassigned duplicates
+      const rawEvaluators = options.analytics?.evaluators || [];
+      const uniqueMap = new Map();
+
+      rawEvaluators.forEach(e => {
+        const name = e.name || 'Unknown';
+        // Priority: expert > evaluator
+        if (!uniqueMap.has(name) || (e.role && e.role.includes('expert'))) {
+          uniqueMap.set(name, e);
+        }
+      });
+
+      return Array.from(uniqueMap.values()).map(e => `
+              <tr>
+                <td>${e.name || 'Unknown'}</td>
+                <td>${e.role || 'unknown'}</td>
+                <td>Submitted</td>
+              </tr>
+            `).join('');
+    })()}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- IMPROVEMENT RECOMMENDATIONS SECTION (Moved to End) -->
+    ${geminiNarrative?.improvementRecommendations ? `
+    <div class="section" id="section-recommendations" style="margin-top: 40px; page-break-before: always;">
+      <h2>Improvement Recommendations</h2>
+      
+      ${geminiNarrative.improvementRecommendations.shortTerm && geminiNarrative.improvementRecommendations.shortTerm.length > 0 ? `
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #ef4444; border-bottom: 1px solid #fee2e2; padding-bottom: 5px;">Short-Term (0-3 Months)</h3>
+        <ul style="margin-left: 20px;">
+          ${geminiNarrative.improvementRecommendations.shortTerm.map(rec => `<li style="margin-bottom: 8px;">${rec}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+      ${geminiNarrative.improvementRecommendations.mediumTerm && geminiNarrative.improvementRecommendations.mediumTerm.length > 0 ? `
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #f59e0b; border-bottom: 1px solid #fef3c7; padding-bottom: 5px;">Medium-Term (3-12 Months)</h3>
+        <ul style="margin-left: 20px;">
+          ${geminiNarrative.improvementRecommendations.mediumTerm.map(rec => `<li style="margin-bottom: 8px;">${rec}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+      ${geminiNarrative.improvementRecommendations.longTerm && geminiNarrative.improvementRecommendations.longTerm.length > 0 ? `
+      <div style="margin-bottom: 20px;">
+        <h3 style="color: #10b981; border-bottom: 1px solid #d1fae5; padding-bottom: 5px;">Long-Term (12+ Months)</h3>
+        <ul style="margin-left: 20px;">
+          ${geminiNarrative.improvementRecommendations.longTerm.map(rec => `<li style="margin-bottom: 8px;">${rec}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+    </div>
+    ` : (geminiNarrative?.recommendations && geminiNarrative.recommendations.length > 0 ? `
+      <!-- Fallback to old table if new structure missing -->
+      <div class="section" id="section-recommendations" style="margin-top: 40px; page-break-before: always;">
       <h2>Prioritized Recommendations</h2>
       <table>
         <thead>
@@ -293,44 +469,16 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         </tbody>
       </table>
     </div>
-    ` : ''}
-  </div>
-
-  <!-- PAGE 3: METHODOLOGY & APPENDIX -->
-  <div class="page">
-    <div class="section">
-      <h2>Methodology & Data Sources</h2>
-      <p>This report matches the Z-Inspection methodology for ethical AI evaluation.</p>
-      
-      <h3>Risk Calculation</h3>
-      <ul>
-        <li><strong>Question Risk:</strong> Importance x Unmitigated Ethical Risk.</li>
-        <li><strong>Aggregated Risk:</strong> Cumulative sum across all questions.</li>
-      </ul>
-      <p><em>Note: All numeric metrics are deterministic and traceable to MongoDB data.</em></p>
-    </div>
+    ` : '')}
     
-    <div class="section">
-      <h2>Appendix: Evaluators</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Role</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-           ${(options.analytics?.evaluators || []).map(e => `
-              <tr>
-                <td>${e.name || 'Unknown'}</td>
-                <td>${e.role || 'unknown'}</td>
-                <td>Submitted</td>
-              </tr>
-            `).join('')}
-        </tbody>
-      </table>
+    <!-- CONCLUSION SECTION (Moved to End) -->
+    ${geminiNarrative?.conclusion && geminiNarrative.conclusion.length > 0 ? `
+    <div class="section" id="section-conclusion">
+      <h2>Conclusion</h2>
+      ${geminiNarrative.conclusion.map(para => `<p>${para}</p>`).join('')}
     </div>
+    ` : ''}
+
   </div>
 
   <div class="footer">
