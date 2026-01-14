@@ -14,6 +14,9 @@ const PrincipleScoreSchema = new mongoose.Schema({
   rwSum: { type: Number }, // Sum of risk weights for this principle - LEGACY
   answeredCount: { type: Number }, // Number of answered questions
   missingCount: { type: Number }, // Number of missing questions
+  // NEW: Ethical Importance Metrics
+  avgImportance: { type: Number }, // Average importance (1-4)
+  highImportanceRatio: { type: Number }, // Ratio of high importance questions (0-1)
   topDrivers: [{
     questionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Question' },
     questionCode: String,

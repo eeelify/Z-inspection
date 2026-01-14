@@ -1135,9 +1135,9 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
 
       <div className="flex items-center space-x-2 mb-4">
         {/* Only show generic status if it's NOT 'ongoing' OR if derivedStatus is 'setup' */}
-        {(project.status.toLowerCase() !== 'ongoing' || (!project.derivedStatus || project.derivedStatus === 'setup')) && (
+        {((project.status || '').toLowerCase() !== 'ongoing' || (!project.derivedStatus || project.derivedStatus === 'setup')) && (
           <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status]?.bg || 'bg-gray-100'} ${statusColors[project.status]?.text || 'text-gray-800'}`}>
-            {project.status.toUpperCase()}
+            {(project.status || 'Unknown').toUpperCase()}
           </span>
         )}
         {(() => {

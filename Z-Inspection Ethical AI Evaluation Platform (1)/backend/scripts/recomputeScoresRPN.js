@@ -12,10 +12,42 @@
  */
 
 const mongoose = require('mongoose');
-require('dotenv').config({ path: '.env' });
+const path = require('path');
+// Load .env from backend root (script is in backend/scripts)
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
+// 1. Load Service FIRST (it will load its own dependencies like Response, Score, Question)
 const { computeEthicalScores, computeProjectEthicalScores } = require('../services/ethicalScoringService');
-const Response = require('../models/response');
+
+// 2. Check and Load/Define missing models required by THIS script
+// We check mongoose.models to see what's already legit loaded.
+
+// Helper to try loading a model file if the model isn't registered
+const ensureModel = (modelName, fileName) => {
+  if (mongoose.models[modelName]) return;
+  try {
+    require(`../models/${fileName}`);
+  } catch (e) {
+    // Only define dummy if NOT Project (handled specifically below) or if genuinely missing
+    if (!mongoose.models[modelName]) {
+      console.log(`⚠️  Defining dummy schema for missing model file: ${modelName}`);
+      mongoose.model(modelName, new mongoose.Schema({}, { strict: false }));
+    }
+  }
+};
+
+ensureModel('Response', 'response');
+// ensureModel('Project', 'project'); // SKIP: File does not exist, defined manually below
+ensureModel('ProjectAssignment', 'projectAssignment');
+ensureModel('User', 'User'); // Casing might vary
+
+// Explicitly define Project if missing (since no file exists)
+if (!mongoose.models.Project) {
+  console.log('📝 Defining Project schema inline');
+  mongoose.model('Project', new mongoose.Schema({ title: String }, { strict: false }));
+}
+
+const Response = mongoose.model('Response');
 const Project = mongoose.model('Project');
 
 const isValidObjectId = (id) => {
@@ -30,10 +62,8 @@ const isValidObjectId = (id) => {
 async function recomputeAllScoresRPN(projectIdFilter = null) {
   try {
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/z-inspection', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
+    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/z-inspection';
+    await mongoose.connect(mongoUri.replace(/&appName=[^&]*/i, ''));
     console.log('✅ Connected to MongoDB');
 
     // Get all projects with responses
@@ -61,9 +91,10 @@ async function recomputeAllScoresRPN(projectIdFilter = null) {
         console.log(`\n🔄 Processing project: ${projectId}`);
 
         // Get all unique userId/questionnaireKey combinations for this project
+        // Include 'draft' status because ethicalScoringService supports scoring drafts
         const responses = await Response.find({
           projectId: projectId,
-          status: 'submitted'
+          status: { $in: ['submitted', 'draft'] }
         })
           .select('userId questionnaireKey')
           .lean();

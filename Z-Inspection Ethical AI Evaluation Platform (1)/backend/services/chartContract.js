@@ -15,7 +15,8 @@ const OPTIONAL_CHARTS = [
   'evidenceCoverageDonut',
   'evidenceTypeDonut',
   'tensionSeverityChart',
-  'tensionReviewStateChart'
+  'tensionReviewStateChart',
+  'ethicalImportanceRanking' // NEW: Expert prioritization chart
 ];
 
 /**
@@ -130,10 +131,10 @@ async function createPlaceholderChartPng({ chartId, title, reason = 'No data ava
   try {
     // Try to use chartjs-node-canvas for consistency
     const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
-    
+
     const width = 800;
     const height = 400;
-    
+
     const chartJSNodeCanvas = new ChartJSNodeCanvas({
       width,
       height,
@@ -176,7 +177,7 @@ async function createPlaceholderChartPng({ chartId, title, reason = 'No data ava
     return buffer;
   } catch (canvasError) {
     console.warn(`⚠️ chartjs-node-canvas not available for placeholder, using Puppeteer fallback`);
-    
+
     // Fallback to Puppeteer
     return await createPlaceholderChartPngPuppeteer({ title, reason });
   }
@@ -188,7 +189,7 @@ async function createPlaceholderChartPng({ chartId, title, reason = 'No data ava
 async function createPlaceholderChartPngPuppeteer({ title, reason }) {
   const puppeteer = require('puppeteer');
   let browser;
-  
+
   try {
     const html = `
 <!DOCTYPE html>
@@ -237,7 +238,7 @@ async function createPlaceholderChartPngPuppeteer({ title, reason }) {
     const page = await browser.newPage();
     await page.setViewport({ width: 800, height: 400 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
-    
+
     const screenshot = await page.screenshot({
       type: 'png',
       omitBackground: false
@@ -264,7 +265,7 @@ async function createPlaceholderChartPngPuppeteer({ title, reason }) {
  */
 async function initializeRequiredCharts(projectId, questionnaireKey = null) {
   const charts = {};
-  
+
   // Chart metadata
   const chartMetadata = {
     principleBarChart: {
@@ -280,7 +281,7 @@ async function initializeRequiredCharts(projectId, questionnaireKey = null) {
   // Initialize all required charts with placeholders
   for (const chartId of REQUIRED_CHARTS) {
     const metadata = chartMetadata[chartId] || { title: chartId, reason: 'No data available' };
-    
+
     try {
       const placeholderPng = await createPlaceholderChartPng({
         chartId,

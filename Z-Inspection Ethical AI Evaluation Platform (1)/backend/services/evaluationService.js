@@ -257,17 +257,33 @@ async function submitResponse(projectId, userId, questionnaireKey) {
       }
     }
 
-    // Compute and save scores using new ethical scoring system
-    const { computeEthicalScores } = require('./ethicalScoringService');
-    await computeEthicalScores(projectId, userId, questionnaireKey);
-
-    // Also compute project-level scores if this is the last questionnaire for this user
-    // (This is a simple trigger - in production you might want a more sophisticated approach)
+    // Compute and save scores for THIS user immediately
+    // This ensures that even if project-level scoring fails or isn't ready, the individual score exists.
     try {
-      const { computeProjectEthicalScores } = require('./ethicalScoringService');
-      await computeProjectEthicalScores(projectId);
+      const { computeEthicalScores } = require('./ethicalScoringService');
+      console.log(`📊 Computing individual scores for ${projectId}/${userId}...`);
+      await computeEthicalScores(projectId, userId, questionnaireKey);
+    } catch (scoreError) {
+      console.error(`❌ Failed to compute individual scores for ${userId}:`, scoreError.message);
+      // We do NOT rollback submission, but we log strictly.
+      // Admin can re-run via script if needed.
+    }
+
+    // Check project completion for Project-Level Scoring
+    // Logic: If all assigned users have submitted -> Recompute Project Scores
+    try {
+      const allAssigned = await ProjectAssignment.find({ projectId }).lean();
+      const allSubmitted = allAssigned.every(a => a.status === 'submitted'); // Assignment status tracks responses
+
+      if (allSubmitted) {
+        console.log(`🏁 All experts submitted for project ${projectId}. Computing project-level scores...`);
+        const { computeProjectEthicalScores } = require('./ethicalScoringService');
+        await computeProjectEthicalScores(projectId);
+      } else {
+        console.log(`⏳ Project ${projectId} incomplete. Waiting for invalid experts.`);
+      }
     } catch (err) {
-      console.warn('Failed to compute project-level scores:', err.message);
+      console.warn('⚠️ Failed to check/compute project-level scores:', err.message);
     }
 
     // Notify admins that evaluation is completed (non-blocking)

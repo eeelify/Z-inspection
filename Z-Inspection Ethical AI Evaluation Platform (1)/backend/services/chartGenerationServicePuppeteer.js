@@ -243,6 +243,92 @@ async function generatePrincipleBarChart(byPrincipleOverall, browser = null) {
   };
 
   return generateChartImagePuppeteer(chartConfig, 1200, 700, browser);
+
+}
+
+/**
+ * Generate ethical importance ranking chart
+ */
+async function generatePrincipleImportanceChart(byPrincipleOverall, browser = null) {
+  if (!byPrincipleOverall || typeof byPrincipleOverall !== 'object') {
+    throw new Error('byPrincipleOverall must be a non-null object');
+  }
+
+  const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
+  if (principles.length === 0) throw new Error('No valid principles found');
+
+  // Extract data and SORT by avgImportance (High Priority First)
+  const dataPoints = principles.map(p => {
+    const data = byPrincipleOverall[p];
+    return {
+      label: p,
+      value: data.avgImportance || 0, // Default to 0 if missing
+      highRatio: data.highImportanceRatio || 0
+    };
+  });
+
+  // Sort descending by importance
+  dataPoints.sort((a, b) => b.value - a.value);
+
+  // Filter out principles with 0 importance if desired? No, explicit 0 is fine.
+
+  const labels = dataPoints.map(d => d.label);
+  const values = dataPoints.map(d => d.value);
+
+  // Color gradient based on Importance (1-4)
+  const colors = values.map(v => {
+    if (v >= 3.5) return '#b91c1c'; // Deep Red
+    if (v >= 2.5) return '#f97316'; // Orange
+    if (v >= 1.5) return '#facc15'; // Yellow
+    return '#3b82f6'; // Blue
+  });
+
+  const chartConfig = {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Average Importance (Expert Priority)',
+        data: values,
+        backgroundColor: colors,
+        borderColor: '#ffffff',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      indexAxis: 'y', // Horizontal Bar Chart
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Ethical Importance Ranking (Expert Prioritization)',
+          font: { size: 16, weight: 'bold' }
+        },
+        subtitle: {
+          display: true,
+          text: 'How critical is this principle for the project? (1=Low, 4=Critical)',
+          font: { size: 12, style: 'italic' }
+        },
+        datalabels: {
+          anchor: 'end',
+          align: 'end',
+          formatter: (value) => value.toFixed(1),
+          font: { weight: 'bold' },
+          color: '#1f2937'
+        },
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          min: 0,
+          max: 4,
+          title: { display: true, text: 'Average Importance Score (1-4)' }
+        }
+      }
+    }
+  };
+
+  return generateChartImagePuppeteer(chartConfig, 1000, 600, browser);
 }
 
 /**
@@ -681,6 +767,46 @@ async function generateAllCharts(reportData) {
       }
     }
 
+
+
+    // Step 2b: Attempt to generate ethicalImportanceRanking (OPTIONAL)
+    try {
+      // Check if we have principle data (reusing scoring.byPrincipleOverall)
+      if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
+        console.log('📊 Generating ethicalImportanceRanking (Puppeteer)...');
+        const pngBuffer = await generatePrincipleImportanceChart(scoring.byPrincipleOverall, browser);
+        if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
+          charts.ethicalImportanceRanking = createChartResult({
+            chartId: 'ethicalImportanceRanking',
+            type: CHART_TYPES.BAR,
+            status: CHART_STATUS.READY,
+            title: 'Ethical Importance Ranking',
+            subtitle: 'Expert prioritization of principles (1-4)',
+            pngBuffer, // Buffer is passed here
+            meta: {
+              source: { collections: ['scores'], projectId, questionnaireKey },
+              scale: { min: 1, max: 4, meaning: 'Higher = More Critical' }
+            }
+          });
+          console.log('✅ ethicalImportanceRanking generated successfully (Puppeteer)');
+        }
+      } else {
+        console.log('ℹ️ No principle data for ethicalHealth, skipping ethicalImportanceRanking');
+      }
+    } catch (error) {
+      console.warn('⚠️ ethicalImportanceRanking generation failed (optional):', error.message);
+      // Optional chart, fail gracefully (charts.ethicalImportanceRanking remains undefined or placeholder from init)
+      // But initializedRequiredCharts only handles REQUIRED charts. 
+      // If we want it to verify, we should set it to null or error result?
+      // verification script checks for availability.
+      // Let's create an error result but marked as optional/null in final output if desired.
+      charts.ethicalImportanceRanking = createErrorChartResult({
+        chartId: 'ethicalImportanceRanking',
+        title: 'Ethical Importance Ranking',
+        error
+      });
+    }
+
     // Step 3: Attempt to generate principleEvaluatorHeatmap
     try {
       if (scoring?.byPrincipleTable &&
@@ -863,6 +989,7 @@ module.exports = {
   generateTensionSeverityChart,
   generateTensionReviewStateChart,
   generateTeamCompletionDonut,
+  generatePrincipleImportanceChart, // Export new function
   generateChartImage: generateChartImagePuppeteer,
   generateAllCharts // Add the new orchestration function
 };

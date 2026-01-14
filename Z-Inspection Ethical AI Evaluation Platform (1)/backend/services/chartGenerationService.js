@@ -171,6 +171,92 @@ if (usePuppeteer) {
   }
 
   /**
+   * NEW: Generate Ethical Importance Ranking Chart
+   * Shows expert prioritization (Avg Importance 1-4) independent of Risk
+   */
+  async function generatePrincipleImportanceChart(byPrincipleOverall) {
+    // Validate
+    if (!byPrincipleOverall || typeof byPrincipleOverall !== 'object') {
+      throw new Error('byPrincipleOverall must be a non-null object');
+    }
+
+    const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
+    if (principles.length === 0) throw new Error('No valid principles found');
+
+    // Extract data and SORT by avgImportance (High Priority First)
+    const dataPoints = principles.map(p => {
+      const data = byPrincipleOverall[p];
+      return {
+        label: p,
+        value: data.avgImportance || 0, // Default to 0 if missing
+        highRatio: data.highImportanceRatio || 0
+      };
+    });
+
+    // Sort descending
+    dataPoints.sort((a, b) => b.value - a.value);
+
+    const labels = dataPoints.map(d => d.label);
+    const values = dataPoints.map(d => d.value);
+
+    // Color gradient based on Importance (1-4)
+    // 1=Low (Blue/Green), 4=High (Red/Orange)
+    const colors = values.map(v => {
+      if (v >= 3.5) return '#b91c1c'; // Deep Red
+      if (v >= 2.5) return '#f97316'; // Orange
+      if (v >= 1.5) return '#facc15'; // Yellow
+      return '#3b82f6'; // Blue
+    });
+
+    const chartConfig = {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Average Importance (Expert Priority)',
+          data: values,
+          backgroundColor: colors,
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        indexAxis: 'y', // Horizontal Bar Chart for better label readability
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Ethical Importance Ranking (Expert Prioritization)',
+            font: { size: 16, weight: 'bold' }
+          },
+          subtitle: {
+            display: true,
+            text: 'How critical is this principle for the project? (1=Low, 4=Critical)',
+            font: { size: 12, style: 'italic' }
+          },
+          datalabels: {
+            anchor: 'end',
+            align: 'end',
+            formatter: (value) => value.toFixed(1),
+            font: { weight: 'bold' },
+            color: '#1f2937'
+          },
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            min: 0,
+            max: 4,
+            title: { display: true, text: 'Average Importance Score (1-4)' }
+          }
+        }
+      }
+    };
+
+    return generateChartImage(chartConfig, 800, 500); // Slightly taller
+  }
+
+  /**
    * Generate role×principle heatmap
    */
   async function generatePrincipleEvaluatorHeatmap(byPrincipleTable, evaluatorsWithScores) {
@@ -933,6 +1019,7 @@ if (usePuppeteer) {
 
   module.exports = {
     generatePrincipleBarChart,
+    generatePrincipleImportanceChart,
     generatePrincipleEvaluatorHeatmap,
     generateEvidenceCoverageChart,
     generateEvidenceTypeChart,

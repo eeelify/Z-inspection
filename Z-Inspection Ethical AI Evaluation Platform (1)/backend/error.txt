@@ -1,0 +1,4 @@
+Chart buffer missing for ethicalImportanceRanking
+Error: Chart buffer missing for ethicalImportanceRanking
+    at run (C:\Users\merve\OneDrive\Desktop\Z-inspection\Z-Inspection Ethical AI Evaluation Platform (1)\backend\verify_importance_metrics.js:109:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

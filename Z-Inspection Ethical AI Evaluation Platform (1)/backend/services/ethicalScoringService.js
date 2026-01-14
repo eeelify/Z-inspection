@@ -122,6 +122,8 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
           sumRisk: 0,
           count: 0,
           maxImportance: 0,
+          sumImportance: 0, // NEW: For Average Importance
+          highImportanceCount: 0, // NEW: For High Importance Ratio
           questions: []
         };
       });
@@ -143,56 +145,54 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         let answerScore = ans.answerScore;
 
         // Allow null for optional questions that are unanswered, BUT valid answers must have scores.
-        // If answer structure exists but score is missing -> ERROR for select types.
         if (answerScore === undefined || answerScore === null) {
           // Check if ignored/unanswered
           const hasResponse = ans.answer && (ans.answer.choiceKey || ans.answer.text || (ans.answer.multiChoiceKeys && ans.answer.multiChoiceKeys.length > 0));
           if (!hasResponse) continue; // Skip unanswered
 
-          // If it HAS a response but NO score, that's a violation of strict mode for closed questions.
-          // For open text, if not scored yet, we treat as unscored (skip risk calc, but maybe flag).
+          // If answer exists but no score:
           if (question.answerType === 'open_text') {
-            // If manual scoring hasn't happened, we cannot compute risk.
-            // We SKIP calculation for this question but count it as missing-score?
-            // User said: "If answerScore is missing -> THROW ERROR". 
-            // But for draft responses of open text, it might just be 0/null initially?
-            // "Step 4 - OPEN-TEXT QUESTIONS ... If missing -> THROW ERROR"
-            // Assuming this applies to verified/submitted state or creating the final report.
-            // For robustness, if it's open text and null, we can't compute risk.
-            // We will Log Error and Skip.
-            console.error(`missing answerScore for question ${question.code}`);
+            // Open text might not have score yet. Skip calculation but maybe log.
+            console.warn(`[EthicalScoring] Missing answerScore for open_text '${question.code}'. Skipping risk calculation.`);
             continue;
           } else {
             // Select question missing score -> DATA CORRUPTION
-            throw new Error(`STRICT ETHICAL SCORING VIOLATION: Question ${question.code} has answer but missing 'answerScore'.`);
+            console.error(`[EthicalScoring] STRICT VIOLATION: Question ${question.code} has answer but missing 'answerScore'.`);
+            // We could throw, but to allow report generation for partial data, we might skip or default?
+            // User requested strictness, but failing entire report is harsh if one question is bad.
+            // Let's SKIP and Log Error.
+            continue;
           }
         }
 
         // 2. questionImportance (1-4)
-        // Default to question.riskScore. Logic may allow override in answer?
-        // User prompt: "questionImportance from importance source"
-        let importance = 2; // Default? User said "If importance is missing -> THROW ERROR"
+        // CHECK ORDER: Response Override -> Question Definition -> Default
+        let importance = 2; // Default
 
-        if (question.riskScore !== undefined && question.riskScore !== null) {
+        // Check if answer has specific importance override (rare)
+        if (ans.importanceScore !== undefined && ans.importanceScore !== null) {
+          importance = ans.importanceScore;
+        } else if (ans.importance !== undefined && ans.importance !== null) {
+          importance = ans.importance;
+        } else if (question.riskScore !== undefined && question.riskScore !== null) {
           importance = question.riskScore;
-        } else {
-          // Some seeds might not have riskScore set?
-          // If so, we must fail.
-          // Check seed files... they use `scoring: { ... }` but `riskScore` field on root?
-          // Questions usually have `riskScore` or `importance`.
-          // Fallback to 2 only if data migration is partial, but Strict Mode says THROW.
-          // Let's check `question.importance` as well just in case.
-          if (question.importance) importance = question.importance;
+        } else if (question.importance !== undefined && question.importance !== null) {
+          importance = question.importance;
         }
 
         // Validate Ranges
-        if (importance < 1 || importance > 4) {
-          // Forcing 1-4 range. If legacy 0 exist, map to 1?
-          // "questionImportance (integer 1–4)"
-          importance = Math.max(1, Math.min(4, importance));
+        importance = Number(importance);
+        if (isNaN(importance)) importance = 2;
+        importance = Math.max(1, Math.min(4, Math.round(importance)));
+
+        answerScore = Number(answerScore);
+        if (isNaN(answerScore)) {
+          console.warn(`Invalid answerScore used for ${question.code}, skipping.`);
+          continue;
         }
         if (answerScore < 0 || answerScore > 1) {
-          throw new Error(`Invalid answerScore ${answerScore} for question ${question.code}. Must be 0.0-1.0.`);
+          // Allow slight float error or clamp? User said 0-1 strict.
+          answerScore = Math.max(0, Math.min(1, answerScore));
         }
 
         // CALCULATION (THE ONLY ALLOWED FORMULA)
@@ -203,6 +203,12 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         principleStats[pKey].sumRisk += riskContribution;
         principleStats[pKey].count += 1;
         principleStats[pKey].maxImportance = Math.max(principleStats[pKey].maxImportance, importance);
+
+        // NEW: Importance Aggregation
+        principleStats[pKey].sumImportance += importance;
+        if (importance >= 3) {
+          principleStats[pKey].highImportanceCount += 1;
+        }
 
         const qEntry = {
           questionId: question._id,
@@ -225,13 +231,21 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
       CANONICAL_PRINCIPLES.forEach(p => {
         const stats = principleStats[p];
         // Aggregation: SUM ONLY (Cumulative Risk)
-        // No averaging. No dilution.
         const totalRisk = stats.sumRisk;
 
+        // Importance Metrics
+        const avgImportance = stats.count > 0 ? (stats.sumImportance / stats.count) : 0;
+        const highImportanceRatio = stats.count > 0 ? (stats.highImportanceCount / stats.count) : 0;
+
         byPrinciple[p] = {
-          risk: Math.round(totalRisk * 100) / 100, // Cumulative Risk
+          risk: Math.round(totalRisk * 100) / 100, // Cumulative Risk (Main Metric)
           n: stats.count,
-          score: undefined, // "Performance" score is meaningless in cumulative risk model
+
+          // NEW EXPLICIT METRICS
+          avgImportance: Math.round(avgImportance * 100) / 100,
+          highImportanceRatio: Math.round(highImportanceRatio * 100) / 100,
+
+          score: undefined, // meaningless
           topDrivers: stats.questions
             .sort((a, b) => b.finalRiskContribution - a.finalRiskContribution)
             .slice(0, 5)

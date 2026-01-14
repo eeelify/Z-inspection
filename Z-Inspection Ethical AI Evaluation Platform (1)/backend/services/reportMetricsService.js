@@ -98,6 +98,9 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
   const principleScores = {};
   CANONICAL_PRINCIPLES.forEach(principle => {
     principleScores[principle] = [];
+    // Initialize extra arrays for importance aggregation
+    principleScores[principle].importance = [];
+    principleScores[principle].highRatio = [];
   });
 
   // CRITICAL: Map legal/role-specific principle names to CANONICAL_PRINCIPLES
@@ -127,6 +130,14 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
         if (data && typeof data === 'object' && typeof data.risk === 'number' && !isNaN(data.risk) && data.risk >= 0) {
           principleScores[principle].push(data.risk);
 
+          // Collect Importance Metrics if available
+          if (typeof data.avgImportance === 'number') {
+            principleScores[principle].importance.push(data.avgImportance);
+          }
+          if (typeof data.highImportanceRatio === 'number') {
+            principleScores[principle].highRatio.push(data.highImportanceRatio);
+          }
+
           // PATCH: Collect unique question IDs for this principle from this evaluator's score
           if (score.questionBreakdown && Array.isArray(score.questionBreakdown)) {
             score.questionBreakdown.forEach(qb => {
@@ -151,6 +162,14 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
           if (data && typeof data === 'object' && typeof data.risk === 'number' && !isNaN(data.risk) && data.risk >= 0) {
             principleScores[mappedPrinciple].push(data.risk);
 
+            // Collect Importance Metrics if available
+            if (typeof data.avgImportance === 'number') {
+              principleScores[mappedPrinciple].importance.push(data.avgImportance);
+            }
+            if (typeof data.highImportanceRatio === 'number') {
+              principleScores[mappedPrinciple].highRatio.push(data.highImportanceRatio);
+            }
+
             // PATCH: Also collect unique question IDs for the mapped principle
             if (score.questionBreakdown && Array.isArray(score.questionBreakdown)) {
               score.questionBreakdown.forEach(qb => {
@@ -174,7 +193,6 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
     if (values.length > 0) {
       // Calculate statistics from collected values
       const sum = values.reduce((a, b) => a + b, 0);
-      // const avg = sum / values.length; // REMOVED: User request "Averages are FORBIDDEN"
       const min = Math.min(...values);
       const max = Math.max(...values);
 
@@ -183,9 +201,17 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
       const roundedMin = Math.round(min * 100) / 100;
       const roundedMax = Math.round(max * 100) / 100;
 
-      // CRITICAL: Validate that sum is not accidentally 0 when values exist
-      if (roundedSum === 0 && values.some(v => v > 0)) {
-        // This log is fine; 0 is valid "No Risk"
+      // Aggregated Importance Metrics
+      let finalAvgImportance = 0;
+      let finalHighRatio = 0;
+
+      if (principleScores[principle].importance && principleScores[principle].importance.length > 0) {
+        const impValues = principleScores[principle].importance;
+        finalAvgImportance = impValues.reduce((a, b) => a + b, 0) / impValues.length;
+      }
+      if (principleScores[principle].highRatio && principleScores[principle].highRatio.length > 0) {
+        const ratioValues = principleScores[principle].highRatio;
+        finalHighRatio = ratioValues.reduce((a, b) => a + b, 0) / ratioValues.length;
       }
 
       // Values are RISK scores (Cumulative Unbounded)
@@ -195,9 +221,12 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
         max: roundedMax,
         n: principleQuestionIds[principle].size, // Correct: Unique questions
         count: values.length, // Experts participating
-        // Legacy 'avg' field -> map to SUM for safety, so UI shows the correct high number
-        // even if it tries to use the old field.
-        avg: roundedSum
+        // Legacy 'avg' field -> map to SUM for safety
+        avg: roundedSum,
+
+        // NEW Importance Fields
+        avgImportance: Math.round(finalAvgImportance * 100) / 100,
+        highImportanceRatio: Math.round(finalHighRatio * 100) / 100
       };
     } else {
       // CRITICAL: Missing = null, NOT 0 (0 is a valid score meaning MINIMAL risk)
@@ -578,57 +607,9 @@ async function getProjectEvaluators(projectId) {
 async function buildReportMetrics(projectId, questionnaireKey) {
   // CRITICAL: Recompute scores before building metrics to ensure we have the latest data
   // This ensures that even if old Score documents exist, we use the most up-to-date Response data
-  try {
-    const { computeEthicalScores } = require('./ethicalScoringService'); // ✅ NEW: Use performance model
-    const Response = require('../models/response');
-    const Score = require('../models/score'); // Ensure Score is available
-
-    // CHECK FOR STALENESS: Only recompute if new data exists
-    // 1. Get timestamp of latest response update for this project
-    const latestResponse = await Response.findOne({ projectId }, { updatedAt: 1 })
-      .sort({ updatedAt: -1 })
-      .lean();
-
-    // 2. Get timestamp of latest score computation for this project (excluding project-level aggregation)
-    const latestScore = await Score.findOne({ projectId, role: { $ne: 'project' } }, { computedAt: 1 })
-      .sort({ computedAt: -1 })
-      .lean();
-
-    const lastResponseTime = latestResponse?.updatedAt ? new Date(latestResponse.updatedAt).getTime() : 0;
-    const lastComputeTime = latestScore?.computedAt ? new Date(latestScore.computedAt).getTime() : 0;
-
-    // 3. Determine if update is needed
-    // Recompute if:
-    // - There are no scores at all (lastComputeTime === 0)
-    // - A response has been updated since the last computation (lastResponseTime > lastComputeTime)
-    // - Force refresh is requested (not implemented here but good practice)
-    const needsUpdate = lastComputeTime === 0 || lastResponseTime > lastComputeTime;
-
-    if (needsUpdate) {
-      console.log(`🔄 [DEBUG buildReportMetrics] STALE DATA DETECTED. Recomputing scores for project ${projectId}.`);
-      console.log(`   Last response: ${latestResponse?.updatedAt}, Last computation: ${latestScore?.computedAt}`);
-
-      // CRITICAL: Recompute scores for ALL questionnaires, not just the specified one
-      // This is because legal questions might be in a different questionnaireKey
-      // but we want them to be included in the report
-      const allQuestionnaireKeys = await Response.distinct('questionnaireKey', { projectId });
-      console.log(`   Found ${allQuestionnaireKeys.length} questionnaire keys: [${allQuestionnaireKeys.join(', ')}]`);
-
-      // Recompute scores for each questionnaire key (userId = null means all users)
-      for (const qKey of allQuestionnaireKeys) {
-        console.log(`   Recomputing scores for questionnaireKey: ${qKey}`);
-        await computeEthicalScores(projectId, null, qKey); // ✅ NEW function
-      }
-      console.log(`✅ [DEBUG buildReportMetrics] Scores recomputed successfully for all questionnaires`);
-    } else {
-      console.log(`⏩ [DEBUG buildReportMetrics] Scores are FRESH. Skipping recomputation for project ${projectId}.`);
-    }
-
-  } catch (scoreError) {
-    console.warn(`⚠️ [WARNING buildReportMetrics] Failed to recompute scores, continuing with existing Score documents: ${scoreError.message}`);
-    console.error(`   Error details:`, scoreError);
-    // Continue anyway - we'll use existing Score documents
-  }
+  // STRICT READ-ONLY MODE: No score recomputation here.
+  // Scores must be pre-computed by the client/backend before requesting a report.
+  // We simply proceed to read the existing Score documents.
   const projectIdObj = isValidObjectId(projectId)
     ? new mongoose.Types.ObjectId(projectId)
     : projectId;
@@ -666,6 +647,27 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   // IMPORTANT: Exclude project-level aggregated score docs from evaluator aggregations.
   // Otherwise roles/counts (e.g., "project") and overall averages get double-counted.
   const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
+
+  // CRITICAL VALIDATION: Check for missing scores (Read-Only Enforcement)
+  // If evaluators have submitted but no scores exist, we MUST fail.
+  // We do NOT silently generate an empty report or recompute.
+  if (evaluators.submitted.length > 0 && evaluatorScores.length === 0) {
+    const submissionCount = evaluators.submitted.length;
+    const errorMsg = `Report generation failed: No ethical scores found for project ${projectId}. Found ${submissionCount} submitted evaluators but 0 score documents. Scores must be computed before generating a report.`;
+
+    console.error(`❌ [ERROR buildReportMetrics] ${errorMsg}`);
+    console.error(`   Debug: Evaluators Submitted: ${submissionCount}, Evaluator Scores Found: ${evaluatorScores.length}`);
+
+    const error = new Error(errorMsg);
+    error.code = 'REPORT_SCORES_MISSING';
+    error.details = {
+      projectId: projectId.toString(),
+      submissionCount: submissionCount,
+      missingPrinciples: [], // Provide empty array or potentially list principles if we did partial checks
+      message: 'Ethical scores must be pre-computed via the scoring endpoint (e.g. /api/scores/compute).'
+    };
+    throw error;
+  }
   const projectLevelScores = scores.filter(s => s && s.role === 'project');
   if (projectLevelScores.length > 0) {
     console.log(`ℹ️ [DEBUG buildReportMetrics] Excluding ${projectLevelScores.length} project-level Score doc(s) from evaluator aggregation`);
@@ -938,7 +940,11 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
               // LEGACY Mapping
               avg: Math.round(sumRisk * 100) / 100,
-              score: Math.round(sumRisk * 100) / 100
+              score: Math.round(sumRisk * 100) / 100,
+
+              // NEW Importance Fields (Propagated from buildPrincipleScores)
+              avgImportance: data.avgImportance || 0,
+              highImportanceRatio: data.highImportanceRatio || 0
             };
 
             console.log(`    ✅ Populated Cumulative Risk: sumRisk=${sumRisk.toFixed(2)}, count=${totalCount}`);
@@ -954,7 +960,11 @@ async function buildReportMetrics(projectId, questionnaireKey) {
             avg: data.risk,
             n: data.n, // Correct unique question count
             count: data.count, // Expert count
-            riskLabel: riskLabelEN(data.risk)
+            riskLabel: riskLabelEN(data.risk),
+
+            // NEW Importance Fields
+            avgImportance: data.avgImportance || 0,
+            highImportanceRatio: data.highImportanceRatio || 0
           };
         } else {
           console.log(`    ❌ No data available`);
@@ -1423,6 +1433,16 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       charts.principleBarChart = await chartGenerationService.generatePrincipleBarChart(
         scoring.byPrincipleOverall
       );
+
+      // NEW: Generate Ethical Importance Ranking Chart
+      try {
+        charts.ethicalImportanceRanking = await chartGenerationService.generatePrincipleImportanceChart(
+          scoring.byPrincipleOverall
+        );
+      } catch (impError) {
+        console.warn(`⚠️ Importance Ranking chart failed (skipped): ${impError.message}`);
+        charts.ethicalImportanceRanking = null;
+      }
     }
 
     // Generate principle-evaluator heatmap (optional)
@@ -1548,6 +1568,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         principleEvaluatorHeatmap: charts.principleEvaluatorHeatmap !== null,
         teamCompletionDonut: charts.teamCompletionDonut !== null,
         tensionReviewStateChart: charts.tensionReviewStateChart !== null,
+        ethicalImportanceRanking: charts.ethicalImportanceRanking !== null,
         // Evidence charts removed per TASK 7 (invalid/misleading)
         severityChart: charts.severityChart !== null
       }
