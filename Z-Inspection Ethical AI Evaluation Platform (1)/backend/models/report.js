@@ -137,6 +137,20 @@ const ReportSchema = new mongoose.Schema(
       default: null
     },
 
+    // Full Report Content (JSON or Markdown)
+    content: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+
+    // Report Sections (for draft/review workflow)
+    sections: [{
+      principle: String,
+      aiDraft: { type: mongoose.Schema.Types.Mixed },
+      expertEdit: { type: String, default: '' },
+      comments: []
+    }],
+
     // Comments from experts/reviewers
     expertComments: [{
       userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

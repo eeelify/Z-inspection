@@ -2810,11 +2810,18 @@ app.post('/api/general-questions', async (req, res) => {
                   answerFormat = { text: answerValue };
                 }
 
+                // Calculate answerSeverity from score (0-4 scale → 0-1 scale)
+                // score 4=best → severity 0 (safe), score 0=worst → severity 1 (critical)
+                const answerSeverity = score !== undefined && score !== null
+                  ? (4 - score) / 4
+                  : null;
+
                 generalResponseAnswers.push({
                   questionId: question._id,
                   questionCode: question.code,
                   answer: answerFormat,
                   score: score,
+                  answerSeverity: answerSeverity,
                   notes: null,
                   evidence: []
                 });
@@ -2947,11 +2954,18 @@ app.post('/api/general-questions', async (req, res) => {
                     answerFormat = { text: answerValue };
                   }
 
+                  // Calculate answerSeverity from score (0-4 scale → 0-1 scale)
+                  // score 4=best → severity 0 (safe), score 0=worst → severity 1 (critical)
+                  const answerSeverity = score !== undefined && score !== null
+                    ? (4 - score) / 4
+                    : null;
+
                   roleResponseAnswers.push({
                     questionId: question._id,
                     questionCode: question.code,
                     answer: answerFormat,
                     score: score,
+                    answerSeverity: answerSeverity,
                     notes: null,
                     evidence: []
                   });
@@ -3322,7 +3336,7 @@ app.get('/api/user-progress', async (req, res) => {
       projectId: projectIdObj,
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
-    }).select('questionnaireKey answers').lean();
+    }).select('questionnaireKey answers.questionCode answers.questionId answers.answer answers.score').lean();
 
     const answeredKeys = new Set();
 
@@ -4187,7 +4201,7 @@ app.get('/projects/:projectId/progress', async (req, res) => {
       projectId: projectIdObj,
       userId: userIdObj,
       questionnaireKey: { $in: assignedQuestionnaireKeys }
-    }).select('answers').lean();
+    }).select('answers.questionCode answers.questionId answers.answer answers.score').lean();
 
     // Step 5: Count answered questions
     // A question is answered if:
@@ -4548,68 +4562,82 @@ app.get('/api/projects', async (req, res) => {
 
     console.log(`✅ Found ${projects.length} projects`);
 
-    // Add evaluation status for each project (for admin dashboard)
+    if (projects.length === 0) {
+      return res.json([]);
+    }
+
+    // OPTIMIZATION: Use Aggregation instead of N+1 Loop
+    const projectIds = projects.map(p => p._id);
     const Response = mongoose.model('Response');
     const Report = mongoose.model('Report');
 
-    const enrichedProjects = await Promise.all(projects.map(async (project) => {
-      try {
-        // Count answered questions for this project
-        const responses = await Response.find({
-          projectId: { $in: [project._id, String(project._id)] }
-        }, { 'answers': 1 }).lean();
-        let answeredQuestions = 0;
-        for (const resp of responses) {
-          answeredQuestions += (resp.answers || []).length;
+    // 1. Batch count answered questions per project
+    const responseCounts = await Response.aggregate([
+      { $match: { projectId: { $in: projectIds } } },
+      {
+        $project: {
+          projectId: 1,
+          answerCount: {
+            $cond: {
+              if: { $isArray: "$answers" },
+              then: { $size: "$answers" },
+              else: 0
+            }
+          }
         }
-
-        // Count reports for this project
-        const reportCount = await Report.countDocuments({
-          projectId: { $in: [project._id, String(project._id)] }
-        });
-
-        // Derive status based on exact rules:
-        // SETUP: answeredQuestions === 0
-        // ASSESS: answeredQuestions > 0 AND reportCount === 0
-        // RESOLVE: reportCount >= 1
-        let derivedStatus = 'setup';
-        if (reportCount >= 1) {
-          derivedStatus = 'resolve';
-        } else if (answeredQuestions > 0) {
-          derivedStatus = 'assess';
+      },
+      {
+        $group: {
+          _id: "$projectId",
+          totalAnswers: { $sum: "$answerCount" }
         }
-
-        return {
-          ...project,
-          hasAnyAnswers: answeredQuestions > 0,
-          reportGenerated: reportCount > 0,
-          answeredQuestions,
-          reportCount,
-          derivedStatus
-        };
-      } catch (err) {
-        console.error(`Error enriching project ${project._id}:`, err);
-        return {
-          ...project,
-          hasAnyAnswers: false,
-          reportGenerated: false,
-          answeredQuestions: 0,
-          reportCount: 0,
-          derivedStatus: 'setup'
-        };
       }
-    }));
+    ]);
+    // Create map for fast lookup: projectId -> totalAnswers
+    const responseCountMap = new Map(responseCounts.map(r => [String(r._id), r.totalAnswers]));
 
-    // Debug: Log enrichment summary
-    const enrichmentSummary = enrichedProjects.map(p => ({
-      title: p.title,
-      hasAnyAnswers: p.hasAnyAnswers,
-      reportGenerated: p.reportGenerated,
-      answeredQuestions: p.answeredQuestions,
-      reportCount: p.reportCount,
-      derivedStatus: p.derivedStatus
-    }));
-    console.log('📊 Project enrichment summary:', JSON.stringify(enrichmentSummary, null, 2));
+    // 2. Batch count reports per project
+    const reportCounts = await Report.aggregate([
+      { $match: { projectId: { $in: projectIds } } },
+      { $group: { _id: "$projectId", count: { $sum: 1 } } }
+    ]);
+    const reportCountMap = new Map(reportCounts.map(r => [String(r._id), r.count]));
+
+    const enrichedProjects = projects.map(project => {
+      const projIdStr = String(project._id);
+      const answeredQuestions = responseCountMap.get(projIdStr) || 0;
+      const reportCount = reportCountMap.get(projIdStr) || 0;
+
+      // Derive status based on exact rules:
+      // SETUP: answeredQuestions === 0
+      // ASSESS: answeredQuestions > 0 AND reportCount === 0
+      // RESOLVE: reportCount >= 1
+      let derivedStatus = 'setup';
+      if (reportCount >= 1) {
+        derivedStatus = 'resolve';
+      } else if (answeredQuestions > 0) {
+        derivedStatus = 'assess';
+      }
+
+      return {
+        ...project,
+        hasAnyAnswers: answeredQuestions > 0,
+        reportGenerated: reportCount > 0,
+        answeredQuestions,
+        reportCount,
+        derivedStatus
+      };
+    });
+
+    // Debug: Log enrichment summary (limit to first 5 for noise reduction)
+    if (process.env.NODE_ENV === 'development') {
+      const enrichmentSummary = enrichedProjects.slice(0, 5).map(p => ({
+        title: p.title,
+        status: p.derivedStatus,
+        answers: p.answeredQuestions
+      }));
+      console.log('📊 Project enrichment summary (first 5):', JSON.stringify(enrichmentSummary));
+    }
 
     res.json(enrichedProjects);
   } catch (err) {
@@ -5068,6 +5096,53 @@ app.get('/api/messages/unread-count', async (req, res) => {
     });
   } catch (err) {
     console.error('Error in /api/messages/unread-count:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/messages/history?userId=&limit= - Fetch all messages (read + unread) for history
+app.get('/api/messages/history', async (req, res) => {
+  try {
+    const { userId, limit = 100 } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId parameter' });
+    }
+
+    const userIdObj = isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+    // Get all messages sent TO this user, sorted by date (newest first)
+    const messages = await Message.find({
+      toUserId: userIdObj
+    })
+      .populate({ path: 'projectId', select: 'title', strictPopulate: false })
+      .populate('fromUserId', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    // Transform to a consistent format
+    const history = messages
+      .filter(msg => msg && msg.fromUserId)
+      .map(msg => ({
+        _id: msg._id,
+        title: msg.isNotification ? 'System Notification' : 'Message',
+        message: String(msg.text || '').replace(/^\[NOTIFICATION\]\s*/, ''),
+        actorId: {
+          _id: msg.fromUserId._id || msg.fromUserId,
+          name: msg.fromUserId.name || 'Unknown'
+        },
+        projectId: msg.projectId ? {
+          _id: msg.projectId._id || msg.projectId,
+          title: msg.projectId.title || 'Unknown Project'
+        } : null,
+        isRead: !!msg.readAt,
+        createdAt: msg.createdAt,
+        isNotification: Boolean(msg.isNotification)
+      }));
+
+    res.json({ messages: history, totalCount: history.length });
+  } catch (err) {
+    console.error('Error in /api/messages/history:', err);
     res.status(500).json({ error: err.message });
   }
 });

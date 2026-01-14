@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-01-14T10:58:55.989Z",
+  "projectId": "6964d4e9d7a6755353c39e4b",
+  "isValid": true,
+  "validityStatus": "valid",
+  "errors": [],
+  "warnings": [
+    "36.6% of answers missing answerSeverity (may be open-text questions)",
+    "7 scores missing threshold version metadata"
+  ],
+  "metadata": {
+    "projectId": "6964d4e9d7a6755353c39e4b",
+    "validatedAt": "2026-01-14T10:58:55.988Z",
+    "validationVersion": "v1.0",
+    "ercThresholdsVersion": "erc-v1",
+    "evaluatorCount": {
+      "total": 3,
+      "ethicalExperts": 1,
+      "submitted": 4,
+      "scored": 4
+    },
+    "dataCompleteness": {
+      "totalAnswers": 93,
+      "answersWithSeverity": 59,
+      "severityCompleteness": "63.4%"
+    }
+  }
+}

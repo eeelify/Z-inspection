@@ -1,0 +1,37 @@
+{
+  "found": true,
+  "userId": "69341f3a77e89c5de5ae6484",
+  "questionnaireKey": "general-v1",
+  "byPrincipleExists": true,
+  "byPrincipleKeys": [
+    "TRANSPARENCY",
+    "HUMAN AGENCY & OVERSIGHT",
+    "TECHNICAL ROBUSTNESS & SAFETY",
+    "PRIVACY & DATA GOVERNANCE",
+    "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+    "SOCIETAL & INTERPERSONAL WELL-BEING",
+    "ACCOUNTABILITY"
+  ],
+  "samplePrinciple": {
+    "n": 2,
+    "risk": 1.5,
+    "avgImportance": 2,
+    "highImportanceRatio": 0,
+    "topDrivers": [
+      {
+        "questionId": "695d814a205aa3b04599f5a6",
+        "answerSeverity": 0.5,
+        "finalRiskContribution": 1,
+        "importance": 2
+      },
+      {
+        "questionId": "695d814a205aa3b04599f597",
+        "answerSeverity": 0.25,
+        "finalRiskContribution": 0.5,
+        "importance": 2
+      }
+    ]
+  },
+  "totalsOverallRisk": 12,
+  "totalsN": 11
+}

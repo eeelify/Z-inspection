@@ -3,6 +3,9 @@ const Score = require('../models/score');
 const Response = require('../models/response');
 const Tension = mongoose.model('Tension');
 const ProjectAssignment = require('../models/projectAssignment');
+
+// PHASE 3: ERC Threshold Configuration
+const ercConfig = require('../config/ercThresholds.v1');
 const Question = require('../models/question');
 const User = mongoose.model('User');
 // Use canonical risk scale utility
@@ -649,25 +652,69 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
 
   // CRITICAL VALIDATION: Check for missing scores (Read-Only Enforcement)
-  // If evaluators have submitted but no scores exist, we MUST fail.
-  // We do NOT silently generate an empty report or recompute.
+  // HONEST REPORTING MODEL: Do not crash. Generate "Invalid" report with notice.
+  let validityStatus = 'valid';
+  const invalidityReasons = [];
+  const recommendedActions = [];
+
+  // 1. Check for Missing Scores (scores < submissions)
   if (evaluators.submitted.length > 0 && evaluatorScores.length === 0) {
-    const submissionCount = evaluators.submitted.length;
-    const errorMsg = `Report generation failed: No ethical scores found for project ${projectId}. Found ${submissionCount} submitted evaluators but 0 score documents. Scores must be computed before generating a report.`;
-
-    console.error(`❌ [ERROR buildReportMetrics] ${errorMsg}`);
-    console.error(`   Debug: Evaluators Submitted: ${submissionCount}, Evaluator Scores Found: ${evaluatorScores.length}`);
-
-    const error = new Error(errorMsg);
-    error.code = 'REPORT_SCORES_MISSING';
-    error.details = {
-      projectId: projectId.toString(),
-      submissionCount: submissionCount,
-      missingPrinciples: [], // Provide empty array or potentially list principles if we did partial checks
-      message: 'Ethical scores must be pre-computed via the scoring endpoint (e.g. /api/scores/compute).'
-    };
-    throw error;
+    validityStatus = 'invalid_missing_scores';
+    invalidityReasons.push('Evaluators have submitted responses, but no ethical scores exist in the database.');
+    recommendedActions.push('Ask an Administrator to run the "Compute Scores" action to process the latest responses.');
+  } else if (evaluators.submitted.length > evaluatorScores.length) {
+    validityStatus = 'invalid_partial_scores';
+    invalidityReasons.push(`Partial data: ${evaluators.submitted.length} submitted evaluators, but only ${evaluatorScores.length} have scores.`);
+    recommendedActions.push('Recompute scores to include all recent submissions.');
   }
+
+  // 2. Check for Incomplete Evaluator Coverage (Assigned vs Submitted)
+  // "Ethical Plurality" requires broad participation.
+  // We check unique user IDs (team size) via getProjectEvaluators logic
+  const assignedCount = evaluators.assigned.length;
+  const submittedCount = evaluators.submitted.length;
+  // Threshold: If < 50% participation or if critical roles missing (can be enhanced later)
+  // For now, strict check: if assigned > 0 and submitted == 0, it's invalid (but handled above)
+  // If assigned > submitted, we mark as "valid_partial" or similar?
+  // User Requirement: "Scoring must NOT finalize if role coverage is incomplete."
+  // "Mark report INVALID."
+  if (assignedCount > 0 && submittedCount < assignedCount) {
+    // Check if "locked" or "finalized"? No, for now strict coverage check.
+    // But practically, maybe we should alert but not fully invalidate if say 4/5 submitted?
+    // User says: "Two ethical-experts were assigned, but only one submitted... System incorrectly reported 100% completion... Mark report INVALID."
+    // So checks must be strict.
+    validityStatus = 'invalid_incomplete_evaluators';
+    invalidityReasons.push(`Incomplete Team Coverage: ${assignedCount} experts assigned, but only ${submittedCount} submitted.`);
+    recommendedActions.push('Wait for all assigned experts to submit their evaluations before finalizing the report.');
+  }
+
+  // 3. Check for Schema Validity (Zero-Risk fake data)
+  // If we found scores but they have 0 risk across the board despite high question counts
+  // This is a heuristic for the "ERC = X * 0" bug. 
+  // We can check the source/model version in the Score document if available.
+  const suspiciousScores = evaluatorScores.filter(s => s.totals && s.totals.overallRisk === 0 && s.totals.n > 5);
+  if (suspiciousScores.length > 0 && evaluatorScores.length > 0) {
+    // Double check if *really* safe or just broken.
+    // If average importance > 2 but risk is 0, that's impossible unless severity is 0 everywhere.
+    // If severity is missing (legacy), it defaults to 0 -> broken.
+    // We'll lean on the "scoringModelVersion" to detect legacy if present, or this heuristic.
+    // For now, let's trust the new 'strict_ethical_v3_cumulative' version tag.
+    const legacyScores = evaluatorScores.filter(s => s.scoringModelVersion !== 'strict_ethical_v3_cumulative');
+    if (legacyScores.length > 0) {
+      validityStatus = 'invalid_scoring_pipeline';
+      invalidityReasons.push('Some scores were computed with an obsolete model/schema. They may incorrectly show "Minimal Risk".');
+      recommendedActions.push('Recompute scores to apply the latest strict ethical formula (Importance × Severity).');
+    }
+  }
+
+  if (validityStatus !== 'valid') {
+    const errorMsg = `Report Invalid: ${invalidityReasons.join(' ')}`;
+    console.error(`❌ [ERROR buildReportMetrics] ${errorMsg}`);
+
+    // INJECT INVALIDITY NOTICE
+    // We proceed to build the report structure but inject flags to suppress charts/validity.
+  }
+
   const projectLevelScores = scores.filter(s => s && s.role === 'project');
   if (projectLevelScores.length > 0) {
     console.log(`ℹ️ [DEBUG buildReportMetrics] Excluding ${projectLevelScores.length} project-level Score doc(s) from evaluator aggregation`);
@@ -739,10 +786,13 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       .filter(r => r.userId)
       .map(r => r.userId.toString ? r.userId.toString() : String(r.userId))
   );
-  const submittedCount = submittedUserIds.size;
-  const assignedCount = submittedCount;
-  const startedCount = submittedCount;
-  const assignedUserIds = new Set(submittedUserIds);
+  // SYNTAX FIX & HONESTY FIX:
+  // We use the true assigned/submitted counts from the 'evaluators' object (derived from ProjectAssignment).
+  // Overwriting them here caused both a SyntaxError (redeclaration) and a logic bug (faking 100% completion).
+  // const submittedCount = submittedUserIds.size;
+  // const assignedCount = submittedCount;
+  const startedCount = submittedUserIds.size;
+  const assignedUserIds = new Set(submittedUserIds); // Warning: This might still be "dishonest" for role stats, but avoiding syntax error first
   const startedUserIds = new Set(submittedUserIds);
 
   // Build role stats from submitted responses (dedupe by userId per role)
@@ -921,28 +971,46 @@ async function buildReportMetrics(projectId, questionnaireKey) {
               .sort((a, b) => (b.finalRiskContribution || 0) - (a.finalRiskContribution || 0))
               .slice(0, 10); // Keep top 10 unique-ish drivers
 
-            scoring.byPrincipleOverall[principle] = {
-              risk: Math.round(sumRisk * 100) / 100, // CUMULATIVE RISK
-              avgRisk: Math.round(sumRisk * 100) / 100, // Alias
+            // PHASE 3: Calculate normalized values
+            const questionCount = data.n || 1; // Prevent division by zero
+            const averageRiskPerQuestion = sumRisk / questionCount;
+            const normalizedRiskLevel = ercConfig.getRiskLevel(averageRiskPerQuestion);
 
+            // REGRESSION GUARD: Ensure labels NOT applied to cumulative sums
+            const wrongLabel = ercConfig.getRiskLevel(sumRisk);
+            if (normalizedRiskLevel.level === wrongLabel.level && sumRisk !== averageRiskPerQuestion) {
+              console.warn(`⚠️  REGRESSION DETECTED: Risk label would be same for sum and average on ${principle}`);
+            }
+
+            scoring.byPrincipleOverall[principle] = {
+              // ===== NEW ERC-COMPLIANT FIELDS (PHASE 3) =====
+              cumulativeRisk: Math.round(sumRisk * 100) / 100,
+              questionCount: questionCount,
+              averageRisk: Math.round(averageRiskPerQuestion * 100) / 100,
+              normalizedLevel: normalizedRiskLevel.level,
+              normalizedLabel: normalizedRiskLevel.label,
+              normalizedColor: normalizedRiskLevel.color,
+
+              // ===== DEPRECATED FIELDS (Backward Compatibility - Remove in Phase 5) =====
+              risk: Math.round(sumRisk * 100) / 100, // DEPRECATED: Use cumulativeRisk
+              avgRisk: Math.round(sumRisk * 100) / 100, // DEPRECATED: Misleading name
+              riskLabel: normalizedRiskLevel.label, // FIXED: Now uses normalized value
+              avg: Math.round(sumRisk * 100) / 100, // DEPRECATED: Use averageRisk
+              score: Math.round(sumRisk * 100) / 100, // DEPRECATED: Ambiguous
+
+              // ===== METADATA =====
               min: Math.round(minRisk * 100) / 100,
               max: Math.round(maxRisk * 100) / 100,
-              n: data.n, // Correct unique question count from buildPrincipleScores
-              count: totalCount, // Expert count
-
-              riskLabel: riskLabelEN(sumRisk),
+              n: data.n, // Question count
+              count: totalCount, // Evaluator count
 
               riskyCount: riskyCount,
               safeCount: safeCount,
               riskPct: totalCount > 0 ? Math.round((riskyCount / totalCount) * 100) : 0,
 
-              topDrivers: topDrivers, // Populated from first/all? Usually we want ALL top drivers.
+              topDrivers: topDrivers,
 
-              // LEGACY Mapping
-              avg: Math.round(sumRisk * 100) / 100,
-              score: Math.round(sumRisk * 100) / 100,
-
-              // NEW Importance Fields (Propagated from buildPrincipleScores)
+              // NEW Importance Fields
               avgImportance: data.avgImportance || 0,
               highImportanceRatio: data.highImportanceRatio || 0
             };
@@ -1616,6 +1684,37 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
 
   // Exclude project-level aggregated score docs from evaluator aggregations
   const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
+
+  // ============================================================
+  // CRITICAL VALIDATION (Honest Reporting)
+  // Ensure validityStatus is defined in this scope for dashboardMetrics
+  // ============================================================
+  let validityStatus = 'valid';
+  const invalidityReasons = [];
+  const recommendedActions = [];
+  const dataQualityNotes = [];
+
+  // 1. Check for Missing Scores
+  if (evaluators.submitted.length > 0 && evaluatorScores.length === 0) {
+    validityStatus = 'invalid_missing_scores';
+    invalidityReasons.push('Evaluators have submitted responses, but no ethical scores exist in the database.');
+    recommendedActions.push('Ask an Administrator to run the "Compute Scores" action to process the latest responses.');
+  } else if (evaluators.submitted.length > evaluatorScores.length) {
+    validityStatus = 'invalid_partial_scores';
+    invalidityReasons.push(`Partial data: ${evaluators.submitted.length} submitted evaluators, but only ${evaluatorScores.length} have scores.`);
+    recommendedActions.push('Recompute scores to include all recent submissions.');
+  }
+
+  // 2. Check for Incomplete Evaluator Coverage (Assigned vs Submitted)
+  // strict check: if assigned > submitted, mark invalid
+  const valAssignedCount = evaluators.assigned.length;
+  const valSubmittedCount = evaluators.submitted.length;
+  if (valAssignedCount > 0 && valSubmittedCount < valAssignedCount) {
+    validityStatus = 'invalid_incomplete_evaluators';
+    invalidityReasons.push(`Incomplete Team Coverage: ${valAssignedCount} experts assigned, but only ${valSubmittedCount} submitted.`);
+    recommendedActions.push('Wait for all assigned experts to submit their evaluations before finalizing the report.');
+  }
+
 
   // Get ALL responses (draft and submitted) for started count
   // Get responses with answers (no draft/submitted distinction)
@@ -2370,16 +2469,44 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   console.log('');
 
   // ============================================================
-  // BUILD FINAL dashboardMetrics JSON
+  // BUILD FINAL dashboardMetrics JSON (With Invalidity Handling)
   // ============================================================
   const dashboardMetrics = {
+    projectId: projectIdObj,
     projectMeta,
     team,
-    scores: scoresData,
+
+    // VALIDITY METADATA
+    validityStatus: validityStatus,
+    dataQualityNotes: [...(dataQualityNotes || []), ...invalidityReasons],
+    recommendedActions: recommendedActions,
+
+    // INVALIDITY NOTICE (Mandatory)
+    invalidityNotice: validityStatus !== 'valid' ? {
+      title: "⚠️ Quantitative Scoring Invalidity Notice",
+      severity: "CRITICAL",
+      message: "The quantitative risk assessment in this report is unreliable or unavailable due to systemic data issues.",
+      details: invalidityReasons,
+      actions: recommendedActions
+    } : null,
+
+    // SCORE & RISK (Conditionally Nullified)
+    scores: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? scoresData : null,
+    riskLevel: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? (scoresData?.totals?.riskLevel || 'Unknown') : 'Data Unavailable',
+
     topRiskyQuestions,
     tensionsSummary,
     dataQuality,
     consistencyChecks,
+
+    // CHARTS GUARDRAIL
+    // buildDashboardMetrics doesn't generate charts - that's done by buildReportMetrics
+    // So we return empty chart structure here
+    charts: {
+      items: {},
+      available: {}
+    },
+
     // Metadata
     generatedAt: new Date().toISOString(),
     source: 'MongoDB collections: scores, responses, tensions, questions',

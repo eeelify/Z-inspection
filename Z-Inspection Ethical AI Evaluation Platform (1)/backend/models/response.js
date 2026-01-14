@@ -23,16 +23,29 @@ const AnswerSchema = new mongoose.Schema({
     required: false, // Allow null for unanswered questions
     default: null
   }, // Normalized 0-4 score (null for unanswered questions) - legacy field
-  // STRICT ETHICAL SCORING: answerScore (0.0-1.0)
-  // 1.0 = No issue / Good
-  // 0.0 = High Risk / Bad
-  // This must be mapped directly from the Question option definition.
-  answerScore: {
+  // STRICT ETHICAL SCORING SCHEMA
+  // 1. importanceScore (0-4): Expert's prioritization
+  importanceScore: {
+    type: Number,
+    min: 0,
+    max: 4,
+    required: false,
+    default: null
+  },
+  // 2. answerSeverity (0.0-1.0): Observed risk severity
+  // 1.0 = High Risk, 0.0 = No Risk
+  answerSeverity: {
     type: Number,
     min: 0,
     max: 1,
     required: false,
     default: null
+  },
+  // DEPRECATED: Do not use. Preserved for legacy migration only.
+  answerScore: {
+    type: Number,
+    required: false,
+    select: false // Hide by default to discourage use
   },
   // ERC Model: answerSeverity (0-1) for free-text questions coverage logic
   // Expert-provided severity: 0 = safe, 0.5 = partial, 1 = risky

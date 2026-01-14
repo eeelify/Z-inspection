@@ -809,14 +809,16 @@ async function generateAllCharts(reportData) {
 
     // Step 3: Attempt to generate principleEvaluatorHeatmap
     try {
+      // FIX: Handle different evaluators data structures (withScores vs. submitted)
+      const evaluatorsList = evaluators?.withScores || evaluators?.submitted || [];
+
       if (scoring?.byPrincipleTable &&
         Object.keys(scoring.byPrincipleTable).length > 0 &&
-        evaluators?.withScores &&
-        evaluators.withScores.length > 0) {
+        evaluatorsList.length > 0) {
         console.log('📊 Generating principleEvaluatorHeatmap (Puppeteer)...');
         const pngBuffer = await generatePrincipleEvaluatorHeatmap(
           scoring.byPrincipleTable,
-          evaluators.withScores,
+          evaluatorsList,
           browser
         );
 
@@ -826,7 +828,7 @@ async function generateAllCharts(reportData) {
             type: CHART_TYPES.HEATMAP,
             status: CHART_STATUS.READY,
             title: 'Risk Distribution by Role and Principle',
-            subtitle: `${evaluators.withScores.length} evaluator(s)`,
+            subtitle: `${evaluatorsList.length} evaluator(s)`,
             pngBuffer,
             meta: {
               source: {
@@ -834,12 +836,12 @@ async function generateAllCharts(reportData) {
                 projectId,
                 questionnaireKey
               },
-              evaluatorCount: evaluators.withScores.length,
+              evaluatorCount: evaluatorsList.length,
               scale: { min: 0, max: 4, meaning: 'Higher = higher risk (ERC)' }
             },
             data: {
               byPrincipleTable: scoring.byPrincipleTable,
-              evaluators: evaluators.withScores.map(e => ({ role: e.role, userId: e.userId }))
+              evaluators: evaluatorsList.map(e => ({ role: e.role, userId: e.userId }))
             }
           });
           console.log('✅ principleEvaluatorHeatmap generated successfully (Puppeteer)');

@@ -21,7 +21,7 @@ const chartGenerationService = require('./chartGenerationService');
  */
 async function generateChartImagesFromAnalytics(analytics) {
   const charts = {};
-  
+
   try {
     // Principle bar chart
     if (analytics.principleBar && analytics.principleBar.length > 0) {
@@ -48,7 +48,7 @@ async function generateChartImagesFromAnalytics(analytics) {
         evidenceTypeDist
       );
     }
-    
+
     // Evidence coverage donut
     if (analytics.evidenceMetrics) {
       charts.evidenceCoverageChart = await chartGenerationService.generateEvidenceCoverageChart(
@@ -101,7 +101,7 @@ async function generateChartImagesFromAnalytics(analytics) {
  */
 async function generateChartImages(reportMetrics) {
   const charts = {};
-  
+
   try {
     // Principle bar chart
     if (Object.keys(reportMetrics.scoring.byPrincipleOverall || {}).length > 0) {
@@ -111,9 +111,9 @@ async function generateChartImages(reportMetrics) {
     }
 
     // Principle-evaluator heatmap (use actual evaluators from analytics)
-    if (reportMetrics.scoring.byPrincipleTable && 
-        Object.keys(reportMetrics.scoring.byPrincipleTable).length > 0 && 
-        reportMetrics.evaluators?.withScores?.length > 0) {
+    if (reportMetrics.scoring.byPrincipleTable &&
+      Object.keys(reportMetrics.scoring.byPrincipleTable).length > 0 &&
+      reportMetrics.evaluators?.withScores?.length > 0) {
       // Use evaluators from reportMetrics (derived from scores collection)
       charts.principleEvaluatorHeatmap = await chartGenerationService.generatePrincipleEvaluatorHeatmap(
         reportMetrics.scoring.byPrincipleTable,
@@ -131,13 +131,13 @@ async function generateChartImages(reportMetrics) {
       charts.tensionReviewStateChart = await chartGenerationService.generateTensionReviewStateChart(
         reportMetrics.tensions.summary
       );
-      
+
       if (Object.keys(reportMetrics.tensions.summary.evidenceTypeDistribution || {}).length > 0) {
         charts.evidenceTypeChart = await chartGenerationService.generateEvidenceTypeChart(
           reportMetrics.tensions.summary.evidenceTypeDistribution
         );
       }
-      
+
       if (reportMetrics.tensions.list?.length > 0) {
         // Convert tension list to severity distribution
         const severityDistribution = {
@@ -174,33 +174,33 @@ async function generateChartImages(reportMetrics) {
  */
 async function generatePDFReport(projectId, questionnaireKey = 'general-v1', options = {}) {
   let browser = null;
-  
+
   try {
     console.log(`📊 Generating PDF report for project: ${projectId}`);
-    
+
     // Step 1: Get analytics data (deterministic, single source of truth)
     console.log('📈 Fetching analytics data...');
     const analytics = await getProjectAnalytics(projectId, questionnaireKey);
-    
+
     // Step 2: Build reportMetrics (for narrative generation)
     console.log('📈 Building report metrics...');
     const reportMetrics = await buildReportMetrics(projectId, questionnaireKey);
-    
+
     // Step 3: Generate charts from analytics
     console.log('📊 Generating charts from analytics...');
     const chartImages = await generateChartImagesFromAnalytics(analytics);
-    
+
     // Also generate heatmap using actual evaluators from analytics and reportMetrics
-    if (reportMetrics.scoring.byPrincipleTable && 
-        Object.keys(reportMetrics.scoring.byPrincipleTable).length > 0 && 
-        analytics.evaluators && analytics.evaluators.length > 0) {
+    if (reportMetrics.scoring.byPrincipleTable &&
+      Object.keys(reportMetrics.scoring.byPrincipleTable).length > 0 &&
+      analytics.evaluators && analytics.evaluators.length > 0) {
       // Use evaluators from analytics (derived from scores collection)
       chartImages.principleEvaluatorHeatmap = await chartGenerationService.generatePrincipleEvaluatorHeatmap(
         reportMetrics.scoring.byPrincipleTable,
         analytics.evaluators
       );
     }
-    
+
     // Step 4: Generate narrative using Gemini (strict guardrails)
     console.log('🤖 Generating narrative with Gemini...');
     let geminiNarrative;
@@ -220,7 +220,7 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
       console.warn('⚠️ Gemini narrative generation failed, using fallback:', geminiError.message);
       geminiNarrative = {
         executiveSummary: [
-          `Overall ethical risk level: ${reportMetrics.scoring.totalsOverall?.avg?.toFixed(2) || 'N/A'}/4.0`,
+          `Normalized Ethical Risk Level: ${reportMetrics.scoring.totalsOverall?.avg?.toFixed(2) || 'N/A'}/4.0`,
           `${reportMetrics.coverage.expertsSubmittedCount || 0} of ${reportMetrics.coverage.assignedExpertsCount || 0} assigned experts completed evaluations`,
           `${reportMetrics.tensions.summary?.total || 0} ethical tensions identified`
         ],
@@ -231,7 +231,7 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         limitations: []
       };
     }
-    
+
     // Step 5: Generate HTML
     console.log('📝 Generating HTML template...');
     const html = generateHTMLReport(
@@ -251,11 +251,11 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         }
       }
     );
-    
+
     // Step 5: Convert HTML to PDF using Puppeteer
     console.log('🖨️ Converting HTML to PDF...');
     console.log(`📄 HTML content length: ${html.length} characters`);
-    
+
     let page;
     try {
       browser = await puppeteer.launch({
@@ -269,12 +269,12 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         ],
         timeout: 60000 // 60 second timeout for browser launch
       });
-      
+
       console.log('✅ Browser launched successfully');
-      
+
       page = await browser.newPage();
       console.log('✅ New page created');
-      
+
       // Set content with longer timeout
       console.log('📝 Setting HTML content...');
       await page.setContent(html, {
@@ -282,7 +282,7 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         timeout: 60000 // 60 second timeout
       });
       console.log('✅ HTML content set');
-      
+
       // Wait for images to load
       console.log('🖼️ Waiting for images to load...');
       await page.evaluateHandle(() => {
@@ -305,15 +305,15 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
       console.error('❌ Error setting up Puppeteer:', setupError);
       throw new Error(`Failed to set up PDF generation: ${setupError.message}`);
     }
-    
+
     // Generate PDF
     console.log('📄 Generating PDF buffer...');
     let pdfBuffer;
-    
+
     if (!page) {
       throw new Error('Page object is null or undefined');
     }
-    
+
     try {
       const pdfResult = await page.pdf({
         format: 'A4',
@@ -338,11 +338,11 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         `,
         timeout: 60000 // 60 second timeout
       });
-      
+
       console.log('✅ PDF result received from Puppeteer');
       console.log('📊 PDF result type:', typeof pdfResult);
       console.log('📊 PDF result is Buffer:', Buffer.isBuffer(pdfResult));
-      
+
       // Ensure we have a Buffer
       if (Buffer.isBuffer(pdfResult)) {
         pdfBuffer = pdfResult;
@@ -359,7 +359,7 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         // Try to convert to Buffer
         pdfBuffer = Buffer.from(pdfResult);
       }
-      
+
       console.log('✅ PDF buffer converted/validated');
     } catch (pdfError) {
       console.error('❌ Error calling page.pdf():', pdfError);
@@ -367,12 +367,12 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
       console.error('❌ PDF error stack:', pdfError.stack);
       throw new Error(`Failed to generate PDF from page: ${pdfError.message}`);
     }
-    
+
     // Validate PDF buffer
     if (!pdfBuffer) {
       throw new Error('PDF generation returned null or undefined buffer');
     }
-    
+
     if (!Buffer.isBuffer(pdfBuffer)) {
       console.error('❌ PDF buffer type:', typeof pdfBuffer);
       console.error('❌ PDF buffer constructor:', pdfBuffer?.constructor?.name);
@@ -387,14 +387,14 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
         throw new Error(`PDF generation returned invalid buffer type: ${typeof pdfBuffer}. Expected Buffer, got ${typeof pdfBuffer}. Conversion failed: ${convertError.message}`);
       }
     }
-    
+
     if (pdfBuffer.length === 0) {
       throw new Error('PDF generation returned empty buffer');
     }
-    
+
     console.log(`✅ PDF report generated successfully (${pdfBuffer.length} bytes)`);
     return pdfBuffer;
-    
+
   } catch (error) {
     console.error('❌ Error generating PDF report:', error);
     throw error;
@@ -422,38 +422,38 @@ async function generateAndSavePDFReport(projectId, questionnaireKey = 'general-v
     }
     return mongoose.Types.ObjectId.isValid(id);
   };
-  
+
   const projectIdObj = isValidObjectId(projectId)
     ? new mongoose.Types.ObjectId(projectId)
     : projectId;
-  
+
   // Generate PDF
   const pdfBuffer = await generatePDFReport(projectId, questionnaireKey, options);
-  
-    // Get analytics (deterministic source)
-    const analytics = await getProjectAnalytics(projectId, questionnaireKey);
-    
-    // Build report metrics for storage
-    const reportMetrics = await buildReportMetrics(projectId, questionnaireKey);
-    let geminiNarrative;
-    try {
-      const { generateReportNarrative } = require('./geminiService');
-      // Pass analytics to Gemini for better context
-      const reportMetricsWithAnalytics = {
-        ...reportMetrics,
-        analytics: {
-          topRiskyQuestions: analytics.topRiskyQuestions,
-          tensionsSummary: analytics.tensionsSummary,
-          evidenceMetrics: analytics.evidenceMetrics,
-          topRiskyQuestionContext: analytics.topRiskyQuestionContext.slice(0, 10)
-        }
-      };
-      geminiNarrative = await generateReportNarrative(reportMetricsWithAnalytics);
-    } catch (error) {
-      console.warn('Gemini narrative generation failed, using fallback');
-      geminiNarrative = null;
-    }
-  
+
+  // Get analytics (deterministic source)
+  const analytics = await getProjectAnalytics(projectId, questionnaireKey);
+
+  // Build report metrics for storage
+  const reportMetrics = await buildReportMetrics(projectId, questionnaireKey);
+  let geminiNarrative;
+  try {
+    const { generateReportNarrative } = require('./geminiService');
+    // Pass analytics to Gemini for better context
+    const reportMetricsWithAnalytics = {
+      ...reportMetrics,
+      analytics: {
+        topRiskyQuestions: analytics.topRiskyQuestions,
+        tensionsSummary: analytics.tensionsSummary,
+        evidenceMetrics: analytics.evidenceMetrics,
+        topRiskyQuestionContext: analytics.topRiskyQuestionContext.slice(0, 10)
+      }
+    };
+    geminiNarrative = await generateReportNarrative(reportMetricsWithAnalytics);
+  } catch (error) {
+    console.warn('Gemini narrative generation failed, using fallback');
+    geminiNarrative = null;
+  }
+
   // Determine version (increment if report exists)
   const existingReport = await Report.findOne({ projectId: projectIdObj })
     .sort({ generatedAt: -1 })
@@ -471,7 +471,7 @@ async function generateAndSavePDFReport(projectId, questionnaireKey = 'general-v
   } catch (err) {
     // Directory might already exist
   }
-  
+
   // Create report document first to get _id for filename
   const report = new Report({
     projectId: projectIdObj,
@@ -493,25 +493,25 @@ async function generateAndSavePDFReport(projectId, questionnaireKey = 'general-v
       chartsGenerated: Object.keys(await generateChartImagesFromAnalytics(analytics)).length
     }
   });
-  
+
   // Save report to get _id, then update with file metadata
   await report.save();
-  
+
   const fileName = `report_${report._id}_${Date.now()}.pdf`;
   const filePath = path.join(reportsDir, fileName);
   await fs.writeFile(filePath, pdfBuffer);
-  
+
   // Update report with file metadata
   report.filePath = filePath;
   report.fileUrl = `/api/reports/${report._id}/file`;
   report.mimeType = 'application/pdf';
   report.fileSize = pdfBuffer.length;
-  
+
   await report.save();
-  
+
   // Also return buffer for immediate download
   report._pdfBuffer = pdfBuffer;
-  
+
   return report;
 }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-import { api } from '../api';
-import { AlertCircle, TrendingUp, Users, AlertTriangle, FileText, Eye } from 'lucide-react';
+import { api, apiFetch } from '../api';
+import { AlertCircle, TrendingUp, Users, AlertTriangle, FileText, Eye, Activity } from 'lucide-react';
 
 interface AnalyticsDashboardProps {
   projectId: string;
@@ -74,22 +74,27 @@ interface AnalyticsData {
     totalEvidenceCount: number;
     typeDistribution: Array<{ type: string; count: number }>;
   };
+  overallTotals?: {
+    cumulativeRiskVolume: number;
+    quantitativeQuestions: number;
+  };
 }
 
 const COLORS = {
-  low: '#10b981',      // emerald-500
-  moderate: '#f59e0b', // amber-500
-  high: '#ef4444',     // red-500
-  critical: '#dc2626'  // red-600
+  low: '#8BC34A',      // Light Green - LOW
+  moderate: '#FF9800', // Amber - MODERATE
+  high: '#F44336',     // Red - HIGH
+  critical: '#D32F2F', // Dark Red - CRITICAL
+  minimal: '#4CAF50'   // Green - MINIMAL
 };
 
 const getRiskColor = (score: number) => {
   // 0 = lowest risk, 4 = highest risk
-  if (score >= 0.0 && score < 1.0) return COLORS.low;
-  if (score >= 1.0 && score < 2.0) return COLORS.moderate;
-  if (score >= 2.0 && score < 3.0) return COLORS.high;
-  if (score >= 3.0 && score <= 4.0) return COLORS.critical;
-  return COLORS.low; // Default to low for edge cases
+  if (score >= 3.5) return COLORS.critical;
+  if (score >= 2.5) return COLORS.high;
+  if (score >= 1.5) return COLORS.moderate;
+  if (score >= 0.5) return COLORS.low;
+  return COLORS.minimal; // < 0.5
 };
 
 const getStatusColor = (status: string) => {
@@ -117,13 +122,19 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get(`/projects/${projectId}/analytics`, {
-        params: { questionnaireKey }
-      });
-      setAnalytics(response.data);
+      const path = `/projects/${projectId}/analytics` + (questionnaireKey ? `?questionnaireKey=${questionnaireKey}` : '');
+      const response = await apiFetch(path);
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Error ${response.status}: Failed to load analytics`);
+      }
+
+      const data = await response.json();
+      setAnalytics(data);
     } catch (err: any) {
       console.error('Error fetching analytics:', err);
-      setError(err.response?.data?.error || 'Failed to load analytics');
+      setError(err.message || 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
@@ -131,14 +142,19 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
 
   const fetchQuestions = async () => {
     try {
-      const response = await api.get('/questions', {
-        params: { questionnaireKey }
-      });
-      const questionMap: Record<string, any> = {};
-      response.data.forEach((q: any) => {
-        questionMap[q._id || q.id] = q;
-      });
-      setQuestions(questionMap);
+      const path = '/questions' + (questionnaireKey ? `?questionnaireKey=${questionnaireKey}` : '');
+      const response = await apiFetch(path);
+
+      if (response && response.ok) {
+        const data = await response.json();
+        const questionMap: Record<string, any> = {};
+        if (Array.isArray(data)) {
+          data.forEach((q: any) => {
+            questionMap[q._id || q.id] = q;
+          });
+          setQuestions(questionMap);
+        }
+      }
     } catch (err) {
       console.warn('Could not fetch questions:', err);
     }
@@ -184,17 +200,34 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
 
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* KPI Cards - Expanded grid for 5 cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Card 1: Overall Risk (Normalized Avg) */}
         <div className="bg-white p-4 rounded-lg shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Overall Risk</p>
+              <p className="text-sm text-gray-600">Normalized Avg ERC</p>
               <p className="text-2xl font-bold" style={{ color: getRiskColor(analytics.principleBar.reduce((sum, p) => sum + p.avgScore, 0) / analytics.principleBar.length) }}>
-                {(analytics.principleBar.reduce((sum, p) => sum + p.avgScore, 0) / analytics.principleBar.length).toFixed(2)}/4.0
+                {(analytics.principleBar.reduce((sum, p) => sum + p.avgScore, 0) / analytics.principleBar.length).toFixed(2)} / 4
               </p>
             </div>
             <TrendingUp className="h-8 w-8 text-gray-400" />
+          </div>
+        </div>
+
+        {/* Card 2: Cumulative Risk Volume (ADDED) */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Cumulative Risk Data</p>
+              <p className="text-2xl font-bold text-gray-800">
+                {analytics.overallTotals?.cumulativeRiskVolume?.toFixed(2) || '0.00'}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Max: {(analytics.overallTotals?.quantitativeQuestions ? (analytics.overallTotals.quantitativeQuestions * 4).toFixed(0) : 'N/A')} (from {analytics.overallTotals?.quantitativeQuestions || 0} Qs)
+              </p>
+            </div>
+            <Activity className="h-8 w-8 text-gray-400" />
           </div>
         </div>
 
@@ -243,8 +276,8 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={principleBarData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="principle" 
+                <XAxis
+                  dataKey="principle"
                   angle={-45}
                   textAnchor="end"
                   height={100}
@@ -252,7 +285,7 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                   fontSize={11}
                 />
                 <YAxis domain={[0, 4]} label={{ value: 'Score (0-4, 0=lowest risk, 4=highest risk)', angle: -90, position: 'insideLeft' }} />
-                <Tooltip 
+                <Tooltip
                   formatter={(value: number) => [`${value.toFixed(2)}/4.0`, 'Average Score']}
                   labelFormatter={(label) => `Principle: ${label}`}
                 />
@@ -314,7 +347,7 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                     const score = analytics.rolePrincipleHeatmap.matrix[roleIdx]?.[princIdx];
                     const n = analytics.rolePrincipleHeatmap.nMatrix[roleIdx]?.[princIdx] || 0;
                     return (
-                      <td 
+                      <td
                         key={principle}
                         className="px-3 py-2 text-center border-b"
                         style={{
@@ -365,7 +398,7 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                       </span>
                     </td>
                     <td className="px-4 py-2 text-center border-b">
-                      <span 
+                      <span
                         className="px-2 py-1 rounded text-xs font-semibold text-white"
                         style={{ backgroundColor: getRiskColor(q.avgRiskScore) }}
                       >
@@ -418,12 +451,11 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                     </span>
                   </td>
                   <td className="px-4 py-2 text-center border-b">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      t.reviewState === 'Accepted' ? 'bg-green-100 text-green-800' :
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${t.reviewState === 'Accepted' ? 'bg-green-100 text-green-800' :
                       t.reviewState === 'Disputed' ? 'bg-red-100 text-red-800' :
-                      t.reviewState === 'Under review' ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
+                        t.reviewState === 'Under review' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                      }`}>
                       {t.reviewState}
                     </span>
                   </td>
@@ -511,19 +543,19 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                   ✕
                 </button>
               </div>
-              
+
               {(() => {
                 const question = questions[selectedQuestion];
                 const questionData = analytics.topRiskyQuestions.find(q => q.questionId === selectedQuestion);
                 const contexts = analytics.topRiskyQuestionContext.filter(c => c.questionId === selectedQuestion);
-                
+
                 return (
                   <div className="space-y-4">
                     <div>
                       <p className="text-sm text-gray-600 mb-1">Question</p>
                       <p className="font-medium">{question?.questionEn || question?.text || 'Question not found'}</p>
                     </div>
-                    
+
                     {questionData && (
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -546,7 +578,7 @@ export function AnalyticsDashboard({ projectId, questionnaireKey = 'general-v1',
                         </div>
                       </div>
                     )}
-                    
+
                     {contexts.length > 0 && (
                       <div>
                         <p className="text-sm font-semibold mb-2">Answer Excerpts by Role</p>

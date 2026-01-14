@@ -1,0 +1,46 @@
+{
+  "code": "T1",
+  "text": {
+    "en": "Is it clear to you what the AI system can and cannot do?",
+    "tr": "AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?"
+  },
+  "answerType": "single_choice",
+  "principle": "TRANSPARENCY",
+  "riskScore": 2,
+  "hasOptions": true,
+  "optionsCount": 4,
+  "options": [
+    {
+      "key": "very_clear",
+      "label": {
+        "en": "Very clear",
+        "tr": "Çok net"
+      },
+      "score": 4
+    },
+    {
+      "key": "mostly_clear",
+      "label": {
+        "en": "Mostly clear",
+        "tr": "Büyük ölçüde net"
+      },
+      "score": 3
+    },
+    {
+      "key": "somewhat_unclear",
+      "label": {
+        "en": "Somewhat unclear",
+        "tr": "Kısmen belirsiz"
+      },
+      "score": 2
+    },
+    {
+      "key": "completely_unclear",
+      "label": {
+        "en": "Completely unclear",
+        "tr": "Tamamen belirsiz"
+      },
+      "score": 0
+    }
+  ]
+}
