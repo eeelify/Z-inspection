@@ -1,0 +1,5 @@
+Detailed Test Metrics (Text Plot)
+Accuracy: 0.8704755338610691
+Fairness: 0.7627243254812367
+Robustness: 0.8334703562298388
+Explainability: 0.7957395880998874
