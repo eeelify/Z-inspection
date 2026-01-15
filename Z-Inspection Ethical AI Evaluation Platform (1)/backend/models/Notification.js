@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const NotificationSchema = new mongoose.Schema({
   recipientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-  entityType: { type: String, enum: ['tension', 'evaluation', 'response'], required: true },
+  entityType: { type: String, enum: ['tension', 'evaluation', 'response', 'report'], required: true },
   entityId: { type: mongoose.Schema.Types.ObjectId, required: true },
   type: {
     type: String,
@@ -16,7 +16,8 @@ const NotificationSchema = new mongoose.Schema({
       'evaluation_submitted',
       'project_assigned',
       'evaluation_completed',
-      'project_all_completed'
+      'project_all_completed',
+      'report_commented'
     ],
     required: true
   },
@@ -37,7 +38,9 @@ const NotificationSchema = new mongoose.Schema({
     projectTitle: String,
     submittedAt: Date,
     assignedCount: Number,
-    submittedCount: Number
+    submittedCount: Number,
+    reportId: { type: mongoose.Schema.Types.ObjectId, ref: 'Report' },
+    commentPreview: String
   },
   dedupeKey: { type: String, index: true }, // For better deduplication
   url: { type: String, required: true },

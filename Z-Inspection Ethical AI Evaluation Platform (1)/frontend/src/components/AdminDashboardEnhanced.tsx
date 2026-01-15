@@ -32,10 +32,11 @@ const stageLabels = {
   resolve: 'Resolve'
 };
 
-const useCaseStatusColors = {
-  'assigned': { bg: 'bg-blue-100', text: 'text-blue-800' },
+const useCaseStatusColors: Record<string, { bg: string; text: string }> = {
+  'assigned': { bg: 'bg-green-100', text: 'text-green-800' },
+  'unassigned': { bg: 'bg-gray-100', text: 'text-gray-600' },
   'in-review': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
-  'completed': { bg: 'bg-green-100', text: 'text-green-800' }
+  'completed': { bg: 'bg-emerald-100', text: 'text-emerald-800' }
 };
 
 const ProjectCard: React.FC<{
@@ -51,8 +52,18 @@ const ProjectCard: React.FC<{
     let mounted = true;
     const fetchProgress = async () => {
       try {
-        const val = await fetchUserProgress(project, currentUser);
-        if (mounted) setUserProgress(val);
+        if (currentUser.role === 'admin') {
+          // Admin: Fetch project details to get overall team average progress
+          const res = await fetch(api(`/api/projects/${project.id}`));
+          if (res.ok) {
+            const data = await res.json();
+            if (mounted) setUserProgress(data.progress || 0);
+          }
+        } else {
+          // Others: Fetch individual user progress
+          const val = await fetchUserProgress(project, currentUser);
+          if (mounted) setUserProgress(val);
+        }
       } catch (error) {
         console.error('Error fetching progress:', error);
       }
@@ -970,6 +981,29 @@ export function AdminDashboardEnhanced({
                 setSelectedUseCaseForAssignment(useCase);
                 setShowAssignExpertsModal(true);
               }}
+              onDeleteUseCase={async (useCaseId: string) => {
+                try {
+                  const response = await fetch(api(`/api/use-cases/${useCaseId}`), {
+                    method: 'DELETE',
+                  });
+                  if (response.ok) {
+                    // Reload use cases after deletion
+                    const useCasesRes = await fetch(api('/api/use-cases'));
+                    if (useCasesRes.ok) {
+                      const useCasesData = await useCasesRes.json();
+                      const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
+                      window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
+                    }
+                    alert('Use case başarıyla silindi!');
+                  } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    alert(`Silme hatası: ${errorData.error || 'Bilinmeyen hata'}`);
+                  }
+                } catch (error) {
+                  console.error('Delete error:', error);
+                  alert('Use case silinirken bir hata oluştu.');
+                }
+              }}
             />
           )}
 
@@ -1308,7 +1342,16 @@ function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProj
   );
 }
 
-function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
+function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCase }: any) {
+  const handleDelete = async (useCase: UseCase) => {
+    const confirmed = window.confirm(`"${useCase.title}" use case'ini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`);
+    if (!confirmed) return;
+
+    if (onDeleteUseCase) {
+      onDeleteUseCase(useCase.id);
+    }
+  };
+
   return (
     <>
       <div className="bg-white border-b border-gray-200 px-8 py-6">
@@ -1348,7 +1391,7 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Unknown'}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status]?.text || 'text-gray-800'}`}>
+                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status?.toLowerCase()]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status?.toLowerCase()]?.text || 'text-gray-800'}`}>
                           {useCase.status.replace('-', ' ').toUpperCase()}
                         </span>
                       </td>
@@ -1370,12 +1413,21 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts }: any) {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => onAssignExperts(useCase)}
-                          className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors"
-                        >
-                          Manage Team
-                        </button>
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => onAssignExperts(useCase)}
+                            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                          >
+                            Manage Team
+                          </button>
+                          <button
+                            onClick={() => handleDelete(useCase)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Use Case"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

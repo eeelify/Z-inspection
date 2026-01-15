@@ -205,6 +205,13 @@ async function saveDraftResponse(projectId, userId, questionnaireKey, answers) {
       await ProjectAssignment.findByIdAndUpdate(assignment._id, { status: 'in_progress' });
     }
 
+    // Recalculate and save project progress
+    try {
+      await calculateProjectProgress(projectId);
+    } catch (progressError) {
+      console.error('Failed to update project progress on draft save:', progressError);
+    }
+
     return response;
   } catch (error) {
     throw new Error(`Failed to save draft: ${error.message}`);
@@ -665,7 +672,7 @@ async function validateSubmission(projectId, userId, questionnaireKey) {
  * @param {string|ObjectId} projectId - Project ID
  * @returns {Promise<number>} Progress percentage (0-100)
  */
-async function calculateProjectProgress(projectId) {
+async function calculateProjectProgress_OLD(projectId) {
   try {
     const Question = require('../models/question');
     const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
@@ -825,10 +832,157 @@ async function calculateProjectProgress(projectId) {
       ? Math.round(totalProgress / validUserCount)
       : 0;
 
-    return Math.max(0, Math.min(100, progress)); // Clamp between 0-100
+    const finalProgress = Math.max(0, Math.min(100, progress));
+
+    // Save to Project model (using mongoose.model since Project isn't in a separate file)
+    try {
+      const Project = mongoose.model('Project');
+      await Project.findByIdAndUpdate(projectIdObj, { progress: finalProgress });
+    } catch (updateError) {
+      console.error('Error updating project progress in DB:', updateError);
+    }
+
+    return finalProgress;
   } catch (error) {
     console.error('Error calculating project progress:', error);
     return 0; // Return 0 on error
+  }
+}
+
+
+// NEW: Corrected Project Progress Calculation (Matching /api/user-progress logic)
+async function calculateProjectProgress(projectId) {
+  try {
+    const projectIdObj = (typeof projectId === 'string') ? new mongoose.Types.ObjectId(projectId) : projectId;
+
+    // Import required models
+    const Project = mongoose.model('Project');
+    const ProjectAssignment = mongoose.model('ProjectAssignment');
+    const Question = mongoose.model('Question');
+    const Response = mongoose.model('Response');
+    const User = mongoose.model('User');
+    const Evaluation = mongoose.model('Evaluation');
+
+    // 1. Get assignments for this project
+    const assignments = await ProjectAssignment.find({ projectId: projectIdObj }).lean();
+
+    if (!assignments || assignments.length === 0) {
+      await Project.findByIdAndUpdate(projectIdObj, { progress: 0 });
+      return 0;
+    }
+
+    let totalUserProgressSum = 0;
+    let validUserCount = 0;
+
+    // 2. Iterate through each assignment to calculate individual user progress
+    for (const assignment of assignments) {
+      // SKIP admins and use-case-owners from the AVERAGE calculation
+      if (assignment.role === 'admin') continue;
+      if (assignment.role === 'use-case-owner' || assignment.role === 'usecaseowner') continue;
+
+      // Double check user role from User collection
+      const user = await User.findById(assignment.userId).select('role').lean();
+      if (!user) continue;
+      if (user.role === 'admin' || user.role === 'use-case-owner' || user.role.includes('use-case-owner')) continue;
+
+      const assignedQuestionnaireKeys = assignment.questionnaires || [];
+      if (assignedQuestionnaireKeys.length === 0) continue;
+
+      // 3. Count total assigned questions for this user
+      const totalAssigned = await Question.countDocuments({
+        questionnaireKey: { $in: assignedQuestionnaireKeys }
+      });
+
+      if (totalAssigned === 0) {
+        continue;
+      }
+
+      // 4. Get all responses for this user and project
+      const responses = await Response.find({
+        projectId: projectIdObj,
+        userId: assignment.userId,
+        questionnaireKey: { $in: assignedQuestionnaireKeys }
+      }).select('answers.questionCode answers.answer').lean();
+
+      // 5. Count answered questions
+      let answeredCount = 0;
+      const answeredQuestionCodes = new Set();
+
+      responses.forEach(response => {
+        if (response.answers && Array.isArray(response.answers)) {
+          response.answers.forEach(answer => {
+            if (!answer.questionCode) return;
+            if (answeredQuestionCodes.has(answer.questionCode)) return;
+
+            let hasAnswer = false;
+            // Robust check for answer content matching server.js logic
+            if (answer.answer) {
+              if (answer.answer.choiceKey !== null && answer.answer.choiceKey !== undefined && answer.answer.choiceKey !== '') {
+                hasAnswer = true;
+              } else if (answer.answer.text !== null && answer.answer.text !== undefined && String(answer.answer.text).trim().length > 0) {
+                hasAnswer = true;
+              } else if (answer.answer.numeric !== null && answer.answer.numeric !== undefined) {
+                hasAnswer = true;
+              } else if (answer.answer.multiChoiceKeys && Array.isArray(answer.answer.multiChoiceKeys) && answer.answer.multiChoiceKeys.length > 0) {
+                hasAnswer = true;
+              }
+            }
+
+            if (hasAnswer) {
+              answeredQuestionCodes.add(answer.questionCode);
+              answeredCount++;
+            }
+          });
+        }
+      });
+
+      // 6. Custom questions logic
+      let customQuestionsTotal = 0;
+      let customQuestionsAnswered = 0;
+
+      const evaluation = await Evaluation.findOne({
+        projectId: projectIdObj,
+        userId: assignment.userId
+      }).select('customQuestions answers').lean();
+
+      if (evaluation && evaluation.customQuestions && evaluation.customQuestions.length > 0) {
+        customQuestionsTotal = evaluation.customQuestions.length;
+        if (evaluation.answers) {
+          for (const q of evaluation.customQuestions) {
+            const customAns = evaluation.answers[q.id];
+            if (customAns !== undefined && customAns !== null) {
+              if (typeof customAns === 'string' && customAns.trim().length > 0) customQuestionsAnswered++;
+              else if (typeof customAns !== 'string') customQuestionsAnswered++;
+            }
+          }
+        }
+      }
+
+      const finalTotal = totalAssigned + customQuestionsTotal;
+      const finalAnswered = answeredCount + customQuestionsAnswered;
+
+      if (finalTotal > 0) {
+        const userProgress = (finalAnswered / finalTotal) * 100;
+        totalUserProgressSum += userProgress;
+        validUserCount++;
+      }
+    }
+
+    // 7. Calculate average progress
+    const progress = validUserCount > 0
+      ? Math.round(totalUserProgressSum / validUserCount)
+      : 0;
+
+    const finalProgress = Math.max(0, Math.min(100, progress));
+
+    // Save to Project model
+    await Project.findByIdAndUpdate(projectIdObj, { progress: finalProgress });
+    console.log(`✅ Project ${projectIdObj} progress updated: ${finalProgress}% (Users: ${validUserCount})`);
+
+    return finalProgress;
+  } catch (error) {
+    console.error('Error calculating project progress:', error);
+    return 0;
   }
 }
 

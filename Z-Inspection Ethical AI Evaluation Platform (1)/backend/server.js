@@ -715,16 +715,24 @@ app.put('/api/use-cases/:id/assign', async (req, res) => {
             if (!expertUser || expertUser.role === 'admin') continue;
 
             // Create or update ProjectAssignment
-            await ProjectAssignment.findOneAndUpdate(
-              { projectId: project._id, userId: expertId },
-              {
+            // Use $set for mutable fields and $setOnInsert for default fields to avoid wiping existing data
+            const updateOps = {
+              $set: {
                 projectId: project._id,
                 userId: expertId,
-                role: expertUser.role, // e.g., "medical-expert", "technical-expert"
-                questionnaires: [], // Will be populated when questionnaires are assigned
-                status: 'assigned',
-                assignedAt: new Date()
+                role: expertUser.role, // Update role if it changed
+                status: 'assigned' // Re-activate if it was something else?
+                // Don't overwrite questionnaires or assignedAt
               },
+              $setOnInsert: {
+                questionnaires: [],
+                assignedAt: new Date()
+              }
+            };
+
+            await ProjectAssignment.findOneAndUpdate(
+              { projectId: project._id, userId: expertId },
+              updateOps,
               { new: true, upsert: true }
             );
           } catch (assignmentError) {
