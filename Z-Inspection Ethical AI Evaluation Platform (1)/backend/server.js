@@ -4353,7 +4353,7 @@ app.post('/api/auth/request-code', async (req, res) => {
     await emailVerification.save();
 
     // Send email to user
-    const { sendVerificationEmail } = require('./config/mailer');
+    const { sendVerificationEmail } = require('./services/emailService');
     await sendVerificationEmail(email, code);
 
     return res.status(200).json({ message: "Verification code sent." });
