@@ -50,7 +50,8 @@ async function validateProjectForReporting(projectId) {
 
     // Check total evaluator count
     if (assignments.length < MIN_TOTAL_EVALUATORS) {
-        if (validityStatus === 'valid') validityStatus = 'invalid_incomplete_team';
+        // CHANGED: Treat small team as a warning only, do not invalidate the report.
+        // if (validityStatus === 'valid') validityStatus = 'invalid_incomplete_team';
         warnings.push(`Total evaluators (${assignments.length}) below recommended minimum (${MIN_TOTAL_EVALUATORS}) for ethical plurality`);
     }
 

@@ -12,7 +12,7 @@ const ercConfig = require('../config/ercThresholds.v1');
 /**
  * Enrich report metrics with Phase 3 ERC-compliant fields
  */
-function enrichReportMetrics(reportMetrics) {
+function enrichReportMetrics(reportMetrics, counts = {}) {
     if (!reportMetrics || !reportMetrics.scoring) {
         return reportMetrics;
     }
@@ -62,11 +62,15 @@ function enrichReportMetrics(reportMetrics) {
     }
 
     // Scoring Disclosure
+    const totalQ = counts.total || 0;
+    const quantQ = counts.quantitative || 0;
+    const qualQ = counts.qualitative || 0;
+
     const scoringDisclosure = {
-        totalQuestions: 93,  // TODO: Calculate dynamically
-        quantitativeQuestions: 59,  // Questions with answerSeverity
-        qualitativeQuestions: 34,  // Open-text/narrative
-        text: `34 qualitative (open-text) questions are excluded from quantitative scoring. Quantitative risk assessment is based on 59 questions with predefined answer options.`,
+        totalQuestions: totalQ,
+        quantitativeQuestions: quantQ,
+        qualitativeQuestions: qualQ,
+        text: `${qualQ} qualitative (open-text) questions are excluded from quantitative scoring. Quantitative risk assessment is based on ${quantQ} questions with predefined answer options.`,
         methodology: 'ERC (Ethical Risk Contribution) = Importance × Severity'
     };
 

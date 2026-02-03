@@ -2123,11 +2123,20 @@ app.post('/api/evaluations', async (req, res) => {
                   );
                 }
 
+                // Calculate answerSeverity from score (4-score)/4
+                let severity = null;
+                if (typeof score === 'number') {
+                  severity = (4 - score) / 4;
+                  // Clamp to 0-1 just in case
+                  severity = Math.max(0, Math.min(1, severity));
+                }
+
                 generalResponseAnswers.push({
                   questionId: question._id,
                   questionCode: questionCode, // Use the canonical code
                   answer: answerFormat,
                   score: score,
+                  answerSeverity: severity, // SAVE SEVERITY
                   notes: null,
                   evidence: []
                 });
@@ -2293,11 +2302,20 @@ app.post('/api/evaluations', async (req, res) => {
                   );
                 }
 
+                // Calculate answerSeverity from score (4-score)/4
+                let severity = null;
+                if (typeof score === 'number') {
+                  severity = (4 - score) / 4;
+                  // Clamp to 0-1 just in case
+                  severity = Math.max(0, Math.min(1, severity));
+                }
+
                 roleResponseAnswers.push({
                   questionId: question._id,
                   questionCode: question.code,
                   answer: answerFormat,
                   score: score,
+                  answerSeverity: severity, // SAVE SEVERITY
                   notes: null,
                   evidence: []
                 });
