@@ -1405,18 +1405,22 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCa
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex -space-x-2">
-                          {assignedExperts.length === 0 ? (
+                          {assignedExperts
+                            .filter(expert => expert.id !== useCase.ownerId) // Hide owner from assigned experts list
+                            .length === 0 ? (
                             <span className="text-xs text-gray-400 italic">None</span>
                           ) : (
-                            assignedExperts.map((expert: User) => (
-                              <div
-                                key={expert.id}
-                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                title={`${expert.name} (${expert.role})`}
-                              >
-                                {expert.name.charAt(0)}
-                              </div>
-                            ))
+                            assignedExperts
+                              .filter(expert => expert.id !== useCase.ownerId)
+                              .map((expert: User) => (
+                                <div
+                                  key={expert.id}
+                                  className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                  title={`${expert.name} (${expert.role})`}
+                                >
+                                  {expert.name.charAt(0)}
+                                </div>
+                              ))
                           )}
                         </div>
                       </td>
