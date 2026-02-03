@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { saveAdminDashboardTab, loadAdminDashboardTab } from '../utils/persistence';
 import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
 import { fetchUserProgress } from '../utils/userProgress';
@@ -170,7 +171,14 @@ export function AdminDashboardEnhanced({
   onLogout,
   onUpdateUser
 }: AdminDashboardEnhancedProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'>(() =>
+    loadAdminDashboardTab('dashboard') as 'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'
+  );
+
+  // Persist tab changes
+  useEffect(() => {
+    saveAdminDashboardTab(activeTab);
+  }, [activeTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAssignExpertsModal, setShowAssignExpertsModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
