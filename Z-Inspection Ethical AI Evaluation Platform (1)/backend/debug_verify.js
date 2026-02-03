@@ -11,7 +11,7 @@ async function debug() {
         require('./models/response');
         require('./models/score');
         require('./models/question');
-        require('./models/user');
+        const User = require('./models/User');
         // require('./models/project'); // REMOVED
 
         console.log('3. Loading ethicalScoringService...');

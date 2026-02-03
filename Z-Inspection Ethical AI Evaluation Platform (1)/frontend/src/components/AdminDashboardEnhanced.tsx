@@ -1406,12 +1406,12 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCa
                       <td className="px-6 py-4">
                         <div className="flex -space-x-2">
                           {assignedExperts
-                            .filter(expert => expert.id !== useCase.ownerId) // Hide owner from assigned experts list
+                            .filter((expert: User) => expert.id !== useCase.ownerId) // Hide owner from assigned experts list
                             .length === 0 ? (
                             <span className="text-xs text-gray-400 italic">None</span>
                           ) : (
                             assignedExperts
-                              .filter(expert => expert.id !== useCase.ownerId)
+                              .filter((expert: User) => expert.id !== useCase.ownerId)
                               .map((expert: User) => (
                                 <div
                                   key={expert.id}
