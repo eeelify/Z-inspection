@@ -515,38 +515,55 @@ async function getProjectEvaluators(projectId) {
       continue;
     }
 
-    // CRITICAL: Skip if we've already added this userId (prevent role duplication)
+    const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
+    const hasScore = scoreMap.has(scoreKey);
+
+    // CRITICAL: Handle duplicates/multiple questionnaires
     if (seenUserIds.has(userId)) {
-      continue; // Already counted this evaluator
+      // If we already have this user, check if we need to "upgrade" to this response
+      // We prefer:
+      // 1. A response that HAS scores (if the current cached one does not)
+      // 2. 'general-v1' over others (if both have scores or both don't) - Optional heuristic
+
+      const existingIndex = submittedEvaluators.findIndex(e => e.userId === userId);
+      if (existingIndex !== -1) {
+        const existing = submittedEvaluators[existingIndex];
+
+        // Upgrade if: Existing has NO score, but New HAS score
+        if (!existing.hasScore && hasScore) {
+          // Overwrite/Update existing entry logic below
+          // Fall through to creation logic but replace at index
+        } else {
+          // Keep existing, skip this one
+          continue;
+        }
+      } else {
+        continue; // Should not happen if seenUserIds is accurate
+      }
     }
+
     seenUserIds.add(userId);
 
     const evaluator = assignedEvaluators.find(e => e.userId === userId);
+    let evaluatorEntry = null;
 
     if (evaluator) {
-      // Check if score exists for this userId+questionnaireKey
-      const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
-      const hasScore = scoreMap.has(scoreKey);
-
-      submittedEvaluators.push({
+      evaluatorEntry = {
         userId: evaluator.userId,
         name: evaluator.name,
         email: evaluator.email,
-        role: response.role || evaluator.role, // Use role from response (more accurate)
+        role: response.role || evaluator.role,
         responseStatus: response.status,
         submittedAt: response.submittedAt,
         questionnaireKey: response.questionnaireKey || 'general-v1',
-        hasScore: hasScore, // Track if canonical score exists
-        scoreMissing: !hasScore // Data quality flag
-      });
+        hasScore: hasScore,
+        scoreMissing: !hasScore
+      };
     } else {
       // User not in assignedEvaluators but submitted - add them
       const user = await User.findById(userId).select('_id name email role').lean();
       if (user) {
-        const scoreKey = `${userId}_${response.questionnaireKey || 'general-v1'}`;
-        const hasScore = scoreMap.has(scoreKey);
-
-        submittedEvaluators.push({
+        evaluatorEntry = {
           userId: user._id.toString(),
           name: user.name || 'Unknown',
           email: user.email || '',
@@ -556,7 +573,16 @@ async function getProjectEvaluators(projectId) {
           questionnaireKey: response.questionnaireKey || 'general-v1',
           hasScore: hasScore,
           scoreMissing: !hasScore
-        });
+        };
+      }
+    }
+
+    if (evaluatorEntry) {
+      const existingIndex = submittedEvaluators.findIndex(e => e.userId === userId);
+      if (existingIndex !== -1) {
+        submittedEvaluators[existingIndex] = evaluatorEntry; // Replace
+      } else {
+        submittedEvaluators.push(evaluatorEntry); // Add new
       }
     }
   }

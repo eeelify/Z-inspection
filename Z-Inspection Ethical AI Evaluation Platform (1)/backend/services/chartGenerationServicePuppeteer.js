@@ -244,6 +244,83 @@ async function generatePrincipleBarChart(byPrincipleOverall, browser = null) {
 
   return generateChartImagePuppeteer(chartConfig, 1200, 700, browser);
 
+  return generateChartImagePuppeteer(chartConfig, 1200, 700, browser);
+
+}
+
+/**
+ * NEW: Generate Risk Radar Chart (Spider Chart)
+ * Visualizes the risk profile across all principles
+ */
+async function generateRiskRadarChart(byPrincipleOverall, browser = null) {
+  if (!byPrincipleOverall || typeof byPrincipleOverall !== 'object') {
+    throw new Error('byPrincipleOverall must be a non-null object');
+  }
+
+  const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
+  if (principles.length === 0) throw new Error('No valid principles found');
+
+  const scores = principles.map(p => {
+    const data = byPrincipleOverall[p];
+    if (!data) return 0;
+    // Use Average Risk (Normalized 0-4) for consistent scale on Radar
+    return typeof data.averageRisk === 'number' ? data.averageRisk : (data.avg || 0);
+  });
+
+  const chartConfig = {
+    type: 'radar',
+    data: {
+      labels: principles,
+      datasets: [{
+        label: 'Ethical Risk Level (0-4)',
+        data: scores,
+        backgroundColor: 'rgba(239, 68, 68, 0.2)', // Red-ish with opacity
+        borderColor: '#ef4444', // Red
+        pointBackgroundColor: '#ef4444',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: '#ef4444',
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Ethical Risk Profile (Radar View)',
+          font: { size: 16, weight: 'bold' }
+        },
+        legend: { display: false },
+        datalabels: {
+          display: false // Too cluttered on radar usually
+        }
+      },
+      scales: {
+        r: {
+          angleLines: {
+            display: true
+          },
+          suggestedMin: 0,
+          suggestedMax: 4,
+          ticks: {
+            stepSize: 1,
+            backdropColor: 'transparent',
+            font: { size: 12 }
+          },
+          pointLabels: {
+            font: {
+              size: 11,
+              weight: 'bold'
+            }
+          }
+        }
+      }
+    }
+  };
+
+  return generateChartImagePuppeteer(chartConfig, 800, 700, browser);
 }
 
 /**
@@ -337,11 +414,44 @@ async function generatePrincipleImportanceChart(byPrincipleOverall, browser = nu
 async function generatePrincipleEvaluatorHeatmap(byPrincipleTable, evaluatorsWithScores, browser = null) {
   // Implementation similar to chartjs-node-canvas version
   // but using Puppeteer
+  // Ensure evaluatorsWithScores is an array
+
+  const safeEvaluators = Array.isArray(evaluatorsWithScores) ? evaluatorsWithScores : [];
+
+  if (safeEvaluators.length === 0) {
+    console.warn('⚠️ generatePrincipleEvaluatorHeatmap: No evaluators provided');
+  }
+
+  const principles = Object.keys(byPrincipleTable || {});
+  const datasets = principles.map((principle, index) => {
+    const principleData = byPrincipleTable[principle];
+    // Map each evaluator to their score for this principle
+    const data = safeEvaluators.map(evaluator => {
+      if (!principleData || !principleData.evaluators) return null;
+      const evalItem = principleData.evaluators.find(e => e.userId === evaluator.userId);
+      return evalItem ? evalItem.score : null;
+    });
+
+    // Color palette for principles
+    const colors = [
+      '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'
+    ];
+    const color = colors[index % colors.length];
+
+    return {
+      label: principle,
+      data: data,
+      backgroundColor: color,
+      borderColor: '#fff',
+      borderWidth: 1
+    };
+  });
+
   const chartConfig = {
     type: 'bar',
     data: {
-      labels: evaluatorsWithScores.map(e => e.name || e.role),
-      datasets: [] // Build datasets for each principle
+      labels: safeEvaluators.map(e => e.name || e.role),
+      datasets: datasets
     },
     options: {
       responsive: true,
@@ -349,13 +459,106 @@ async function generatePrincipleEvaluatorHeatmap(byPrincipleTable, evaluatorsWit
       plugins: {
         title: {
           display: true,
-          text: 'Role × Principle Heatmap'
+          text: 'Role × Principle Heatmap',
+          font: { size: 16, weight: 'bold' }
+        },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              return `${context.dataset.label}: ${context.raw !== null ? context.raw : 'N/A'}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 4,
+          title: { display: true, text: 'Risk Score (0-4)' }
+        },
+        x: {
+          title: { display: true, text: 'Evaluator / Role' }
         }
       }
     }
   };
 
   return generateChartImagePuppeteer(chartConfig, 1400, 800, browser);
+}
+
+/**
+ * NEW: Generate Risk Radar Chart (Spider Chart)
+ * Visualizes the risk profile across all principles
+ */
+async function generateRiskRadarChart(byPrincipleOverall, browser = null) {
+  if (!byPrincipleOverall || typeof byPrincipleOverall !== 'object') {
+    throw new Error('byPrincipleOverall must be a non-null object');
+  }
+
+  const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
+  if (principles.length === 0) throw new Error('No valid principles found');
+
+  const scores = principles.map(p => {
+    const data = byPrincipleOverall[p];
+    if (!data) return 0;
+    // Use Average Risk (Normalized 0-4) for consistent scale on Radar
+    return typeof data.averageRisk === 'number' ? data.averageRisk : (data.avg || 0);
+  });
+
+  const chartConfig = {
+    type: 'radar',
+    data: {
+      labels: principles,
+      datasets: [{
+        label: 'Ethical Risk Level (0-4)',
+        data: scores,
+        backgroundColor: 'rgba(239, 68, 68, 0.2)', // Red-ish with opacity
+        borderColor: '#ef4444', // Red
+        pointBackgroundColor: '#ef4444',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: '#ef4444',
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Ethical Risk Profile (Radar View)',
+          font: { size: 16, weight: 'bold' }
+        },
+        legend: { display: false },
+        datalabels: {
+          display: false
+        }
+      },
+      scales: {
+        r: {
+          angleLines: {
+            display: true
+          },
+          suggestedMin: 0,
+          suggestedMax: 4,
+          ticks: {
+            stepSize: 1,
+            backdropColor: 'transparent',
+            font: { size: 12 }
+          },
+          pointLabels: {
+            font: {
+              size: 11,
+              weight: 'bold'
+            }
+          }
+        }
+      }
+    }
+  };
+
+  return generateChartImagePuppeteer(chartConfig, 800, 700, browser);
 }
 
 /**
@@ -708,7 +911,24 @@ async function generateAllCharts(reportData) {
 
     const { projectId, questionnaireKey, scoring, evaluators, tensions, coverage } = reportData;
 
-    // Step 1: Initialize with placeholders for all required charts
+    // FIX: Resolve evaluators.withScores if it is a function (lazy loader pattern from reportMetricsService)
+    let resolvedEvaluatorsWithScores = [];
+    if (evaluators) {
+      if (typeof evaluators.withScores === 'function') {
+        try {
+          console.log('🔄 Resolving evaluators.withScores() function for charts...');
+          resolvedEvaluatorsWithScores = await evaluators.withScores(null);
+          console.log(`✅ Resolved ${resolvedEvaluatorsWithScores.length} evaluators with scores.`);
+        } catch (e) {
+          console.error('⚠️ Failed to resolve evaluators.withScores:', e.message);
+          resolvedEvaluatorsWithScores = evaluators.submitted || [];
+        }
+      } else if (Array.isArray(evaluators.withScores)) {
+        resolvedEvaluatorsWithScores = evaluators.withScores;
+      } else {
+        resolvedEvaluatorsWithScores = evaluators.submitted || [];
+      }
+    }
     console.log('📊 Initializing required charts with placeholders (Puppeteer)...');
     const charts = await initializeRequiredCharts(projectId, questionnaireKey);
 
@@ -720,14 +940,17 @@ async function generateAllCharts(reportData) {
         console.log('📊 Generating principleBarChart (Puppeteer)...');
         const pngBuffer = await generatePrincipleBarChart(scoring.byPrincipleOverall, browser);
 
-        if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
+        // FIX: Handle Uint8Array from Puppeteer
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.principleBarChart = createChartResult({
             chartId: 'principleBarChart',
             type: CHART_TYPES.BAR,
             status: CHART_STATUS.READY,
             title: 'Ethical Principles Risk Overview',
             subtitle: 'ERC scores by principle (0-4 scale)',
-            pngBuffer,
+            pngBuffer: finalBuffer,
             meta: {
               source: {
                 collections: ['scores'],
@@ -767,6 +990,37 @@ async function generateAllCharts(reportData) {
       }
     }
 
+    // Step 2.1: NEW Radar Chart (Spider Chart)
+    try {
+      if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
+        console.log('📊 Generating riskRadarChart (Puppeteer)...');
+        const pngBuffer = await generateRiskRadarChart(scoring.byPrincipleOverall, browser);
+
+        // FIX: Handle Uint8Array from Puppeteer
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+
+        if (finalBuffer && finalBuffer.length > 0) {
+          charts.riskRadarChart = createChartResult({
+            chartId: 'riskRadarChart',
+            type: CHART_TYPES.OTHER,
+            status: CHART_STATUS.READY,
+            title: 'Ethical Risk Profile',
+            pngBuffer: finalBuffer,
+            meta: {
+              source: { collections: ['scores'], projectId },
+              description: 'Radar chart showing risk distribution across principles'
+            }
+          });
+          console.log('✅ riskRadarChart generated successfully (Puppeteer)');
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ riskRadarChart generation failed (Puppeteer):', error.message);
+      chartErrors.push({ chart: 'riskRadarChart', error: error.message });
+      // Non-critical chart
+    }
+
+
 
 
     // Step 2b: Attempt to generate ethicalImportanceRanking (OPTIONAL)
@@ -775,14 +1029,16 @@ async function generateAllCharts(reportData) {
       if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
         console.log('📊 Generating ethicalImportanceRanking (Puppeteer)...');
         const pngBuffer = await generatePrincipleImportanceChart(scoring.byPrincipleOverall, browser);
-        if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
+        // FIX: Handle Uint8Array
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.ethicalImportanceRanking = createChartResult({
             chartId: 'ethicalImportanceRanking',
             type: CHART_TYPES.BAR,
             status: CHART_STATUS.READY,
             title: 'Ethical Importance Ranking',
             subtitle: 'Expert prioritization of principles (1-4)',
-            pngBuffer, // Buffer is passed here
+            pngBuffer: finalBuffer, // Buffer is passed here
             meta: {
               source: { collections: ['scores'], projectId, questionnaireKey },
               scale: { min: 1, max: 4, meaning: 'Higher = More Critical' }
@@ -798,19 +1054,44 @@ async function generateAllCharts(reportData) {
       // Optional chart, fail gracefully (charts.ethicalImportanceRanking remains undefined or placeholder from init)
       // But initializedRequiredCharts only handles REQUIRED charts. 
       // If we want it to verify, we should set it to null or error result?
-      // verification script checks for availability.
-      // Let's create an error result but marked as optional/null in final output if desired.
-      charts.ethicalImportanceRanking = createErrorChartResult({
-        chartId: 'ethicalImportanceRanking',
-        title: 'Ethical Importance Ranking',
-        error
-      });
+    }
+
+    // Step 2.1: NEW Radar Chart (Spider Chart)
+    try {
+      if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
+        console.log('📊 Generating riskRadarChart (Puppeteer)...');
+        const pngBuffer = await generateRiskRadarChart(scoring.byPrincipleOverall, browser);
+
+        // FIX: Handle Uint8Array from Puppeteer
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+
+        if (finalBuffer && finalBuffer.length > 0) {
+          charts.riskRadarChart = createChartResult({
+            chartId: 'riskRadarChart',
+            type: CHART_TYPES.OTHER,
+            status: CHART_STATUS.READY,
+            title: 'Ethical Risk Profile',
+            pngBuffer: finalBuffer,
+            meta: {
+              source: { collections: ['scores'], projectId },
+              description: 'Radar chart showing risk distribution across principles'
+            }
+          });
+          console.log('✅ riskRadarChart generated successfully (Puppeteer)');
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ riskRadarChart generation failed (Puppeteer):', error.message);
+      chartErrors.push({ chart: 'riskRadarChart', error: error.message });
     }
 
     // Step 3: Attempt to generate principleEvaluatorHeatmap
     try {
-      // FIX: Handle different evaluators data structures (withScores vs. submitted)
-      const evaluatorsList = evaluators?.withScores || evaluators?.submitted || [];
+      // FIX: Use the resolved evaluators array
+      let evaluatorsList = resolvedEvaluatorsWithScores;
+      if (!Array.isArray(evaluatorsList)) {
+        evaluatorsList = [];
+      }
 
       if (scoring?.byPrincipleTable &&
         Object.keys(scoring.byPrincipleTable).length > 0 &&
@@ -822,14 +1103,19 @@ async function generateAllCharts(reportData) {
           browser
         );
 
-        if (pngBuffer && Buffer.isBuffer(pngBuffer) && pngBuffer.length > 0) {
+        // FIX: Ensure it is a Buffer (Puppeteer might return Uint8Array)
+        const finalBuffer = (pngBuffer && !Buffer.isBuffer(pngBuffer) && pngBuffer instanceof Uint8Array)
+          ? Buffer.from(pngBuffer)
+          : pngBuffer;
+
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.principleEvaluatorHeatmap = createChartResult({
             chartId: 'principleEvaluatorHeatmap',
             type: CHART_TYPES.HEATMAP,
             status: CHART_STATUS.READY,
             title: 'Risk Distribution by Role and Principle',
             subtitle: `${evaluatorsList.length} evaluator(s)`,
-            pngBuffer,
+            pngBuffer: finalBuffer,
             meta: {
               source: {
                 collections: ['scores', 'responses'],
@@ -846,6 +1132,12 @@ async function generateAllCharts(reportData) {
           });
           console.log('✅ principleEvaluatorHeatmap generated successfully (Puppeteer)');
         } else {
+          console.error('❌ Buffer Error Details:', {
+            isBuffer: Buffer.isBuffer(pngBuffer),
+            length: pngBuffer ? pngBuffer.length : 'N/A',
+            type: typeof pngBuffer,
+            value: pngBuffer ? 'Buffered Data' : pngBuffer
+          });
           throw new Error('Generated buffer is empty or invalid');
         }
       } else {
@@ -878,13 +1170,15 @@ async function generateAllCharts(reportData) {
       if (coverage?.evidenceMetrics) {
         console.log('📊 Generating evidenceCoverageChart (Puppeteer)...');
         const pngBuffer = await generateEvidenceCoverageChart(coverage.evidenceMetrics, 0, 0, browser);
-        if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        // FIX: Handle Uint8Array
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.evidenceCoverageDonut = createChartResult({
             chartId: 'evidenceCoverageDonut',
             type: CHART_TYPES.DONUT,
             status: CHART_STATUS.READY,
             title: 'Evidence Coverage',
-            pngBuffer,
+            pngBuffer: finalBuffer,
             meta: { source: { collections: ['tensions'], projectId } }
           });
         }
@@ -898,13 +1192,14 @@ async function generateAllCharts(reportData) {
       if (tensions?.summary?.evidenceTypeDistribution) {
         console.log('📊 Generating evidenceTypeChart (Puppeteer)...');
         const pngBuffer = await generateEvidenceTypeChart(tensions.summary.evidenceTypeDistribution, browser);
-        if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.evidenceTypeDonut = createChartResult({
             chartId: 'evidenceTypeDonut',
             type: CHART_TYPES.DONUT,
             status: CHART_STATUS.READY,
             title: 'Evidence Type Distribution',
-            pngBuffer,
+            pngBuffer: finalBuffer,
             meta: { source: { collections: ['tensions'], projectId } }
           });
         }
@@ -924,13 +1219,14 @@ async function generateAllCharts(reportData) {
           else severityDist.medium++;
         });
         const pngBuffer = await generateTensionSeverityChart(severityDist, browser);
-        if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.tensionSeverityChart = createChartResult({
             chartId: 'tensionSeverityChart',
             type: CHART_TYPES.BAR,
             status: CHART_STATUS.READY,
-            title: 'Tension Severity Distribution',
-            pngBuffer,
+            title: 'Tension Severity',
+            pngBuffer: finalBuffer,
             meta: { source: { collections: ['tensions'], projectId } }
           });
         }
@@ -944,13 +1240,14 @@ async function generateAllCharts(reportData) {
       if (tensions?.summary) {
         console.log('📊 Generating tensionReviewStateChart (Puppeteer)...');
         const pngBuffer = await generateTensionReviewStateChart(tensions.summary, browser);
-        if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+        const finalBuffer = (pngBuffer) ? Buffer.from(pngBuffer) : null;
+        if (finalBuffer && finalBuffer.length > 0) {
           charts.tensionReviewStateChart = createChartResult({
             chartId: 'tensionReviewStateChart',
             type: CHART_TYPES.DONUT,
             status: CHART_STATUS.READY,
-            title: 'Tension Review Status',
-            pngBuffer,
+            title: 'Tensions Review Status',
+            pngBuffer: finalBuffer,
             meta: { source: { collections: ['tensions'], projectId } }
           });
         }
@@ -985,14 +1282,15 @@ async function generateAllCharts(reportData) {
 
 module.exports = {
   generatePrincipleBarChart,
+  generateRiskRadarChart,
   generatePrincipleEvaluatorHeatmap,
   generateEvidenceCoverageChart,
   generateEvidenceTypeChart,
   generateTensionSeverityChart,
   generateTensionReviewStateChart,
   generateTeamCompletionDonut,
-  generatePrincipleImportanceChart, // Export new function
+  generatePrincipleImportanceChart,
   generateChartImage: generateChartImagePuppeteer,
-  generateAllCharts // Add the new orchestration function
+  generateAllCharts
 };
 

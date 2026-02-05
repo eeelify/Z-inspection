@@ -351,6 +351,80 @@ if (usePuppeteer) {
   }
 
   /**
+   * NEW: Generate Risk Radar Chart (Spider Chart)
+   * Visualizes the risk profile across all principles
+   */
+  async function generateRiskRadarChart(byPrincipleOverall) {
+    if (!byPrincipleOverall || typeof byPrincipleOverall !== 'object') {
+      throw new Error('byPrincipleOverall must be a non-null object');
+    }
+
+    const principles = Object.keys(byPrincipleOverall).filter(p => byPrincipleOverall[p] !== null);
+    if (principles.length === 0) throw new Error('No valid principles found');
+
+    const scores = principles.map(p => {
+      const data = byPrincipleOverall[p];
+      if (!data) return 0;
+      // Use cumulative risk, capped at some reasonable visual max if needed, or normalized 0-4
+      // Use Average Risk (Normalized 0-4) for consistent scale on Radar
+      return typeof data.averageRisk === 'number' ? data.averageRisk : (data.avg || 0);
+    });
+
+    const chartConfig = {
+      type: 'radar',
+      data: {
+        labels: principles,
+        datasets: [{
+          label: 'Ethical Risk Level (0-4)',
+          data: scores,
+          backgroundColor: 'rgba(239, 68, 68, 0.2)', // Red-ish with opacity
+          borderColor: '#ef4444', // Red
+          pointBackgroundColor: '#ef4444',
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: '#ef4444',
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Ethical Risk Profile (Radar View)',
+            font: { size: 16, weight: 'bold' }
+          },
+          legend: { display: false },
+          datalabels: {
+            display: false // Too cluttered on radar usually
+          }
+        },
+        scales: {
+          r: {
+            angleLines: {
+              display: true
+            },
+            suggestedMin: 0,
+            suggestedMax: 4,
+            ticks: {
+              stepSize: 1,
+              backdropColor: 'transparent' // Hide white box behind numbers
+            },
+            pointLabels: {
+              font: {
+                size: 11,
+                weight: 'bold'
+              }
+            }
+          }
+        }
+      }
+    };
+
+    return generateChartImage(chartConfig, 700, 600); // Taller for radar
+  }
+
+  /**
    * Generate evidence coverage donut chart
    */
   async function generateEvidenceCoverageChart(evidenceTypeDistribution, tensionsWithEvidence = 0, totalTensions = 0) {
@@ -849,6 +923,33 @@ if (usePuppeteer) {
       }
     }
 
+    // Step 2.1: NEW Radar Chart (Spider Chart)
+    try {
+      if (scoring?.byPrincipleOverall && Object.keys(scoring.byPrincipleOverall).length > 0) {
+        console.log('📊 Generating riskRadarChart...');
+        const pngBuffer = await generateRiskRadarChart(scoring.byPrincipleOverall);
+
+        if (pngBuffer && Buffer.isBuffer(pngBuffer)) {
+          charts.riskRadarChart = createChartResult({
+            chartId: 'riskRadarChart',
+            type: CHART_TYPES.OTHER, // Radar isn't in standard types enum yet maybe, or use OTHER
+            status: CHART_STATUS.READY,
+            title: 'Ethical Risk Profile',
+            pngBuffer,
+            meta: {
+              source: { collections: ['scores'], projectId },
+              description: 'Radar chart showing risk distribution across principles'
+            }
+          });
+          console.log('✅ riskRadarChart generated successfully');
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ riskRadarChart generation failed:', error.message);
+      chartErrors.push({ chart: 'riskRadarChart', error: error.message });
+      // Non-critical chart, so no placeholder needed strictly, or can add one
+    }
+
     // Step 3: Attempt to generate principleEvaluatorHeatmap
     try {
       if (scoring?.byPrincipleTable &&
@@ -1019,6 +1120,7 @@ if (usePuppeteer) {
 
   module.exports = {
     generatePrincipleBarChart,
+    generateRiskRadarChart,
     generatePrincipleImportanceChart,
     generatePrincipleEvaluatorHeatmap,
     generateEvidenceCoverageChart,

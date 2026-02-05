@@ -219,6 +219,14 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     <!-- RESTORED: Ethical Principles Risk Overview Table -->
     <div class="section">
       <h3>Ethical Principles Risk Overview</h3>
+      
+      <!-- NEW: Radar Chart Visualization -->
+      ${chartImages.riskRadarChart ? `
+      <div style="text-align: center; margin-bottom: 20px; page-break-inside: avoid;">
+        <img src="${chartImages.riskRadarChart}" style="max-width: 80%; max-height: 500px;" alt="Ethical Risk Radar Chart" />
+      </div>
+      ` : ''}
+
       <table>
         <thead>
           <tr>
@@ -315,10 +323,18 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     </div>
     ` : ''}
 
-     <!-- HEATMAP REMOVED (User Request) --> 
-    <!--
-      The Role x Principle Risk Matrix has been removed.
-    -->
+      <!-- HEATMAP RESTORED --> 
+    ${chartImages.principleEvaluatorHeatmap ? `
+    <div class="section" style="page-break-before: always;">
+      <h3>Role x Principle Risk Heatmap</h3>
+      <div style="text-align: center; margin-bottom: 10px;">
+        <img src="${chartImages.principleEvaluatorHeatmap}" style="max-width: 100%;" alt="Role Risk Heatmap" />
+      </div>
+      <p style="font-size: 9pt; color: #6b7280; text-align: center; font-style: italic;">
+        Visualizes the consensus and divergence in risk assessment across different expert roles.
+      </p>
+    </div>
+    ` : ''}
   </div>
 
   <!-- PAGE 2: TENSIONS & RECOMMENDATIONS -->
