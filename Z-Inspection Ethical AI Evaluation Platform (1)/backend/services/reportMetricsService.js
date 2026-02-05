@@ -11,6 +11,7 @@ const User = mongoose.model('User');
 // Use canonical risk scale utility
 const { classifyRisk, riskLabelEN, getRiskLabel, validateRiskScaleNotInverted } = require('../utils/riskScale');
 const { computeReviewState } = require('./analyticsService');
+const { enrichReportMetrics } = require('./reportEnrichmentService');
 
 // Report semantics:
 // - For reports, we treat "included evaluators" as those who have responses WITH answers.
@@ -650,6 +651,43 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     throw new Error('Project not found');
   }
 
+  // Get responses - CRITICAL: Get ALL responses (draft and submitted) for started count
+  // Submitted responses are used for submitted count, all responses for started count
+  // ÖNEMLİ: answers field'ını da çek - MongoDB'den cevapları alabilmek için
+  // Include ALL questionnaires if questionnaireKey is null (for report generation)
+  const allResponses = await Response.find({
+    projectId: projectIdObj,
+    ...(questionnaireKey ? { questionnaireKey } : {}) // Only filter if questionnaireKey is provided
+  })
+    .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
+    .lean();
+
+  console.log(`📊 [DEBUG buildReportMetrics] Found ${allResponses.length} total responses`);
+  allResponses.forEach((r, idx) => {
+    const answersCount = r.answers ? r.answers.length : 0;
+    const hasAnswers = r.answers && Array.isArray(r.answers) && r.answers.length > 0;
+    const textAnswersCount = r.answers ? r.answers.filter(a => {
+      const text = a.answer?.text || a.answerText || '';
+      return text && text.trim().length > 0;
+    }).length : 0;
+    console.log(`  Response ${idx + 1}: userId=${r.userId}, status=${r.status}, answersCount=${answersCount}, textAnswers=${textAnswersCount}`);
+  });
+
+  // Get responses with answers (no status filter - answers exist = ready)
+  const responses = allResponses.filter(r => {
+    if (!r.answers || !Array.isArray(r.answers) || r.answers.length === 0) {
+      return false;
+    }
+    return r.answers.some(answer => {
+      if (!answer.answer) return false;
+      return answer.answer.text ||
+        answer.answer.choiceKey ||
+        answer.answer.numeric !== undefined ||
+        (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
+    });
+  });
+  console.log(`📊 [DEBUG buildReportMetrics] Found ${responses.length} responses with answers`);
+
   // CRITICAL: Get actual evaluators (not hardcoded)
   // Only includes evaluators who submitted (status="submitted") and have scores
   const evaluators = await getProjectEvaluators(projectId);
@@ -746,42 +784,6 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     console.log(`ℹ️ [DEBUG buildReportMetrics] Excluding ${projectLevelScores.length} project-level Score doc(s) from evaluator aggregation`);
   }
 
-  // Get responses - CRITICAL: Get ALL responses (draft and submitted) for started count
-  // Submitted responses are used for submitted count, all responses for started count
-  // ÖNEMLİ: answers field'ını da çek - MongoDB'den cevapları alabilmek için
-  // Include ALL questionnaires if questionnaireKey is null (for report generation)
-  const allResponses = await Response.find({
-    projectId: projectIdObj,
-    ...(questionnaireKey ? { questionnaireKey } : {}) // Only filter if questionnaireKey is provided
-  })
-    .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
-    .lean();
-
-  console.log(`📊 [DEBUG buildReportMetrics] Found ${allResponses.length} total responses`);
-  allResponses.forEach((r, idx) => {
-    const answersCount = r.answers ? r.answers.length : 0;
-    const hasAnswers = r.answers && Array.isArray(r.answers) && r.answers.length > 0;
-    const textAnswersCount = r.answers ? r.answers.filter(a => {
-      const text = a.answer?.text || a.answerText || '';
-      return text && text.trim().length > 0;
-    }).length : 0;
-    console.log(`  Response ${idx + 1}: userId=${r.userId}, status=${r.status}, answersCount=${answersCount}, textAnswers=${textAnswersCount}`);
-  });
-
-  // Get responses with answers (no status filter - answers exist = ready)
-  const responses = allResponses.filter(r => {
-    if (!r.answers || !Array.isArray(r.answers) || r.answers.length === 0) {
-      return false;
-    }
-    return r.answers.some(answer => {
-      if (!answer.answer) return false;
-      return answer.answer.text ||
-        answer.answer.choiceKey ||
-        answer.answer.numeric !== undefined ||
-        (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
-    });
-  });
-  console.log(`📊 [DEBUG buildReportMetrics] Found ${responses.length} responses with answers`);
 
   // Get tensions (all tensions for the project)
   const tensions = await Tension.find({
@@ -806,7 +808,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
 
   // REPORT MODE: Ignore "team/assigned experts" and use evaluators who have answers.
   // Status may be 'draft' even when evaluation is effectively complete.
-  const submittedResponses = responses;
+  // Fallback for scope safety - replicate responses logic
+  const submittedResponses = allResponses.filter(r => r.answers && Array.isArray(r.answers) && r.answers.length > 0);
   const submittedUserIds = new Set(
     submittedResponses
       .filter(r => r.userId)
@@ -1610,7 +1613,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   }
 
   // Build dashboardMetrics (deterministic JSON - single source of truth)
-  const dashboardMetrics = await buildDashboardMetrics(projectId, questionnaireKey);
+  const dashboardMetrics = await buildDashboardMetrics(projectId, questionnaireKey, evaluators, scoring);
 
   // Build final reportMetrics structure
   const reportMetrics = {
@@ -1621,7 +1624,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
       ownerId: project.ownerId ? project.ownerId.toString() : '',
       createdAt: project.createdAt,
       questionnaireKey: questionnaireKey || 'general-v1',
-      questionnaireVersion: responses.length > 0 ? responses[0].questionnaireVersion : 1
+      questionnaireVersion: (typeof allResponses !== 'undefined' && allResponses.length > 0) ? allResponses[0].questionnaireVersion : 1
     },
     // Include dashboardMetrics as the canonical source
     dashboardMetrics,
@@ -2049,6 +2052,86 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   topRiskyQuestions.sort((a, b) => b.totalRiskContribution - a.totalRiskContribution);
   topRiskyQuestions.splice(20);
 
+  // Calculate question counts for disclosure
+  const totalQuestions = questions.length;
+  // Quantitative: Questions that are NOT open_text
+  const quantitativeQuestions = questions.filter(q => q.answerType !== 'open_text').length;
+  // Qualitative: Questions that ARE open_text
+  const qualitativeQuestions = questions.filter(q => q.answerType === 'open_text').length;
+
+  const counts = {
+    total: totalQuestions,
+    quantitative: quantitativeQuestions,
+    qualitative: qualitativeQuestions
+  };
+
+  // Build final report metrics object
+  const reportMetrics = {
+    projectId: projectIdObj.toString(),
+    questionnaireKey: questionnaireKey || 'general-v1',
+    updatedAt: new Date().toISOString(),
+    scale: { min: 0, max: 4 },
+    thresholds,
+    participation: {
+      assignedCount,
+      submittedCount,
+      byRole: Object.values(byRole)
+    },
+    evaluators: uniqueEvaluators, // Actual evaluators from scores collection
+    principleBar,
+    rolePrincipleHeatmap: {
+      roles,
+      principles,
+      matrix,
+      nMatrix,
+      evaluators: uniqueEvaluators // Include for heatmap labels
+    },
+    topRiskyQuestions: topRiskyQuestions.map(q => ({
+      questionId: q.questionId,
+      principleKey: q.principleKey,
+      avgRiskScore: parseFloat(q.avgRiskScore.toFixed(2)),
+      n: q.n,
+      rolesInvolved: q.rolesInvolved,
+      weight: q.weight
+    })),
+    topRiskyQuestionContext: topRiskyQuestionContext.slice(0, 20), // Limit to 20 snippets
+    tensionsSummary,
+    tensionsTable,
+    evidenceMetrics: {
+      coveragePct: parseFloat(evidenceMetrics.coveragePct.toFixed(1)),
+      totalEvidenceCount: evidenceMetrics.totalEvidenceCount,
+      typeDistribution: evidenceMetrics.typeDistribution
+    },
+    // Scaffolding for overallTotals (will be populated by enrichReportMetrics)
+    scoring: scoring
+  };
+
+  // CRITICAL: Enrich with Overall Totals (Cumulative Risk) and Scoring Disclosure
+  // This ensures the "Cumulative Risk Volume" and "Risk Level" are properly calculated
+  // regardless of where this service is called (API or Report Generation).
+  return enrichReportMetrics(reportMetrics, counts);
+}
+
+
+/**
+ * Build metrics for the project dashboard (including tensions)
+ */
+async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, injectedScores) {
+  // Helper for risk labels
+  const riskLabelEN = (score) => {
+    if (score < 1) return 'Low';
+    if (score < 2) return 'Moderate';
+    if (score < 3) return 'High';
+    return 'Critical';
+  };
+  console.log('🔍 [DEBUG buildDashboardMetrics] Args:', { projectId, questionnaireKey, evaluatorsIsDefined: !!evaluators, scoresDataIsDefined: !!injectedScores });
+  const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+
+  // Get tensions
+  const tensions = await Tension.find({
+    projectId: projectIdObj
+  }).lean();
+
   // ============================================================
   // 5) TENSIONS SUMMARY
   // ============================================================
@@ -2284,6 +2367,22 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   let submittedCountWithText = 0;
   let emptyAnswersCount = 0;
 
+  // Fix: Fetch responses locally since they are not passed
+  const Response = mongoose.model('Response');
+  const responses = await Response.find({
+    projectId: new mongoose.Types.ObjectId(projectId),
+    ...(questionnaireKey ? { questionnaireKey } : {})
+  }).select('answers').lean();
+
+  const submittedCount = responses.length;
+
+  // Fix: Fetch questions locally
+  const Question = mongoose.model('Question');
+  const questions = await Question.find({
+    ...(questionnaireKey ? { questionnaireKey } : {})
+  }).lean();
+
+
   responses.forEach(response => {
     if (response.answers && Array.isArray(response.answers)) {
       const hasTextAnswer = response.answers.some(a => {
@@ -2384,7 +2483,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   });
 
   dataQuality.incompleteResponses.responses = incompleteResponses.map(r => ({
-    userId: r.userId.toString(),
+    userId: r.userId ? r.userId.toString() : 'unknown',
     role: r.role || 'unknown',
     answeredCount: r.answers ? r.answers.filter(a => a.questionId).length : 0,
     expectedCount: requiredQuestions.length
@@ -2401,7 +2500,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   };
 
   // Check 1: submittedCount consistency (TASK A - Single Source of Truth)
-  const dashboardSubmittedCount = team.submittedCount;
+  const dashboardSubmittedCount = submittedCount;
   const appendixSubmittedCount = evaluators.submitted.length;
 
   // Defensive guard: if appendix shows included evaluators > 0 but dashboard shows 0, throw error
@@ -2437,7 +2536,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
   // Verify that any "Higher score = higher risk" text matches the riskLabel mapping
   // This is a semantic check - we'll flag if scores suggest opposite interpretation
   // TASK 3: NO FALLBACK TO 0 - if null, skip validation
-  const avgScore = scoresData.totals?.overallAvg;
+  const avgScore = injectedScores.totals?.overallAvg;
   if (avgScore === null || avgScore === undefined) {
     return; // Skip validation if no overall average
   }
@@ -2530,8 +2629,8 @@ async function buildDashboardMetrics(projectId, questionnaireKey = null) {
     } : null,
 
     // SCORE & RISK (Conditionally Nullified)
-    scores: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? scoresData : null,
-    riskLevel: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? (scoresData?.totals?.riskLevel || 'Unknown') : 'Data Unavailable',
+    scores: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? injectedScores : null,
+    riskLevel: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? (injectedScores?.totals?.riskLevel || 'Unknown') : 'Data Unavailable',
 
     topRiskyQuestions,
     tensionsSummary,

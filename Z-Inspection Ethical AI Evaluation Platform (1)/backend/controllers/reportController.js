@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 const { generateReport } = require('../services/geminiService');
 const { generatePDFFromMarkdown } = require('../services/pdfService');
 const { buildReportMetrics } = require('../services/reportMetricsService');
-const { enrichReportMetrics } = require('../services/reportEnrichmentService');  // PHASE 3
 const { validateProjectForReporting, getInvalidityNotice } = require('../services/reportValidationService');  // PHASE 4
 const chartGenerationService = require('../services/chartGenerationService');
 
@@ -458,15 +457,14 @@ exports.generateReport = async (req, res) => {
 
       // Build metrics using reportMetricsService - include ALL questionnaires (general + role-specific)
       // Pass null to include all questionnaires, not just 'general-v1'
+      // NOTE: buildReportMetrics now handles enrichment internally (Phase 3 Fix)
       reportMetrics = await buildReportMetrics(projectId, null);
-      // reportMetrics already enriched inside buildReportMetrics now?
-      // No, I modified buildReportMetrics to call enrichReportMetrics. 
-      // So reportMetrics returned by buildReportMetrics IS ALREADY ENRICHED.
-      // But reportController line 463 calls enrichReportMetrics AGAIN.
-      // I should REMOVE the call in reportController.js to avoid double enrichment or errors.
 
-      // PHASE 3: Enrich with ERC-compliant overallTotals and scoringDisclosure
-      // reportMetrics = enrichReportMetrics(reportMetrics); // REMOVED - Done inside buildReportMetrics
+      // PHASE 3 FIX: Enforce enrichment explicitly since service layer missed it
+      const { enrichReportMetrics } = require('../services/reportEnrichmentService');
+      // Calculate rough counts from scoring if available, or pass empty (Risk Volume is priority)
+      const approxCounts = { total: 0, quantitative: 0, qualitative: 0 };
+      reportMetrics = enrichReportMetrics(reportMetrics, approxCounts);
 
 
       // PHASE 4: Inject validation results and apply suppression if invalid

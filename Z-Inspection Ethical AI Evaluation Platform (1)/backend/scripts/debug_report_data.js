@@ -147,6 +147,20 @@ async function debugReportData() {
             console.error('Error building metrics:', e);
         }
 
+        console.log('\n🔄 Running reportMetricsService.buildReportMetrics (Full Report Data)...');
+        try {
+            const reportMetrics = await reportMetricsService.buildReportMetrics(project._id);
+            console.log('✅ buildReportMetrics SUCCESS');
+            if (reportMetrics.overallTotals) {
+                console.log('Cumulative Risk:', reportMetrics.overallTotals.cumulativeRiskVolume);
+                console.log('Quantitative Questions:', reportMetrics.overallTotals.quantitativeQuestions);
+            } else {
+                console.log('❌ reportMetrics.overallTotals is MISSING');
+            }
+        } catch (e) {
+            console.error('❌ buildReportMetrics FAILED:', e);
+        }
+
     } catch (error) {
         console.error('❌ Error:', error);
     } finally {
