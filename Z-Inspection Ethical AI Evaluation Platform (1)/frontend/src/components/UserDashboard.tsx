@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { saveUserDashboardTab, loadUserDashboardTab } from "../utils/persistence";
 import {
   Bell,
   Folder,
@@ -106,9 +107,14 @@ export function UserDashboard({
   assignmentsRefreshToken,
 }: UserDashboardProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentTab, setCurrentTab] = useState<"assigned" | "finished" | "reports">(
-    "assigned"
+  const [currentTab, setCurrentTab] = useState<"assigned" | "finished" | "reports">(() =>
+    loadUserDashboardTab("assigned") as "assigned" | "finished" | "reports"
   );
+
+  // Persist tab changes
+  useEffect(() => {
+    saveUserDashboardTab(currentTab);
+  }, [currentTab]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadConversations, setUnreadConversations] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -1305,15 +1311,15 @@ export function UserDashboard({
                                               const allTensionsVoted = tensions.every((tension: any) => {
                                                 const votes = tension.votes || [];
                                                 const votedUserIds = votes.map((v: any) => String(v.userId));
-                                                
+
                                                 // Exclude the creator from required voters
                                                 // Handle createdBy as object or string
-                                                const creatorId = tension.createdBy && typeof tension.createdBy === 'object' 
-                                                  ? String(tension.createdBy._id || tension.createdBy.id) 
+                                                const creatorId = tension.createdBy && typeof tension.createdBy === 'object'
+                                                  ? String(tension.createdBy._id || tension.createdBy.id)
                                                   : String(tension.createdBy || '');
-                                                  
+
                                                 const requiredVoters = expertUserIds.filter(uid => uid !== creatorId);
-                                                
+
                                                 // If there are no required voters (e.g. only creator is assigned), consider it voted
                                                 if (requiredVoters.length === 0) return true;
 

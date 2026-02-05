@@ -21,20 +21,25 @@ import {
   UseCase,
 } from "./types";
 import { api } from "./api";
+import { saveUser, loadUser, clearUser } from "./utils/auth";
+import { saveViewState, loadViewState, clearViewState } from "./utils/persistence";
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState<string>("dashboard");
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [selectedTension, setSelectedTension] = useState<Tension | null>(null);
-  const [selectedOwner, setSelectedOwner] = useState<User | null>(null);
-  const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null);
-  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
-  
+  // Load initial view state from storage if available
+  const initialViewState = loadViewState();
+
+  const [currentUser, setCurrentUser] = useState<User | null>(() => loadUser());
+  const [currentView, setCurrentView] = useState<string>(initialViewState?.currentView || "dashboard");
+  const [selectedProject, setSelectedProject] = useState<Project | null>(initialViewState?.selectedProject || null);
+  const [selectedTension, setSelectedTension] = useState<Tension | null>(initialViewState?.selectedTension || null);
+  const [selectedOwner, setSelectedOwner] = useState<User | null>(initialViewState?.selectedOwner || null);
+  const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(initialViewState?.selectedUseCase || null);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(initialViewState?.selectedReportId || null);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  
+
   const [needsPrecondition, setNeedsPrecondition] = useState(false);
   const [dashboardPreferredTab, setDashboardPreferredTab] = useState<"assigned" | "finished" | null>(null);
   const [assignmentsRefreshToken, setAssignmentsRefreshToken] = useState(0);
@@ -106,12 +111,12 @@ function App() {
     };
 
     fetchAllData();
-    
+
     // Listen for projects update events (e.g., after assignment)
     const handleProjectsUpdate = (event: CustomEvent) => {
       const updatedProjects = event.detail;
       setProjects(updatedProjects);
-      
+
       // Also update selectedProject if it exists and is in the updated list
       setSelectedProject(prev => {
         if (!prev) return prev;
@@ -119,9 +124,9 @@ function App() {
         return updatedProject || prev;
       });
     };
-    
+
     window.addEventListener('projects-updated', handleProjectsUpdate as EventListener);
-    
+
     // Periodically refresh projects (every 10 seconds) to catch assignment updates
     const refreshInterval = setInterval(() => {
       if (currentUser) {
@@ -142,7 +147,7 @@ function App() {
                 return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
               });
               setProjects(formattedProjects);
-              
+
               // Also update selectedProject if it exists
               setSelectedProject(prev => {
                 if (!prev) return prev;
@@ -154,12 +159,26 @@ function App() {
           .catch(err => console.error('Error refreshing projects:', err));
       }
     }, 10000); // Refresh every 10 seconds
-    
+
     return () => {
       window.removeEventListener('projects-updated', handleProjectsUpdate as EventListener);
       clearInterval(refreshInterval);
     };
   }, [currentUser]);
+
+  // Persist view state whenever navigation changes
+  useEffect(() => {
+    if (currentUser) {
+      saveViewState({
+        currentView,
+        selectedProject,
+        selectedTension,
+        selectedOwner,
+        selectedUseCase,
+        selectedReportId
+      });
+    }
+  }, [currentUser, currentView, selectedProject, selectedTension, selectedOwner, selectedUseCase, selectedReportId]);
 
   // Minimal URL-based route support for report review screen: /reports/:reportId/review
   useEffect(() => {
@@ -187,7 +206,7 @@ function App() {
       const loginUrl = api('/api/login');
       console.log('Login URL:', loginUrl);
       console.log('Sending login request...');
-      
+
       const response = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,10 +219,11 @@ function App() {
         const userDB = await response.json();
         const userFrontend = {
           ...userDB,
-          id: userDB._id 
+          id: userDB._id
         };
 
         setCurrentUser(userFrontend);
+        saveUser(userFrontend);
 
         // Fetch profile image separately (login response excludes profileImage for performance)
         (async () => {
@@ -215,7 +235,9 @@ function App() {
               const img = await imgRes.json();
               setCurrentUser((prev) => {
                 if (!prev) return prev;
-                return { ...(prev as any), profileImage: img.profileImage || null } as any;
+                const updated = { ...(prev as any), profileImage: img.profileImage || null } as any;
+                saveUser(updated);
+                return updated;
               });
             }
           } catch (e) {
@@ -240,7 +262,7 @@ function App() {
         message: error.message,
         stack: error.stack
       });
-      
+
       if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed to fetch'))) {
         alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
       } else {
@@ -260,7 +282,11 @@ function App() {
         });
         if (res.ok) {
           const updatedUser = await res.json();
-          setCurrentUser(prev => prev ? { ...prev, ...updatedUser } : prev);
+          setCurrentUser(prev => {
+            const updated = prev ? { ...prev, ...updatedUser } : prev;
+            if (updated) saveUser(updated);
+            return updated;
+          });
           setNeedsPrecondition(false);
         } else {
           console.error('Approval save failed');
@@ -273,6 +299,8 @@ function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    clearUser();
+    clearViewState();
     setCurrentView("dashboard");
     setSelectedProject(null);
     setNeedsPrecondition(false);
@@ -372,7 +400,7 @@ function App() {
             .filter((ep: any) => ep.progress < 100)
             .map((ep: any) => `- ${ep.name || 'Expert'}: ${ep.progress}%`)
             .join('\n');
-          
+
           alert(
             `Please wait for other experts to complete their evaluations.\n\n` +
             `Progress: ${completedExperts}/${totalExperts} experts completed (100%)\n` +
@@ -451,7 +479,7 @@ function App() {
         const newProjectDB = await response.json();
         const newProjectFrontend: Project = {
           ...newProjectDB,
-          id: newProjectDB._id, 
+          id: newProjectDB._id,
           isNew: true,
         };
         setProjects([newProjectFrontend, ...projects]);
@@ -505,9 +533,9 @@ function App() {
 
       if (response.ok) {
         const newUseCaseDB = await response.json();
-        const newUseCaseFrontend = { 
-            ...newUseCaseDB, 
-            id: newUseCaseDB._id 
+        const newUseCaseFrontend = {
+          ...newUseCaseDB,
+          id: newUseCaseDB._id
         };
         // Listeyi güncelle ki anında görebilelim
         setUseCases([newUseCaseFrontend, ...useCases]);
@@ -544,7 +572,7 @@ function App() {
   // --- TENSION EKLEME ---
   const handleCreateTension = async (tensionData: any) => {
     if (!selectedProject) return;
-    
+
     try {
       const response = await fetch(api('/api/tensions'), {
         method: 'POST',
@@ -976,7 +1004,7 @@ function App() {
   };
 
   const content = renderContent();
-  
+
   // If content is null, show dashboard as fallback to prevent white screen
   if (content === null) {
     // If we're not on dashboard and content is null, show dashboard

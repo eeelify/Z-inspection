@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { saveAdminDashboardTab, loadAdminDashboardTab } from '../utils/persistence';
 import { Plus, Folder, MessageSquare, Users, LogOut, Search, BarChart3, UserPlus, X, Link as LinkIcon, CheckCircle2, Trash2, Bell, Clock, FileText, Download } from 'lucide-react';
 import { Project, User, UseCase } from '../types';
 import { fetchUserProgress } from '../utils/userProgress';
@@ -170,7 +171,14 @@ export function AdminDashboardEnhanced({
   onLogout,
   onUpdateUser
 }: AdminDashboardEnhancedProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'>(() =>
+    loadAdminDashboardTab('dashboard') as 'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'
+  );
+
+  // Persist tab changes
+  useEffect(() => {
+    saveAdminDashboardTab(activeTab);
+  }, [activeTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAssignExpertsModal, setShowAssignExpertsModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -1397,18 +1405,22 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCa
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex -space-x-2">
-                          {assignedExperts.length === 0 ? (
+                          {assignedExperts
+                            .filter((expert: User) => expert.id !== useCase.ownerId) // Hide owner from assigned experts list
+                            .length === 0 ? (
                             <span className="text-xs text-gray-400 italic">None</span>
                           ) : (
-                            assignedExperts.map((expert: User) => (
-                              <div
-                                key={expert.id}
-                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                title={`${expert.name} (${expert.role})`}
-                              >
-                                {expert.name.charAt(0)}
-                              </div>
-                            ))
+                            assignedExperts
+                              .filter((expert: User) => expert.id !== useCase.ownerId)
+                              .map((expert: User) => (
+                                <div
+                                  key={expert.id}
+                                  className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                  title={`${expert.name} (${expert.role})`}
+                                >
+                                  {expert.name.charAt(0)}
+                                </div>
+                              ))
                           )}
                         </div>
                       </td>

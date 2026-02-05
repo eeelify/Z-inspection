@@ -459,8 +459,15 @@ exports.generateReport = async (req, res) => {
       // Build metrics using reportMetricsService - include ALL questionnaires (general + role-specific)
       // Pass null to include all questionnaires, not just 'general-v1'
       reportMetrics = await buildReportMetrics(projectId, null);
+      // reportMetrics already enriched inside buildReportMetrics now?
+      // No, I modified buildReportMetrics to call enrichReportMetrics. 
+      // So reportMetrics returned by buildReportMetrics IS ALREADY ENRICHED.
+      // But reportController line 463 calls enrichReportMetrics AGAIN.
+      // I should REMOVE the call in reportController.js to avoid double enrichment or errors.
+
       // PHASE 3: Enrich with ERC-compliant overallTotals and scoringDisclosure
-      reportMetrics = enrichReportMetrics(reportMetrics);
+      // reportMetrics = enrichReportMetrics(reportMetrics); // REMOVED - Done inside buildReportMetrics
+
 
       // PHASE 4: Inject validation results and apply suppression if invalid
       reportMetrics.validityStatus = validation.validityStatus;

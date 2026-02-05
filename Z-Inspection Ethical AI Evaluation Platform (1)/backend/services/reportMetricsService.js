@@ -1528,6 +1528,19 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         scoring.byPrincipleOverall
       );
 
+      // Calculate question counts for disclosure
+      const totalQuestionsCount = questions.length;
+      const qualitativeQuestionsCount = questions.filter(q => q.answerType === 'open_text').length;
+      const quantitativeQuestionsCount = totalQuestionsCount - qualitativeQuestionsCount;
+
+      const counts = {
+        total: totalQuestionsCount,
+        quantitative: quantitativeQuestionsCount,
+        qualitative: qualitativeQuestionsCount
+      };
+
+      // PHASE 3: Enrich with ERC-compliant overallTotals and scoringDisclosure
+      reportMetrics = enrichReportMetrics(reportMetrics, counts);
       // NEW: Generate Ethical Importance Ranking Chart
       try {
         charts.ethicalImportanceRanking = await chartGenerationService.generatePrincipleImportanceChart(
