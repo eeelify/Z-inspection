@@ -1153,9 +1153,21 @@ export function AdminDashboardEnhanced({
 
 // --- SUB COMPONENTS ---
 
-// Project Progress Component - Atanan kullanıcıların progress ortalamasını hesaplar
+// Project Progress Component - Admin için proje ilerlemesini gösterir
+// NOT: Hesaplama kaynağı olarak backend'in sağladığı `project.progress` alanını kullanır.
+// Böylece Admin Dashboard'daki progress, Project Detail ve diğer admin ekranlarıyla tutarlı olur.
+
+function isProgressContributorForAdminDashboard(role?: string) {
+  const r = String(role || '').toLowerCase();
+  if (!r) return false;
+  if (r === 'admin') return false;
+  if (r === 'use-case-owner') return false;
+  if (r === 'usecaseowner') return false;
+  if (r.includes('use-case-owner')) return false;
+  return true;
+}
 function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }: { project: Project; users: User[]; onViewProject: (p: Project) => void; onDeleteProject: (id: string) => void }) {
-  const [averageProgress, setAverageProgress] = useState<number>(0);
+  const [averageProgress, setAverageProgress] = useState<number>(project.progress ?? 0);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -1172,13 +1184,29 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
 
       try {
         const assignedUserIds = project.assignedUsers;
-        const progressPromises = assignedUserIds.map(async (userId: string) => {
+
+        // Sadece katkı sağlayan uzman rollerini (admin / use-case-owner hariç) dahil et
+        const contributorIds = assignedUserIds.filter((userId: string) => {
+          const user = users.find(u => (u.id || (u as any)._id) === userId);
+          if (!user) return false;
+          return isProgressContributorForAdminDashboard(user.role);
+        });
+
+        if (contributorIds.length === 0) {
+          if (mounted) {
+            setAverageProgress(0);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const progressPromises = contributorIds.map(async (userId: string) => {
           const user = users.find(u => (u.id || (u as any)._id) === userId);
           if (!user) return 0;
 
           try {
             const progress = await fetchUserProgress(project, user);
-            return progress;
+            return typeof progress === 'number' ? progress : 0;
           } catch (error) {
             console.error(`Error fetching progress for user ${userId}:`, error);
             return 0;
@@ -1186,19 +1214,12 @@ function ProjectProgressCard({ project, users, onViewProject, onDeleteProject }:
         });
 
         const progresses = await Promise.all(progressPromises);
-        const validProgresses = progresses.filter(p => p > 0);
+        const sum = progresses.reduce((acc, p) => acc + (typeof p === 'number' ? p : 0), 0);
+        const avg = sum / contributorIds.length;
 
-        if (validProgresses.length > 0) {
-          const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
-          if (mounted) {
-            setAverageProgress(Math.round(average));
-            setLoading(false);
-          }
-        } else {
-          if (mounted) {
-            setAverageProgress(0);
-            setLoading(false);
-          }
+        if (mounted) {
+          setAverageProgress(Math.max(0, Math.min(100, Math.round(avg))));
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error calculating average progress:', error);
@@ -2267,15 +2288,20 @@ function ReportsTab({ projects, currentUser, users }: any) {
     }
   };
 
-  // Fetch progress for all projects
+  // Fetch progress for all projects (admin view) - same team-average logic as Project Detail
   useEffect(() => {
     const fetchAllProgresses = async () => {
-      if (!users || users.length === 0) return;
+      if (!projects || projects.length === 0 || !users || users.length === 0) {
+        setProjectProgresses({});
+        return;
+      }
 
       const progresses: Record<string, number> = {};
+
       await Promise.all(
         projects.map(async (project: any) => {
           const projectId = project.id || (project as any)._id;
+
           if (!project.assignedUsers || project.assignedUsers.length === 0) {
             progresses[projectId] = 0;
             return;
@@ -2283,14 +2309,26 @@ function ReportsTab({ projects, currentUser, users }: any) {
 
           try {
             const assignedUserIds = project.assignedUsers;
-            const progressPromises = assignedUserIds.map(async (userId: string) => {
+
+            const contributorIds = assignedUserIds.filter((userId: string) => {
+              const user = users.find((u: any) => (u.id || (u as any)._id) === userId);
+              if (!user) return false;
+              return isProgressContributorForAdminDashboard(user.role);
+            });
+
+            if (contributorIds.length === 0) {
+              progresses[projectId] = 0;
+              return;
+            }
+
+            const progressPromises = contributorIds.map(async (userId: string) => {
               const user = users.find((u: any) => (u.id || (u as any)._id) === userId);
               if (!user) return 0;
 
               try {
                 const { fetchUserProgress } = await import('../utils/userProgress');
                 const progress = await fetchUserProgress(project, user);
-                return progress;
+                return typeof progress === 'number' ? progress : 0;
               } catch (error) {
                 console.error(`Error fetching progress for user ${userId}:`, error);
                 return 0;
@@ -2298,14 +2336,10 @@ function ReportsTab({ projects, currentUser, users }: any) {
             });
 
             const progressesList = await Promise.all(progressPromises);
-            const validProgresses = progressesList.filter(p => p > 0);
+            const sum = progressesList.reduce((acc, p) => acc + (typeof p === 'number' ? p : 0), 0);
+            const avg = sum / contributorIds.length;
 
-            if (validProgresses.length > 0) {
-              const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
-              progresses[projectId] = Math.round(average);
-            } else {
-              progresses[projectId] = 0;
-            }
+            progresses[projectId] = Math.max(0, Math.min(100, Math.round(avg)));
           } catch (error) {
             console.error(`Error calculating progress for project ${projectId}:`, error);
             progresses[projectId] = 0;
@@ -2320,6 +2354,8 @@ function ReportsTab({ projects, currentUser, users }: any) {
       fetchAllProgresses();
       const interval = setInterval(fetchAllProgresses, 5000);
       return () => clearInterval(interval);
+    } else {
+      setProjectProgresses({});
     }
   }, [projects, users]);
 
