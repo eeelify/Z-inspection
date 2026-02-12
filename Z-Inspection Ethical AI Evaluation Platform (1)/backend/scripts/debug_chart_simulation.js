@@ -35,62 +35,32 @@ if (!process.env.MONGODB_URI) {
     process.exit(1);
 }
 
-const ScoreSchema = new mongoose.Schema({
-    projectId: mongoose.Schema.Types.ObjectId,
-    userId: mongoose.Schema.Types.ObjectId,
-    role: String,
-    questionnaireKey: String,
-    byPrinciple: mongoose.Schema.Types.Mixed,
-    totals: mongoose.Schema.Types.Mixed
-}, { strict: false });
-
-const ResponseSchema = new mongoose.Schema({
-    projectId: mongoose.Schema.Types.ObjectId,
-    userId: String,
-    role: String,
-    questionnaireKey: String,
-    status: String,
-    submittedAt: Date
-}, { strict: false });
-
-const ProjectSchema = new mongoose.Schema({
-    title: String,
-    assignedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
-}, { strict: false });
-
-const UserSchema = new mongoose.Schema({
-    name: String,
-    email: String,
-    role: String
-}, { strict: false });
-
 async function debugChartSimulation() {
     try {
-        // Clean URI if needed
         const uri = process.env.MONGODB_URI;
         await mongoose.connect(uri);
 
-        // Helper to safe register
-        const safeRegister = (name, schema) => {
-            if (!mongoose.models[name]) {
-                try {
-                    mongoose.model(name, schema);
-                } catch (e) { /* ignore */ }
-            }
-        };
+        // Define models that are normally in server.js but missing in models/
+        // Use strict: false to accommodate any schema
+        if (!mongoose.models.Project) mongoose.model('Project', new mongoose.Schema({}, { strict: false }));
+        if (!mongoose.models.User) mongoose.model('User', new mongoose.Schema({}, { strict: false }));
+        if (!mongoose.models.Tension) mongoose.model('Tension', new mongoose.Schema({}, { strict: false }));
+        if (!mongoose.models.UseCase) mongoose.model('UseCase', new mongoose.Schema({}, { strict: false }));
+        if (!mongoose.models.Evaluation) mongoose.model('Evaluation', new mongoose.Schema({}, { strict: false }));
+        if (!mongoose.models.GeneralQuestionsAnswers) mongoose.model('GeneralQuestionsAnswers', new mongoose.Schema({}, { strict: false }));
 
-        safeRegister('Project', new mongoose.Schema({}, { strict: false }));
-        safeRegister('Response', new mongoose.Schema({}, { strict: false }));
-        safeRegister('Score', new mongoose.Schema({}, { strict: false }));
-        safeRegister('User', new mongoose.Schema({}, { strict: false }));
-        safeRegister('ProjectAssignment', new mongoose.Schema({}, { strict: false }));
-        safeRegister('Question', new mongoose.Schema({}, { strict: false }));
-        safeRegister('Tension', new mongoose.Schema({}, { strict: false }));
-        safeRegister('UseCase', new mongoose.Schema({}, { strict: false }));
-        const Project = mongoose.model('Project'); // Retrieve the registered model
-        const Score = mongoose.model('Score');
-        const Response = mongoose.model('Response');
+        // Use REAL models where they exist (and are required by service)
+        // We don't need to manually require them if reportMetricsService does it,
+        // BUT reportMetricsService does require them, so we just let it happen.
+        // We only provide the ones it EXPECTS to be there (from server.js).
+
+        const Project = mongoose.model('Project');
+        // Score and Response will be loaded by reportMetricsService
+        // But we need to access them for this script
+        const Score = require('../models/score');
+        const Response = require('../models/response');
         const User = mongoose.model('User');
+
 
         const projects = await Project.find({}).sort({ createdAt: -1 }).limit(1);
         if (!projects.length) throw new Error('No project found');
@@ -105,49 +75,26 @@ async function debugChartSimulation() {
         const responses = await Response.find({ projectId: project._id }).lean();
         const scores = await Score.find({ projectId: project._id }).lean();
 
+        // TEST: Check if overallTotals is defined (the original bug)
+        const hasOverallTotals = metrics && metrics.overallTotals !== undefined;
+        const hasScoringDisclosure = metrics && metrics.scoringDisclosure !== undefined;
+
         const result = {
             project: { title: project.title, id: project._id },
             counts: { responses: responses.length, scores: scores.length },
             responseStatuses: responses.map(r => r.status),
-            // Use the REAL metrics data
-            metrics_byPrincipleTable: metrics.scoring?.byPrincipleTable,
-            // Resolve evaluators with scores using the service logic
-            evaluators_withScores: await metrics.evaluators.withScores(null),
-            message: "Data fetched."
+            // Critical test results
+            testResults: {
+                metricsReturned: !!metrics,
+                hasOverallTotals,
+                hasScoringDisclosure,
+                overallTotalsKeys: hasOverallTotals ? Object.keys(metrics.overallTotals) : [],
+                scoringKeys: metrics?.scoring ? Object.keys(metrics.scoring) : []
+            },
+            message: hasOverallTotals
+                ? "✅ SUCCESS: buildReportMetrics returned valid metrics with overallTotals!"
+                : "❌ FAIL: overallTotals is still undefined"
         };
-
-        const seenUsers = new Set();
-        for (const r of responses) {
-            const userIdStr = r.userId ? r.userId.toString() : null;
-            if (!userIdStr || seenUsers.has(userIdStr)) continue;
-            seenUsers.add(userIdStr);
-
-            const user = await User.findById(userIdStr).lean();
-            const userScores = scores.filter(s => s.userId.toString() === userIdStr);
-
-            const exactScore = scores.find(s =>
-                s.userId.toString() === userIdStr &&
-                (s.questionnaireKey === r.questionnaireKey || (!s.questionnaireKey && r.questionnaireKey === 'general-v1'))
-            );
-
-            result.evaluators.push({
-                user: user ? user.name : 'Unknown',
-                userId: userIdStr,
-                role: r.role,
-                responseQKey: r.questionnaireKey,
-                hasAnyScore: userScores.length > 0,
-                hasExactScore: !!exactScore,
-                scoreKeys: userScores.map(s => s.questionnaireKey),
-                scoreDocPrinciplesCount: exactScore && exactScore.byPrinciple ? Object.keys(exactScore.byPrinciple).length : 0
-            });
-        }
-
-        const validEvaluators = result.evaluators.filter(e => e.hasAnyScore); // Checked stricter condition before, let's look at ANY score
-        if (validEvaluators.length === 0) {
-            result.message = "CHART WILL BE EMPTY. Valid Evaluators: 0";
-        } else {
-            result.message = `Chart should show ${validEvaluators.length} evaluators.`;
-        }
 
         fs.writeFileSync('sim_output.json', JSON.stringify(result, null, 2));
         console.log('✅ Wrote sim_output.json');

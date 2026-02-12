@@ -37,27 +37,46 @@ function enrichReportMetrics(reportMetrics, counts = {}) {
         };
     } else {
         const totalCumulativeRisk = principleValues.reduce((sum, p) => sum + (p.cumulativeRisk || p.risk || 0), 0);
-        const totalQuestionCount = principleValues.reduce((sum, p) => sum + (p.questionCount || p.n || 0), 0);
-        const averageERCPerQuestion = totalQuestionCount > 0 ? totalCumulativeRisk / totalQuestionCount : 0;
-        const normalized = ercConfig.getRiskLevel(averageERCPerQuestion);
 
-        // REGRESSION GUARD
-        const wrongNormalized = ercConfig.getRiskLevel(totalCumulativeRisk);
-        if (normalized.level === wrongNormalized.level && Math.abs(totalCumulativeRisk - averageERCPerQuestion) > 0.01) {
-            console.warn(`⚠️  OVERALL REGRESSION DETECTED: Risk label would be same for sum (${totalCumulativeRisk.toFixed(2)}) and avg (${averageERCPerQuestion.toFixed(2)})`);
+        // OLD (Buggy for Risk Norm, but needed for Display): Unique Question Count
+        const totalQuestionCount = principleValues.reduce((sum, p) => sum + (p.questionCount || p.n || 0), 0);
+
+        // NEW (Fixed): Normalize by TOTAL ANSWERS (sum of all 'n' from all scores)
+        const totalAnswerCount = principleValues.reduce((sum, p) => sum + (p.totalAnswers || p.n || 0), 0);
+
+        // Denominator must be total answers to get correct average per answer
+        const averageERCPerQuestion = totalAnswerCount > 0 ? totalCumulativeRisk / totalAnswerCount : 0;
+
+        // --- SENSITIVITY OVERRIDE (DILUTION FIX) ---
+        // Calculate max average across principles to prevent a single high-risk area being hidden by volume
+        const principleAverages = principleValues.map(p => {
+            const n = p.totalAnswers || p.n || 0;
+            return n > 0 ? (p.cumulativeRisk || p.risk || 0) / n : 0;
+        });
+        const maxPrincipleAverage = Math.max(0, ...principleAverages);
+
+        // Final sensitivity: use the higher of the overall average or the maximum principle average
+        const effectiveERC = Math.max(averageERCPerQuestion, maxPrincipleAverage);
+        const normalized = ercConfig.getRiskLevel(effectiveERC);
+
+        // REGRESSION GUARD & LOGGING
+        if (maxPrincipleAverage > averageERCPerQuestion + 0.5) {
+            console.log(`⚠️  RISK SENSITIVITY OVERRIDE: Overall Avg=${averageERCPerQuestion.toFixed(2)}, Max Principle Avg=${maxPrincipleAverage.toFixed(2)}. Promoting to ${normalized.label}.`);
         }
 
         overallTotals = {
             cumulativeRiskVolume: Math.round(totalCumulativeRisk * 100) / 100,
             quantitativeQuestionCount: totalQuestionCount,
-            averageERC: Math.round(averageERCPerQuestion * 100) / 100,
+            averageERC: Math.round(effectiveERC * 100) / 100, // Now reflects the higher sensitivity value
+            rawAverageERC: Math.round(averageERCPerQuestion * 100) / 100, // Keep raw avg for transparency if needed
+            maxPrincipleAverage: Math.round(maxPrincipleAverage * 100) / 100,
             normalizedRiskLevel: normalized.level,
             normalizedLabel: normalized.label,
             normalizedColor: normalized.color,
 
             // DEPRECATED (Backward compat - Phase 5 cleanup)
-            overallRisk: Math.round(totalCumulativeRisk * 100) / 100,  // DEPRECATED: Use cumulativeRiskVolume
-            riskLabel: normalized.label  // FIXED: Now uses normalized average
+            overallRisk: Math.round(totalCumulativeRisk * 100) / 100,
+            riskLabel: normalized.label
         };
     }
 

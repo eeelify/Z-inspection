@@ -1,0 +1,95 @@
+Connected to DB
+Project: Tutor AI – Öğrenciye Özel Yapay Zekâ Destekli Eğitim Chatbotu
+Found 8 responses
+Found 27 Transparency Questions definitions
+Found 14 Transparency Answers in Responses
+First Answer Structure:
+{
+  "questionId": "695d814a205aa3b04599f597",
+  "questionCode": "T1",
+  "answer": {
+    "choiceKey": "mostly_clear",
+    "multiChoiceKeys": []
+  },
+  "score": 4,
+  "importanceScore": null,
+  "answerSeverity": 0,
+  "notes": null,
+  "evidence": []
+}
+Corresponding Question Definition:
+{
+  "_id": "695d814a205aa3b04599f597",
+  "questionnaireKey": "general-v1",
+  "code": "T1",
+  "principle": "TRANSPARENCY",
+  "appliesToRoles": [
+    "any"
+  ],
+  "text": {
+    "en": "Is it clear to you what the AI system can and cannot do?",
+    "tr": "AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?"
+  },
+  "answerType": "single_choice",
+  "options": [
+    {
+      "key": "very_clear",
+      "label": {
+        "en": "Very clear",
+        "tr": "Çok net"
+      },
+      "answerScore": 1,
+      "_id": "6984da925bd20fc5f20de678"
+    },
+    {
+      "key": "mostly_clear",
+      "label": {
+        "en": "Mostly clear",
+        "tr": "Büyük ölçüde net"
+      },
+      "answerScore": 0.75,
+      "_id": "6984da925bd20fc5f20de679"
+    },
+    {
+      "key": "somewhat_unclear",
+      "label": {
+        "en": "Somewhat unclear",
+        "tr": "Kısmen belirsiz"
+      },
+      "answerScore": 0.5,
+      "_id": "6984da925bd20fc5f20de67a"
+    },
+    {
+      "key": "completely_unclear",
+      "label": {
+        "en": "Completely unclear",
+        "tr": "Tamamen belirsiz"
+      },
+      "answerScore": 0,
+      "_id": "6984da925bd20fc5f20de67b"
+    }
+  ],
+  "riskScore": 2,
+  "scoring": {
+    "answerScoreRange": "0-1",
+    "importanceHandledSeparately": true,
+    "method": "mapped"
+  },
+  "required": true,
+  "order": 1,
+  "tags": [],
+  "createdAt": "2026-01-06T21:40:26.005Z",
+  "updatedAt": "2026-02-12T19:51:46.991Z",
+  "__v": 0,
+  "optionScores": {
+    "very_clear": 1,
+    "mostly_clear": 0.75,
+    "somewhat_unclear": 0.5,
+    "completely_unclear": 0.25
+  },
+  "principleKey": "transparency_explainability",
+  "principleLabel": {
+    "en": "Transparency & Explainability",
+    "tr": "Şeffaflık ve Açıklanabilirlik"
+  }
+}

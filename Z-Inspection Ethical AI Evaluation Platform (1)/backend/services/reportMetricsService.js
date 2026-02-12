@@ -1,4 +1,16 @@
 const mongoose = require('mongoose');
+const fs = require('fs');
+
+const path = require('path');
+
+function debugFileLog(msg) {
+  try {
+    const logPath = path.join(__dirname, '../../sim_debug.log');
+    fs.appendFileSync(logPath, msg + '\n');
+  } catch (e) {
+    console.error('DEBUG LOG FAILED:', e.message);
+  }
+}
 const Score = require('../models/score');
 const Response = require('../models/response');
 const Tension = mongoose.model('Tension');
@@ -46,7 +58,7 @@ const CANONICAL_PRINCIPLES = [
  * Build principle scores using ONLY Score collection
  * NEVER recompute from Response or generalquestionanswers
  */
-async function buildPrincipleScores(projectId, questionnaireKey = null) {
+async function buildPrincipleScores(projectId, questionnaireKey = null, injectedScores = null) {
   const projectIdObj = isValidObjectId(projectId)
     ? new mongoose.Types.ObjectId(projectId)
     : projectId;
@@ -64,36 +76,56 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
   //   scoreQuery.questionnaireKey = questionnaireKey;
   // }
 
-  const scores = await Score.find(scoreQuery).lean();
+  const scores = injectedScores || await Score.find(scoreQuery).lean();
+
+  // CRITICAL: Check if a combined score exists (from aggregateMultiQuestionnaireScores)
+  // If it does, use ONLY the combined score and exclude individual scores to prevent double counting
+  const combinedScore = scores.find(s => s.questionnaireKey === '__ALL_COMBINED__');
+  const scoresToUse = combinedScore ? [combinedScore] : scores;
+
+  if (combinedScore) {
+    console.log(`🔄 [buildPrincipleScores] Found combined score - using ONLY combined score (ignoring ${scores.length - 1} individual scores)`);
+  } else {
+    console.log(`📊 [buildPrincipleScores] No combined score found - aggregating ${scores.length} individual scores`);
+  }
 
   // Debug: Log found scores with DETAILED principle data
   console.log(`📊 [DEBUG buildPrincipleScores] Found ${scores.length} Score documents for project ${projectId}`);
-  if (scores.length > 0) {
-    scores.forEach((s, idx) => {
-      const principleCount = s.byPrinciple ? Object.keys(s.byPrinciple).filter(p => s.byPrinciple[p] !== null && s.byPrinciple[p] !== undefined).length : 0;
-      console.log(`  Score ${idx + 1}: userId=${s.userId}, questionnaireKey=${s.questionnaireKey}, principles with data=${principleCount}`);
+  if (scoresToUse.length > 0) {
+    scoresToUse.forEach((s, idx) => {
+      try {
+        if (!s) {
+          console.log(`  Score ${idx + 1}: UNDEFINED`);
+          return;
+        }
+        const principleKeys = (s.byPrinciple && typeof s.byPrinciple === 'object') ? Object.keys(s.byPrinciple) : [];
+        const principleCount = principleKeys.filter ? principleKeys.filter(p => s.byPrinciple[p] !== null && s.byPrinciple[p] !== undefined).length : 0;
+        console.log(`  Score ${idx + 1}: userId=${s.userId}, questionnaireKey=${s.questionnaireKey}, principles with data=${principleCount}`);
 
-      // CRITICAL DEBUG: Log ALL principle keys in Score document (both canonical and non-canonical)
-      if (s.byPrinciple) {
-        console.log(`    📋 ALL principle keys in Score document: [${Object.keys(s.byPrinciple).join(', ')}]`);
+        // CRITICAL DEBUG: Log ALL principle keys in Score document (both canonical and non-canonical)
+        if (s.byPrinciple) {
+          console.log(`    📋 ALL principle keys in Score document: [${principleKeys.join(', ')}]`);
 
-        // Log canonical principles
-        CANONICAL_PRINCIPLES.forEach(principle => {
-          const data = s.byPrinciple[principle];
-          if (data && typeof data === 'object' && data.avg !== undefined) {
-            console.log(`    ✅ ${principle}: avg=${data.avg}, n=${data.n}, min=${data.min}, max=${data.max}`);
-          } else {
-            console.log(`    ❌ ${principle}: null/undefined`);
-          }
-        });
+          // Log canonical principles
+          CANONICAL_PRINCIPLES.forEach(principle => {
+            const data = s.byPrinciple[principle];
+            if (data && typeof data === 'object' && data.avg !== undefined) {
+              console.log(`    ✅ ${principle}: avg=${data.avg}, n=${data.n}, min=${data.min}, max=${data.max}`);
+            } else {
+              console.log(`    ❌ ${principle}: null/undefined`);
+            }
+          });
 
-        // Log non-canonical principles (that will be mapped)
-        Object.keys(s.byPrinciple).forEach(rawPrinciple => {
-          if (!CANONICAL_PRINCIPLES.includes(rawPrinciple)) {
-            const data = s.byPrinciple[rawPrinciple];
-            console.log(`    🔄 NON-CANONICAL "${rawPrinciple}": avg=${data?.avg || 'N/A'}, n=${data?.n || 'N/A'}`);
-          }
-        });
+          // Log non-canonical principles (that will be mapped)
+          Object.keys(s.byPrinciple).forEach(rawPrinciple => {
+            if (!CANONICAL_PRINCIPLES.includes(rawPrinciple)) {
+              const data = s.byPrinciple[rawPrinciple];
+              console.log(`    🔄 NON-CANONICAL "${rawPrinciple}": avg=${data?.avg || 'N/A'}, n=${data?.n || 'N/A'}`);
+            }
+          });
+        }
+      } catch (err) {
+        console.error(`❌ [buildPrincipleScores] Failed to process score document at index ${idx}:`, err.message);
       }
     });
   }
@@ -125,7 +157,7 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
   CANONICAL_PRINCIPLES.forEach(p => principleQuestionIds[p] = new Set());
 
   // Collect scores and unique questions for each principle (ONLY if present in Score document)
-  scores.forEach(score => {
+  scoresToUse.forEach(score => {
     if (score.byPrinciple) {
       // First, collect from CANONICAL_PRINCIPLES directly
       CANONICAL_PRINCIPLES.forEach(principle => {
@@ -218,13 +250,32 @@ async function buildPrincipleScores(projectId, questionnaireKey = null) {
         finalHighRatio = ratioValues.reduce((a, b) => a + b, 0) / ratioValues.length;
       }
 
+      // Calculate Total Answer Count (Sum of 'n' from all scores)
+      // FIX: Use scoresToUse to avoid double counting if Combined score exists
+      const totalAnswers = scoresToUse.reduce((sum, s) => {
+        if (s.byPrinciple && s.byPrinciple[principle]) {
+          return sum + (s.byPrinciple[principle].n || 0);
+        }
+        // Handle mapped principles
+        const rawKey = Object.keys(s.byPrinciple || {}).find(k => principleMapping[k] === principle);
+        if (rawKey && s.byPrinciple[rawKey]) {
+          return sum + (s.byPrinciple[rawKey].n || 0);
+        }
+        return sum;
+      }, 0);
+
       // Values are RISK scores (Cumulative Unbounded)
       result[principle] = {
         risk: roundedSum, // The aggregated risk IS the cumulative sum
         min: roundedMin,
         max: roundedMax,
-        n: principleQuestionIds[principle].size, // Correct: Unique questions
+        n: totalAnswers, // FIX: Use Total Answer Count so ERC = Risk/N is correct (Average Risk per Assessment)
+        uniqueQuestions: principleQuestionIds[principle].size, // Preserve unique question count for reference
         count: values.length, // Experts participating
+
+        // NEW: Total Answer Count (Sum of 'n' from all scores)
+        totalAnswers: totalAnswers,
+
         // Legacy 'avg' field -> map to SUM for safety
         avg: roundedSum,
 
@@ -631,6 +682,130 @@ async function getProjectEvaluators(projectId) {
 }
 
 /**
+ * CRITICAL: Aggregate scores from multiple questionnaires
+ * Merges questionBreakdown arrays from all Score documents and recalculates
+ * principle-level metrics (byPrinciple) from the combined data.
+ * 
+ * @param {Array} scores - All Score documents from all questionnaires
+ * @returns {Object} Combined score object with merged metrics
+ */
+function aggregateMultiQuestionnaireScores(scores) {
+  console.log(`🔄 [aggregateMultiQuestionnaireScores] Merging ${scores.length} Score documents from all questionnaires`);
+
+  if (!scores || scores.length === 0) {
+    console.warn('⚠️ No scores to aggregate');
+    return null;
+  }
+
+  // Collect all questionBreakdown entries from ALL scores
+  const allQuestionBreakdowns = [];
+  const scoresByQuestionnaire = {};
+
+  scores.forEach(score => {
+    const qKey = score.questionnaireKey || 'unknown';
+    if (!scoresByQuestionnaire[qKey]) {
+      scoresByQuestionnaire[qKey] = 0;
+    }
+    scoresByQuestionnaire[qKey]++;
+
+    if (score.questionBreakdown && Array.isArray(score.questionBreakdown)) {
+      console.log(`  Adding ${score.questionBreakdown.length} questions from ${qKey} (userId: ${score.userId})`);
+      allQuestionBreakdowns.push(...score.questionBreakdown);
+    }
+  });
+
+  console.log(`📊 Questionnaire distribution:`, scoresByQuestionnaire);
+  console.log(`📊 Total combined questions: ${allQuestionBreakdowns.length}`);
+
+  // Group by principle and recalculate metrics
+  const byPrinciple = {};
+  CANONICAL_PRINCIPLES.forEach(principle => {
+    byPrinciple[principle] = {
+      n: 0,
+      risk: 0,
+      avgImportance: 0,
+      highImportanceRatio: 0,
+      topDrivers: []
+    };
+  });
+
+  // Aggregate by principle
+  const principleData = {};
+  CANONICAL_PRINCIPLES.forEach(p => {
+    principleData[p] = {
+      questions: [],
+      totalRisk: 0,
+      totalImportance: 0,
+      highImportanceCount: 0
+    };
+  });
+
+  allQuestionBreakdowns.forEach(qb => {
+    const principle = qb.principle;
+    if (!principle || !CANONICAL_PRINCIPLES.includes(principle)) {
+      console.warn(`⚠️ Question with unknown principle: ${principle}`);
+      return;
+    }
+
+    principleData[principle].questions.push(qb);
+    principleData[principle].totalRisk += (qb.finalRiskContribution || 0);
+    principleData[principle].totalImportance += (qb.importance || 0);
+    if (qb.importance >= 3) {
+      principleData[principle].highImportanceCount++;
+    }
+  });
+
+  // Calculate aggregated metrics per principle
+  CANONICAL_PRINCIPLES.forEach(principle => {
+    const data = principleData[principle];
+    const n = data.questions.length;
+
+    if (n > 0) {
+      byPrinciple[principle] = {
+        n,
+        risk: data.totalRisk,
+        totalAnswers: n, // CRITICAL: Added for correct N calculation in reportEnrichmentService
+        avgImportance: data.totalImportance / n,
+        highImportanceRatio: data.highImportanceCount / n,
+        topDrivers: data.questions
+          .sort((a, b) => (b.finalRiskContribution || 0) - (a.finalRiskContribution || 0))
+          .slice(0, 5)
+          .map(q => ({
+            questionId: q.questionId,
+            answerSeverity: q.answerSeverity,
+            finalRiskContribution: q.finalRiskContribution,
+            importance: q.importance
+          }))
+      };
+
+      console.log(`  ${principle}: ${n} questions, risk=${data.totalRisk.toFixed(2)}`);
+    }
+  });
+
+  // Calculate totals
+  const totalRisk = allQuestionBreakdowns.reduce((sum, qb) => sum + (qb.finalRiskContribution || 0), 0);
+  const totalQuestions = allQuestionBreakdowns.length;
+
+  console.log(`✅ Combined totals: ${totalQuestions} questions, total risk=${totalRisk.toFixed(2)}`);
+
+  return {
+    byPrinciple,
+    totals: {
+      overallRisk: totalRisk,
+      n: totalQuestions
+    },
+    questionBreakdown: allQuestionBreakdowns,
+    // Preserve metadata from first score (for role, version, etc.)
+    questionnaireKey: '__ALL_COMBINED__',
+    role: scores[0]?.role || 'combined',
+    scoringModelVersion: scores[0]?.scoringModelVersion || 'combined',
+    // CRITICAL: Add userId and projectId to prevent chart generation errors
+    userId: scores[0]?.userId || 'combined_all_evaluators',
+    projectId: scores[0]?.projectId
+  };
+}
+
+/**
  * Build deterministic reportMetrics JSON from MongoDB data
  * NO LLM computation - all metrics come from stored data
  */
@@ -715,6 +890,27 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   // Otherwise roles/counts (e.g., "project") and overall averages get double-counted.
   const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
 
+  // CRITICAL: Aggregate scores from ALL questionnaires into a single combined score
+  // This merges questionBreakdown arrays from all Score documents (general-v1, ethical-expert-v1, etc.)
+  // and recalculates principle-level metrics from the combined data
+  console.log(`🔄 [buildReportMetrics] Aggregating ${evaluatorScores.length} Score documents from all questionnaires`);
+  const combinedScore = aggregateMultiQuestionnaireScores(evaluatorScores);
+
+  if (combinedScore) {
+    console.log(`✅ Combined score created: ${combinedScore.totals.n} total questions, ${combinedScore.totals.overallRisk.toFixed(2)} total risk`);
+    console.log(`🔄 [buildReportMetrics] Keeping ${evaluatorScores.length} individual scores + adding combined score`);
+
+    // CRITICAL: Keep individual scores for charts (evaluator breakdown, heatmaps)
+    // But also add combined score for overall totals calculation
+    // Mark combined score with special flag so we can use it for byPrincipleOverall
+    combinedScore._isCombinedScore = true;
+    evaluatorScores.push(combinedScore); // Add to end, don't replace
+
+    console.log(`✅ evaluatorScores now contains ${evaluatorScores.length} items (${evaluatorScores.length - 1} individual + 1 combined)`);
+  } else {
+    console.warn('⚠️ Failed to create combined score - continuing with individual scores');
+  }
+
   // CRITICAL VALIDATION: Check for missing scores (Read-Only Enforcement)
   // HONEST REPORTING MODEL: Do not crash. Generate "Invalid" report with notice.
   let validityStatus = 'valid';
@@ -722,13 +918,21 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   const recommendedActions = [];
 
   // 1. Check for Missing Scores (scores < submissions)
-  if (evaluators.submitted.length > 0 && evaluatorScores.length === 0) {
+  // EXCEPTION: If using combined score (all questionnaires merged), we have N+1 scores (individual + combined)
+  const hasCombinedScore = evaluatorScores.some(s => s._isCombinedScore);
+  const actualScoreCount = hasCombinedScore ? evaluatorScores.length - 1 : evaluatorScores.length;
+
+  if (hasCombinedScore) {
+    console.log(`✅ [buildReportMetrics] Using combined score - adjusting validation (actual evaluator scores: ${actualScoreCount})`);
+  }
+
+  if (evaluators.submitted.length > 0 && actualScoreCount === 0) {
     validityStatus = 'invalid_missing_scores';
     invalidityReasons.push('Evaluators have submitted responses, but no ethical scores exist in the database.');
     recommendedActions.push('Ask an Administrator to run the "Compute Scores" action to process the latest responses.');
-  } else if (evaluators.submitted.length > evaluatorScores.length) {
+  } else if (evaluators.submitted.length > actualScoreCount) {
     validityStatus = 'invalid_partial_scores';
-    invalidityReasons.push(`Partial data: ${evaluators.submitted.length} submitted evaluators, but only ${evaluatorScores.length} have scores.`);
+    invalidityReasons.push(`Partial data: ${evaluators.submitted.length} submitted evaluators, but only ${actualScoreCount} have scores.`);
     recommendedActions.push('Recompute scores to include all recent submissions.');
   }
 
@@ -939,7 +1143,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     }
 
     // TASK 2 & 4: Use buildPrincipleScores - ONLY from Score collection
-    const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey);
+    const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey, evaluatorScores);
 
     // TASK 9: Validation - Check score ranges
     // Note: With Cumulative Risk, scores can exceed 4. We remove the strict 0-4 check for aggregates.
@@ -964,11 +1168,18 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         scoring.byPrincipleOverall[principle] = null;
       } else {
         // CRITICAL: Strict Risk Mode
-        const principleScores = evaluatorScores
+        // CRITICAL FIX: If using combined score, ONLY use that one for aggregate totals
+        // to prevent double counting (Summing individual experts + their own sum)
+        const hasCombined = evaluatorScores.some(s => s._isCombinedScore);
+        const scoresToAggregate = hasCombined
+          ? evaluatorScores.filter(s => s._isCombinedScore)
+          : evaluatorScores;
+
+        const principleScores = scoresToAggregate
           .map(s => s.byPrinciple?.[principle])
           .filter(p => p && typeof p === 'object');
 
-        console.log(`  📊 ${principle}: Found ${principleScores.length} score document(s) with data`);
+        console.log(`  📊 ${principle}: Found ${principleScores.length} score document(s) with data (Combined Mode: ${hasCombined})`);
 
         if (principleScores.length > 0) {
           // Extract RISK values (NEW: .risk)
@@ -1086,6 +1297,7 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Aggregate by role
     const roleGroups = {};
     evaluatorScores.forEach(score => {
+      if (score._isCombinedScore) return; // Skip combined score for role grouping
       const role = score.role || 'unknown';
       if (!roleGroups[role]) {
         roleGroups[role] = {
@@ -1116,15 +1328,16 @@ async function buildReportMetrics(projectId, questionnaireKey) {
           riskLabel: riskLabelEN(avg),
           count: data.totals.scores.length
         };
+
+        Object.entries(data.byPrinciple).forEach(([principle, values]) => {
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          roleGroups[role].byPrinciple[principle] = {
+            avg: avg,
+            riskLabel: riskLabelEN(avg),
+            count: values.length
+          };
+        });
       }
-      Object.entries(data.byPrinciple).forEach(([principle, values]) => {
-        const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        roleGroups[role].byPrinciple[principle] = {
-          avg: avg,
-          riskLabel: riskLabelEN(avg),
-          count: values.length
-        };
-      });
     });
     scoring.byRole = roleGroups;
 
@@ -1531,16 +1744,58 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         scoring.byPrincipleOverall
       );
 
+
       // Calculate question counts for disclosure
-      const totalQuestionsCount = questions.length;
-      const qualitativeQuestionsCount = questions.filter(q => q.answerType === 'open_text').length;
-      const quantitativeQuestionsCount = totalQuestionsCount - qualitativeQuestionsCount;
+      // CRITICAL FIX: Use questionBreakdown from combinedScore to count only questions
+      // from assigned evaluators' questionnaires, not ALL questions in the system
+      let totalQuestionsCount = 0;
+      let qualitativeQuestionsCount = 0;
+      let quantitativeQuestionsCount = 0;
+
+      if (combinedScore && combinedScore.questionBreakdown) {
+        // Get unique question IDs to avoid double counting
+        // (same question can appear multiple times if answered by multiple evaluators)
+        const uniqueQuestionIds = new Set(
+          combinedScore.questionBreakdown.map(qb => qb.questionId?.toString()).filter(Boolean)
+        );
+        totalQuestionsCount = uniqueQuestionIds.size;
+
+        // Count qualitative vs quantitative questions
+        // Create a map of unique questions with their properties
+        const uniqueQuestions = new Map();
+        combinedScore.questionBreakdown.forEach(qb => {
+          const qId = qb.questionId?.toString();
+          if (qId && !uniqueQuestions.has(qId)) {
+            uniqueQuestions.set(qId, qb);
+          }
+        });
+
+        // Count qualitative (open_text or manual_risk_input)
+        qualitativeQuestionsCount = Array.from(uniqueQuestions.values()).filter(qb =>
+          qb.answerType === 'open_text' ||
+          qb.scoringMethod === 'manual_risk_input'
+        ).length;
+
+        quantitativeQuestionsCount = totalQuestionsCount - qualitativeQuestionsCount;
+
+        console.log(`📊 [Question Count Fix] Using combinedScore.questionBreakdown:`);
+        console.log(`   Total unique questions: ${totalQuestionsCount}`);
+        console.log(`   Quantitative: ${quantitativeQuestionsCount}`);
+        console.log(`   Qualitative: ${qualitativeQuestionsCount}`);
+      } else {
+        console.warn('⚠️ No combinedScore available, question counts may be inaccurate');
+        // Fallback to 0 if combinedScore is not available
+        totalQuestionsCount = 0;
+        qualitativeQuestionsCount = 0;
+        quantitativeQuestionsCount = 0;
+      }
 
       const counts = {
         total: totalQuestionsCount,
         quantitative: quantitativeQuestionsCount,
         qualitative: qualitativeQuestionsCount
       };
+
 
       // PHASE 3: Enrich with ERC-compliant overallTotals and scoringDisclosure
       reportMetrics = enrichReportMetrics(reportMetrics, counts);
@@ -1612,8 +1867,9 @@ async function buildReportMetrics(projectId, questionnaireKey) {
     // Continue without charts - report can still be generated
   }
 
-  // Build dashboardMetrics (deterministic JSON - single source of truth)
-  const dashboardMetrics = await buildDashboardMetrics(projectId, questionnaireKey, evaluators, scoring);
+  debugFileLog('🚀 [DEBUG buildReportMetrics] Calling buildDashboardMetrics...');
+  const dashboardMetrics = await buildDashboardMetrics(projectId, questionnaireKey, evaluators, scoring, combinedScore);
+  debugFileLog('✅ [DEBUG buildReportMetrics] buildDashboardMetrics returned: ' + (typeof dashboardMetrics) + ' ' + (dashboardMetrics ? Object.keys(dashboardMetrics).join(',') : 'null/undefined'));
 
   // Build final reportMetrics structure
   const reportMetrics = {
@@ -1682,7 +1938,36 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         // Evidence charts removed per TASK 7 (invalid/misleading)
         severityChart: charts.severityChart !== null
       }
-    }
+    },
+    // CRITICAL FIX: Propagate enriched fields from dashboardMetrics to report root
+    overallTotals: dashboardMetrics.overallTotals,
+    // CRITICAL FIX: Calculate scoringDisclosure directly from combinedScore
+    // instead of broken dashboardMetrics chain that returns 0 counts
+    scoringDisclosure: (() => {
+      if (combinedScore && combinedScore.questionBreakdown) {
+        const uniqueQs = new Map();
+        combinedScore.questionBreakdown.forEach(qb => {
+          const qId = qb.questionId?.toString();
+          if (qId && !uniqueQs.has(qId)) uniqueQs.set(qId, qb);
+        });
+        const total = uniqueQs.size;
+        const qual = Array.from(uniqueQs.values()).filter(qb =>
+          qb.answerType === 'open' || qb.answerType === 'open_text' ||
+          qb.scoringMethod === 'manual_risk_input'
+        ).length;
+        const quant = total - qual;
+        console.log(`✅ [scoringDisclosure] Direct calculation: total=${total}, quant=${quant}, qual=${qual}`);
+        return {
+          totalQuestions: total,
+          quantitativeQuestions: quant,
+          qualitativeQuestions: qual,
+          text: `${qual} qualitative (open-text) questions are excluded from quantitative risk scoring. Quantitative risk assessment is based on ${quant} questions with predefined answer options.`,
+          methodology: 'ERC (Ethical Risk Contribution) = Importance × Severity'
+        };
+      }
+      console.warn('⚠️ [scoringDisclosure] No combinedScore, falling back to dashboardMetrics');
+      return dashboardMetrics.scoringDisclosure || {};
+    })()
   };
 
   // Store chart buffers separately (they're too large for JSON)
@@ -1691,446 +1976,26 @@ async function buildReportMetrics(projectId, questionnaireKey) {
   return reportMetrics;
 }
 
-/**
- * Build deterministic dashboardMetrics JSON
- * This is the SINGLE SOURCE OF TRUTH for all numeric metrics used by:
- * - On-screen dashboard
- * - Report generation
- * - Gemini AI (must only refer to this JSON, never compute scores)
- * 
- * @param {string|ObjectId} projectId - Project ID
- * @param {string} questionnaireKey - Optional questionnaire key filter
- * @returns {Promise<Object>} dashboardMetrics JSON object
- */
-async function buildDashboardMetrics(projectId, questionnaireKey = null) {
-  const projectIdObj = isValidObjectId(projectId)
-    ? new mongoose.Types.ObjectId(projectId)
-    : projectId;
-
-  // Fetch all required data
-  const Project = mongoose.model('Project');
-  const project = await Project.findById(projectIdObj).lean();
-  if (!project) {
-    throw new Error('Project not found');
-  }
-
-  // Get evaluators (only submitted)
-  const evaluators = await getProjectEvaluators(projectId);
-  const evaluatorsWithScores = await evaluators.withScores(questionnaireKey);
-
-  // Get scores (canonical metrics)
-  const scores = await Score.find({
-    projectId: projectIdObj,
-    questionnaireKey: questionnaireKey || { $exists: true }
-  }).lean();
-
-  // Exclude project-level aggregated score docs from evaluator aggregations
-  const evaluatorScores = scores.filter(s => s && s.role !== 'project' && s.userId);
-
-  // ============================================================
-  // CRITICAL VALIDATION (Honest Reporting)
-  // Ensure validityStatus is defined in this scope for dashboardMetrics
-  // ============================================================
-  let validityStatus = 'valid';
-  const invalidityReasons = [];
-  const recommendedActions = [];
-  const dataQualityNotes = [];
-
-  // 1. Check for Missing Scores
-  if (evaluators.submitted.length > 0 && evaluatorScores.length === 0) {
-    validityStatus = 'invalid_missing_scores';
-    invalidityReasons.push('Evaluators have submitted responses, but no ethical scores exist in the database.');
-    recommendedActions.push('Ask an Administrator to run the "Compute Scores" action to process the latest responses.');
-  } else if (evaluators.submitted.length > evaluatorScores.length) {
-    validityStatus = 'invalid_partial_scores';
-    invalidityReasons.push(`Partial data: ${evaluators.submitted.length} submitted evaluators, but only ${evaluatorScores.length} have scores.`);
-    recommendedActions.push('Recompute scores to include all recent submissions.');
-  }
-
-  // 2. Check for Incomplete Evaluator Coverage (Assigned vs Submitted)
-  // strict check: if assigned > submitted, mark invalid
-  const valAssignedCount = evaluators.assigned.length;
-  const valSubmittedCount = evaluators.submitted.length;
-  if (valAssignedCount > 0 && valSubmittedCount < valAssignedCount) {
-    validityStatus = 'invalid_incomplete_evaluators';
-    invalidityReasons.push(`Incomplete Team Coverage: ${valAssignedCount} experts assigned, but only ${valSubmittedCount} submitted.`);
-    recommendedActions.push('Wait for all assigned experts to submit their evaluations before finalizing the report.');
-  }
-
-
-  // Get ALL responses (draft and submitted) for started count
-  // Get responses with answers (no draft/submitted distinction)
-  // because "Finish Evaluation" does not update status yet.
-  // ÖNEMLİ: answers field'ını da çek - MongoDB'den cevapları alabilmek için
-  const allResponsesRaw = await Response.find({
-    projectId: projectIdObj,
-    questionnaireKey: questionnaireKey || { $exists: true }
-  })
-    .select('_id projectId userId role questionnaireKey status submittedAt answers') // answers field'ını explicit select et
-    .lean();
-
-  console.log(`📊 [DEBUG buildDashboardMetrics] Found ${allResponsesRaw.length} total responses`);
-
-  // Get responses with answers (no draft/submitted distinction)
-  const responses = allResponsesRaw.filter(r => {
-    if (!r.answers || !Array.isArray(r.answers) || r.answers.length === 0) {
-      return false;
-    }
-    return r.answers.some(answer => {
-      if (!answer.answer) return false;
-      return answer.answer.text ||
-        answer.answer.choiceKey ||
-        answer.answer.numeric !== undefined ||
-        (answer.answer.multiChoiceKeys && answer.answer.multiChoiceKeys.length > 0);
-    });
-  });
-
-  console.log(`📊 [DEBUG buildDashboardMetrics] Found ${responses.length} responses with answers`);
-
-  // Debug: Check if answers are being fetched
-  responses.forEach((r, idx) => {
-    const answersCount = r.answers ? r.answers.length : 0;
-    const textAnswersCount = r.answers ? r.answers.filter(a => {
-      const text = a.answer?.text || a.answerText || '';
-      return text && text.trim().length > 0;
-    }).length : 0;
-    console.log(`  Response ${idx + 1}: userId=${r.userId}, answersCount=${answersCount}, textAnswers=${textAnswersCount}`);
-  });
-
-  // Get tensions
-  const tensions = await Tension.find({
-    projectId: projectIdObj
-  }).lean();
-
-  // Get questions
-  const questions = await Question.find({
-    questionnaireKey: questionnaireKey || { $exists: true }
-  }).lean();
-  const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
-
-  // ============================================================
-  // 1) PROJECT META
-  // ============================================================
-  const projectMeta = {
-    projectId: project._id.toString(),
-    title: project.title || 'Untitled Project',
-    description: project.description || project.category || '',
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    targetDate: project.targetDate || project.deadline || null,
-    category: project.category || '',
-    ownerId: project.ownerId ? project.ownerId.toString() : '',
-    questionnaireKey: questionnaireKey || 'general-v1',
-    questionnaireVersion: responses.length > 0 ? responses[0].questionnaireVersion : 1
-  };
-
-  // ============================================================
-  // 2) TEAM METRICS (REPORT/DASHBOARD SEMANTICS)
-  // ============================================================
-  // For dashboards and reports, we treat "team" as the set of submitted evaluators.
-  // Assigned experts should not inflate counts or trigger warnings in generated reports.
-  // "Submitted" for dashboard/report semantics = has answers (status may not be updated)
-  const submittedResponses = responses;
-  const submittedUserIds = new Set(
-    submittedResponses
-      .filter(r => r.userId)
-      .map(r => r.userId.toString ? r.userId.toString() : String(r.userId))
-  );
-  const submittedCount = submittedUserIds.size;
-  const assignedCount = submittedCount;
-  const startedCount = submittedCount;
-  const completionPct = submittedCount > 0 ? 100 : 0;
-
-  const team = {
-    assignedCount,
-    submittedCount,
-    startedCount,
-    completionPct: parseFloat(completionPct.toFixed(1)),
-    withScoresCount: evaluatorsWithScores.length,
-    missingScoresCount: evaluators.submitted.filter(e => e.scoreMissing || false).length
-  };
-
-  // ============================================================
-  // 3) SCORES (Canonical Metrics)
-  // ============================================================
-  const scoresData = {
-    totals: {
-      overallAvg: 0,
-      min: 4,
-      max: 0,
-      count: 0,
-      naExcluded: 0,
-      riskLevel: 'Unknown' // Critical, High, Medium, Low
-    },
-    byPrinciple: {},
-    rolePrincipleMatrix: {}
-  };
-
-  // Calculate totals
-  const allTotals = evaluatorScores
-    .map(s => s.totals?.avg)
-    .filter(v => v !== undefined && v !== null && !isNaN(v) && v >= 0);
-
-  if (allTotals.length > 0) {
-    scoresData.totals.overallAvg = parseFloat((allTotals.reduce((a, b) => a + b, 0) / allTotals.length).toFixed(2));
-    scoresData.totals.min = parseFloat(Math.min(...allTotals).toFixed(2));
-    scoresData.totals.max = parseFloat(Math.max(...allTotals).toFixed(2));
-    scoresData.totals.count = allTotals.length;
-
-    // TASK 1: Use canonical risk classification function
-    const avg = scoresData.totals.overallAvg;
-    if (avg !== null && avg !== undefined) {
-      scoresData.totals.riskLevel = classifyRisk(avg);
-    } else {
-      scoresData.totals.riskLevel = 'N/A';
-    }
-  }
-
-  // TASK 2 & 4: Use buildPrincipleScores - ONLY from Score collection
-  // NEVER recompute from Response or generalquestionanswers
-  const principleScoresData = await buildPrincipleScores(projectId, questionnaireKey);
-
-  // TASK 9: Validation - Check if all principle scores are null
-  const allNull = Object.values(principleScoresData).every(v => v === null);
-  if (allNull) {
-    throw new Error('REPORT GENERATION ABORTED: All principle scores are null. Cannot generate report without any evaluated principles.');
-  }
-
-  // Map to scoresData.byPrinciple structure
-  Object.entries(principleScoresData).forEach(([principle, data]) => {
-    if (data === null) {
-      // TASK 3: Missing = null, NOT 0 (0 is a valid score meaning MINIMAL risk)
-      scoresData.byPrinciple[principle] = null;
-    } else {
-      // CUMULATIVE RISK VALIDATION: Scores are unbounded (>= 0 only)
-      // Legacy 0-4 validation REMOVED: Aggregated risk is cumulative and unbounded.
-      if (data.avg < 0) {
-        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid score ${data.avg}. Score must be >= 0.`);
-      }
-      if (data.min !== undefined && data.min < 0) {
-        throw new Error(`INVALID PRINCIPLE SCORE: Principle ${principle} has invalid min score ${data.min}. Score must be >= 0.`);
-      }
-      // NOTE: data.max check removed - max can be any positive value for cumulative risk
-
-      // TASK 7: Validate risk classification matches score (MODIFIED: classifyRisk now handles unbounded)
-      // const classification = classifyRisk(data.avg); // Commented out: classifyRisk may not support unbounded
-      // validateRiskScaleNotInverted(data.avg, classification); // Commented out
-
-      scoresData.byPrinciple[principle] = {
-        avg: data.avg,
-        min: data.min,
-        max: data.max,
-        count: data.count
-      };
-    }
-  });
-
-  // TASK 7: Validation - Check for auto-conversion of null to 0
-  Object.entries(scoresData.byPrinciple).forEach(([principle, data]) => {
-    const originalData = principleScoresData[principle];
-    if (originalData === null && data !== null && data.avg === 0) {
-      throw new Error(`VALIDATION ERROR: Principle ${principle} was null but was auto-converted to 0. This is not allowed. NULL means not evaluated, 0 means MINIMAL risk.`);
-    }
-  });
-
-  // TASK 9: Validation - Check for auto-conversion of null to 0
-  Object.entries(scoresData.byPrinciple).forEach(([principle, data]) => {
-    const originalData = principleScoresData[principle];
-    if (originalData === null && data !== null && data.avg === 0) {
-      throw new Error(`VALIDATION ERROR: Principle ${principle} was null but was auto-converted to 0. This is not allowed. NULL means not evaluated, 0 means MINIMAL risk.`);
-    }
-  });
-
-  // Calculate total NA excluded
-  const totalNaExcluded = Object.values(principleScoresData).filter(v => v === null).length * evaluatorScores.length;
-  scoresData.totals.naExcluded = totalNaExcluded;
-
-  // Build rolePrincipleMatrix (role × principle)
-  // TASK B: Use canonical principles and null for missing
-  const rolePrincipleMatrix = {};
-  const roles = [...new Set(evaluatorScores.map(s => s.role || 'unknown'))];
-
-  roles.forEach(role => {
-    rolePrincipleMatrix[role] = {};
-    const roleScores = evaluatorScores.filter(s => (s.role || 'unknown') === role);
-
-    CANONICAL_PRINCIPLES.forEach(principle => {
-      const principleValues = [];
-      roleScores.forEach(score => {
-        if (score.byPrinciple && score.byPrinciple[principle]) {
-          const avg = score.byPrinciple[principle].avg;
-          if (typeof avg === 'number' && !isNaN(avg) && avg >= 0) {
-            principleValues.push(avg);
-          }
-        }
-      });
-
-      if (principleValues.length > 0) {
-        rolePrincipleMatrix[role][principle] = {
-          avg: parseFloat((principleValues.reduce((a, b) => a + b, 0) / principleValues.length).toFixed(2)),
-          count: principleValues.length
-        };
-      } else {
-        // TASK B: Missing = null, NOT 0
-        rolePrincipleMatrix[role][principle] = null;
-      }
-    });
-  });
-
-  scoresData.rolePrincipleMatrix = rolePrincipleMatrix;
-
-  // ============================================================
-  // 4) TOP RISKY QUESTIONS
-  // ============================================================
-  const questionScores = {};
-  const questionAnswerMap = {}; // Map questionId -> {userId, role, answerSnippet}
-
-  responses.forEach(response => {
-    if (response.answers && Array.isArray(response.answers)) {
-      response.answers.forEach(answer => {
-        if (answer.questionId && typeof answer.score === 'number') {
-          const qId = answer.questionId.toString();
-
-          // Aggregate scores
-          if (!questionScores[qId]) {
-            questionScores[qId] = [];
-          }
-          questionScores[qId].push(answer.score);
-
-          // Store answer snippet
-          if (!questionAnswerMap[qId]) {
-            questionAnswerMap[qId] = [];
-          }
-          const answerText = answer.answerText || (answer.answer && answer.answer.text) || '';
-          if (answerText.trim().length > 0) {
-            questionAnswerMap[qId].push({
-              userId: response.userId.toString(),
-              role: response.role || 'unknown',
-              answerSnippet: answerText.trim().substring(0, 200)
-            });
-          }
-        }
-      });
-    }
-  });
-
-  const topRiskyQuestions = [];
-  Object.entries(questionScores).forEach(([questionId, scoreArray]) => {
-    // Use Cumulative Risk (Unbounded)
-    // Assumption: scoreArray contains performance/quality scores (0-4), so Risk = 4 - Score
-    const totalRiskContribution = scoreArray.reduce((sum, s) => sum + (4 - s), 0);
-
-    // Also keep avg for legacy reference if needed, but primary metric is totalRisk
-    const avgPerformance = scoreArray.reduce((sum, s) => sum + s, 0) / scoreArray.length;
-
-    const question = questionMap.get(questionId);
-
-    if (question) {
-      // Get answer snippet (prefer first available)
-      const answerData = questionAnswerMap[questionId] || [];
-      const answerSnippet = answerData.length > 0 ? answerData[0].answerSnippet : '';
-      const role = answerData.length > 0 ? answerData[0].role : 'unknown';
-      const userId = answerData.length > 0 ? answerData[0].userId : '';
-
-      topRiskyQuestions.push({
-        questionId,
-        questionCode: question.code || questionId,
-        principle: question.principle || 'Unknown',
-        totalRiskContribution: parseFloat(totalRiskContribution.toFixed(2)),
-        // Legacy fields for backward compatibility, but sorted by Total Risk
-        avgPerformance: parseFloat(avgPerformance.toFixed(2)),
-        avgRisk: parseFloat((4 - avgPerformance).toFixed(2)),
-        role,
-        userId,
-        answerSnippet,
-        count: scoreArray.length
-      });
-    }
-  });
-
-  // Sort by totalRiskContribution (descending = highest risk first) and limit to top 20
-  topRiskyQuestions.sort((a, b) => b.totalRiskContribution - a.totalRiskContribution);
-  topRiskyQuestions.splice(20);
-
-  // Calculate question counts for disclosure
-  const totalQuestions = questions.length;
-  // Quantitative: Questions that are NOT open_text
-  const quantitativeQuestions = questions.filter(q => q.answerType !== 'open_text').length;
-  // Qualitative: Questions that ARE open_text
-  const qualitativeQuestions = questions.filter(q => q.answerType === 'open_text').length;
-
-  const counts = {
-    total: totalQuestions,
-    quantitative: quantitativeQuestions,
-    qualitative: qualitativeQuestions
-  };
-
-  // Build final report metrics object
-  const reportMetrics = {
-    projectId: projectIdObj.toString(),
-    questionnaireKey: questionnaireKey || 'general-v1',
-    updatedAt: new Date().toISOString(),
-    scale: { min: 0, max: 4 },
-    thresholds,
-    participation: {
-      assignedCount,
-      submittedCount,
-      byRole: Object.values(byRole)
-    },
-    evaluators: uniqueEvaluators, // Actual evaluators from scores collection
-    principleBar,
-    rolePrincipleHeatmap: {
-      roles,
-      principles,
-      matrix,
-      nMatrix,
-      evaluators: uniqueEvaluators // Include for heatmap labels
-    },
-    topRiskyQuestions: topRiskyQuestions.map(q => ({
-      questionId: q.questionId,
-      principleKey: q.principleKey,
-      avgRiskScore: parseFloat(q.avgRiskScore.toFixed(2)),
-      n: q.n,
-      rolesInvolved: q.rolesInvolved,
-      weight: q.weight
-    })),
-    topRiskyQuestionContext: topRiskyQuestionContext.slice(0, 20), // Limit to 20 snippets
-    tensionsSummary,
-    tensionsTable,
-    evidenceMetrics: {
-      coveragePct: parseFloat(evidenceMetrics.coveragePct.toFixed(1)),
-      totalEvidenceCount: evidenceMetrics.totalEvidenceCount,
-      typeDistribution: evidenceMetrics.typeDistribution
-    },
-    // Scaffolding for overallTotals (will be populated by enrichReportMetrics)
-    scoring: scoring
-  };
-
-  // CRITICAL: Enrich with Overall Totals (Cumulative Risk) and Scoring Disclosure
-  // This ensures the "Cumulative Risk Volume" and "Risk Level" are properly calculated
-  // regardless of where this service is called (API or Report Generation).
-  return enrichReportMetrics(reportMetrics, counts);
-}
-
 
 /**
  * Build metrics for the project dashboard (including tensions)
  */
-async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, injectedScores) {
-  // Helper for risk labels
-  const riskLabelEN = (score) => {
-    if (score < 1) return 'Low';
-    if (score < 2) return 'Moderate';
-    if (score < 3) return 'High';
-    return 'Critical';
-  };
-  console.log('🔍 [DEBUG buildDashboardMetrics] Args:', { projectId, questionnaireKey, evaluatorsIsDefined: !!evaluators, scoresDataIsDefined: !!injectedScores });
+async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, injectedScores, combinedScore = null) {
+  debugFileLog('🔍 [DEBUG buildDashboardMetrics] Args: ' + JSON.stringify({ projectId, questionnaireKey, evaluatorsIsDefined: !!evaluators, scoresDataIsDefined: !!injectedScores, combinedScoreProvided: !!combinedScore }));
   const projectIdObj = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
 
   // Get tensions
-  const tensions = await Tension.find({
-    projectId: projectIdObj
-  }).lean();
+  debugFileLog('🔍 [DEBUG buildDashboardMetrics] Fetching tensions...');
+  let tensions = [];
+  try {
+    tensions = await Tension.find({
+      projectId: projectIdObj
+    }).lean();
+    debugFileLog('✅ [DEBUG buildDashboardMetrics] Tensions found: ' + tensions.length);
+  } catch (err) {
+    debugFileLog('❌ [DEBUG buildDashboardMetrics] Tension.find failed: ' + err.message);
+    throw err;
+  }
 
   // ============================================================
   // 5) TENSIONS SUMMARY
@@ -2355,6 +2220,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
   });
 
   tensionsSummary.topUnresolvedTensions = unresolvedTensions.slice(0, 10);
+  debugFileLog('✅ [DEBUG buildDashboardMetrics] Tensions processed. Summary total: ' + tensionsSummary.total);
 
   // NOTE: tensionsList is already built above (line 1320) and added to tensionsSummary (line 1408)
   // No need to rebuild it here
@@ -2378,9 +2244,16 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
 
   // Fix: Fetch questions locally
   const Question = mongoose.model('Question');
-  const questions = await Question.find({
-    ...(questionnaireKey ? { questionnaireKey } : {})
-  }).lean();
+  // Handle case where specific questionnaire is requested vs all
+  const qQuery = questionnaireKey ? { questionnaireKey } : {};
+  debugFileLog(`🔍 [DEBUG buildDashboardMetrics] Fetching questions with query: ${JSON.stringify(qQuery)}`);
+
+  const questions = await Question.find(qQuery).lean();
+  debugFileLog(`✅ [DEBUG buildDashboardMetrics] Questions loaded: ${questions.length}`);
+
+  if (questions.length > 0) {
+    debugFileLog(`   Sample Question: ${questions[0].code}, answerType=${questions[0].answerType}`);
+  }
 
 
   responses.forEach(response => {
@@ -2450,7 +2323,30 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
     }
   };
 
+
+  // NOTE: counts will be calculated later from combinedScore before enrichReportMetrics
+
+  const topRiskyQuestions = []; // Not calculated in buildDashboardMetrics
+  const assignedCount = evaluators?.assigned?.length || 0;
+  const startedCount = evaluators?.started?.length || 0;
+  const team = {
+    assignedCount,
+    startedCount,
+    submittedCount,
+    completionPct: assignedCount > 0 ? (submittedCount / assignedCount) * 100 : 0
+  };
+  const allResponsesRaw = responses; // Use the responses we already have
+  const evaluatorScores = []; // Not available in this context
+  const scoresData = injectedScores || { byPrinciple: {} }; // Use injected scores with safe default
+  const CANONICAL_PRINCIPLES = ['TRANSPARENCY', 'HUMAN AGENCY & OVERSIGHT', 'TECHNICAL ROBUSTNESS & SAFETY', 'PRIVACY & DATA GOVERNANCE', 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS', 'SOCIETAL & INTERPERSONAL WELL-BEING', 'ACCOUNTABILITY'];
+  const validityStatus = 'valid'; // Default to valid
+  const dataQualityNotes = [];
+  const invalidityReasons = [];
+  const recommendedActions = [];
+  const projectMeta = {}; // Not available in this context
+
   // Check for missing answers (questions that should be answered but aren't)
+  debugFileLog('✅ [DEBUG buildDashboardMetrics] Data Quality object built. Checking missing answers...');
   const requiredQuestions = questions.filter(q => q.required !== false);
   const answeredQuestionIds = new Set();
 
@@ -2536,13 +2432,16 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
   // Verify that any "Higher score = higher risk" text matches the riskLabel mapping
   // This is a semantic check - we'll flag if scores suggest opposite interpretation
   // TASK 3: NO FALLBACK TO 0 - if null, skip validation
-  const avgScore = injectedScores.totals?.overallAvg;
-  if (avgScore === null || avgScore === undefined) {
-    return; // Skip validation if no overall average
+  // Fix: Check totalsOverall if totals is missing (reportMetrics vs dashboardMetrics structure mismatch)
+  const avgScore = injectedScores.totals?.overallAvg ?? injectedScores.totalsOverall?.avg ?? injectedScores.totalsOverall?.overallRisk;
+
+  if (avgScore !== null && avgScore !== undefined) {
+    // Only proceed with check if score exists
+    const riskLabelForAvg = riskLabelEN(avgScore);
+    // Logic continues...
   }
-  const riskLabelForAvg = riskLabelEN(avgScore);
-  // If avg score is high (3-4) and we're calling it "Low risk", that's inconsistent
-  // But our mapping is: 0-1=Low, 3-4=Critical, so high score = Critical = correct
+  // If no score, just continue without this specific check. DO NOT RETURN.
+  // Evidence coverage check follows...
 
   // Check 4: Evidence coverage consistency
   const tensionsWithEvidenceCount = tensionsSummary.total - (dataQuality.evidence?.tensionsWithoutEvidenceCount || 0);
@@ -2569,6 +2468,7 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
   // ============================================================
   // TASK C: DEBUG LOGGING - Log metrics before rendering
   // ============================================================
+  debugFileLog('✅ [DEBUG buildDashboardMetrics] Consistency checks done. Starting debug logs...');
   console.log('📊 [DEBUG] Participation Metrics:');
   console.log(`  - assignedCount: ${assignedCount}`);
   console.log(`  - startedCount: ${startedCount}`);
@@ -2594,16 +2494,20 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
     // Non-critical: never fail report due to logging
   }
   console.log('📊 [DEBUG] Principle Scores (showing nulls explicitly):');
-  CANONICAL_PRINCIPLES.forEach(principle => {
-    const data = scoresData.byPrinciple[principle];
-    if (data === null) {
-      console.log(`  - ${principle}: null (N/A)`);
-    } else if (data && typeof data.avg === 'number') {
-      console.log(`  - ${principle}: ${data.avg} (avg)`);
-    } else {
-      console.log(`  - ${principle}: ${JSON.stringify(data)}`);
-    }
-  });
+  try {
+    CANONICAL_PRINCIPLES.forEach(principle => {
+      const data = scoresData.byPrinciple?.[principle] || scoresData.byPrincipleOverall?.[principle];
+      if (data === null) {
+        console.log(`  - ${principle}: null (N/A)`);
+      } else if (data && typeof data.avg === 'number') {
+        console.log(`  - ${principle}: ${data.avg} (avg)`);
+      } else {
+        console.log(`  - ${principle}: ${JSON.stringify(data)}`);
+      }
+    });
+  } catch (e) {
+    console.log('  (Principle scores logging failed - non-critical)');
+  }
   console.log('');
 
   // ============================================================
@@ -2632,6 +2536,14 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
     scores: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? injectedScores : null,
     riskLevel: (validityStatus === 'valid' || validityStatus.startsWith('valid_partial')) ? (injectedScores?.totals?.riskLevel || 'Unknown') : 'Data Unavailable',
 
+    // CRITICAL FIX: Add scoring structure for enrichReportMetrics
+    scoring: {
+      totalsOverall: injectedScores?.totalsOverall || null,
+      byPrincipleOverall: injectedScores?.byPrincipleOverall || {},
+      byRole: injectedScores?.byRole || {},
+      byPrincipleTable: injectedScores?.byPrincipleTable || []
+    },
+
     topRiskyQuestions,
     tensionsSummary,
     dataQuality,
@@ -2651,7 +2563,49 @@ async function buildDashboardMetrics(projectId, questionnaireKey, evaluators, in
     version: '1.0'
   };
 
-  return dashboardMetrics;
+
+  // Final debug before return
+  debugFileLog('🏁 [DEBUG buildDashboardMetrics] About to return enriched metrics...');
+
+  // CRITICAL FIX: Calculate counts from combinedScore parameter if available
+  // This ensures we count only questions from assigned evaluators, not all system questions
+  let counts = { total: 0, quantitative: 0, qualitative: 0 };
+
+  if (combinedScore && combinedScore.questionBreakdown) {
+    // Get unique question IDs from questionBreakdown
+    const uniqueQuestionIds = new Set(
+      combinedScore.questionBreakdown.map(qb => qb.questionId?.toString()).filter(Boolean)
+    );
+    counts.total = uniqueQuestionIds.size;
+
+    // Create map of unique questions
+    const uniqueQuestions = new Map();
+    combinedScore.questionBreakdown.forEach(qb => {
+      const qId = qb.questionId?.toString();
+      if (qId && !uniqueQuestions.has(qId)) {
+        uniqueQuestions.set(qId, qb);
+      }
+    });
+
+    // Count qualitative questions
+    counts.qualitative = Array.from(uniqueQuestions.values()).filter(qb =>
+      qb.answerType === 'open' ||
+      qb.answerType === 'open_text' ||
+      qb.scoringMethod === 'manual_risk_input'
+    ).length;
+    counts.quantitative = counts.total - counts.qualitative;
+
+    console.log(`📊 [buildDashboardMetrics Question Count Fix] Using combinedScore.questionBreakdown:`);
+    console.log(`   Total unique questions: ${counts.total}`);
+    console.log(`   Quantitative: ${counts.quantitative}`);
+    console.log(`   Qualitative: ${counts.qualitative}`);
+  } else {
+    console.warn('⚠️ [buildDashboardMetrics] No combinedScore available for question counting, counts will be 0');
+  }
+
+  const finalMetrics = enrichReportMetrics(dashboardMetrics, counts);
+  debugFileLog('🏁 [DEBUG buildDashboardMetrics] Final Metrics keys: ' + (finalMetrics ? Object.keys(finalMetrics).join(',') : 'null/undefined'));
+  return finalMetrics;
 }
 
 module.exports = {

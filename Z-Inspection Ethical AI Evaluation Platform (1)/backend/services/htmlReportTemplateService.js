@@ -180,15 +180,25 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
           
           <!-- Normalized Average Display -->
           <div class="sub-metric">
-            <strong>Normalized Average ERC:</strong> ${normalizedAverage.toFixed(2)} / 4
+            <strong>Overall Average ERC (Mean):</strong> ${overallTotals.rawAverageERC ? overallTotals.rawAverageERC.toFixed(2) : normalizedAverage.toFixed(2)} / 4
           </div>
-          <div style="font-size: 0.8em; color: #9ca3af;">
+          <div class="sub-metric">
+            <strong>Max Principle Average (Sensitivity):</strong> ${overallTotals.maxPrincipleAverage ? overallTotals.maxPrincipleAverage.toFixed(2) : 'N/A'} / 4
+          </div>
+          
+          ${overallTotals.maxPrincipleAverage > (overallTotals.rawAverageERC + 0.1) ? `
+          <div style="font-size: 0.8em; color: #1e40af; margin-top: 5px; font-style: italic;">
+            ℹ️ Overall risk promoted due to Max Principle Sensitivity override.
+          </div>
+          ` : ''}
+
+          <div style="font-size: 0.8em; color: #9ca3af; margin-top: 5px;">
             (ERC values are normalized on a 0–4 scale)
           </div>
           
-          <!-- Risk Level Display based on NORMALIZED average -->
+          <!-- Risk Level Display based on NORMALIZED average (potentially promoted) -->
           <div class="sub-metric" style="margin-top: 10px;">
-            Risk Level: 
+            Final Risk Label: 
             <span class="risk-badge" style="background-color: ${displayColor}">${displayLabel}</span>
           </div>
         `}
@@ -209,9 +219,9 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
 
     <!-- MANDATORY Qualitative Questions Disclosure -->
     <div class="disclosure-box">
-      <strong>Total Questions Assessed:</strong> ${scoringDisclosure.totalQuestions || 93} total (${scoringDisclosure.quantitativeQuestions || 59} Quantitative, ${scoringDisclosure.qualitativeQuestions || 34} Qualitative)
+      <strong>Total Questions Assessed:</strong> ${scoringDisclosure.totalQuestions || 0} total (${scoringDisclosure.quantitativeQuestions || 0} Quantitative, ${scoringDisclosure.qualitativeQuestions || 0} Qualitative)
       <br><br>
-      ${scoringDisclosure.qualitativeQuestions || 34} qualitative (open-text) questions are excluded from quantitative risk scoring.
+      ${scoringDisclosure.qualitativeQuestions || 0} qualitative (open-text) questions are excluded from quantitative risk scoring.
       These questions provide narrative insights that complement the quantitative analysis.
       ${scoringDisclosure.text ? `<br><br><span class="methodology-note">Note: ${scoringDisclosure.text}</span>` : ''}
     </div>
@@ -220,10 +230,33 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
     <div class="section">
       <h3>Ethical Principles Risk Overview</h3>
       
-      <!-- NEW: Radar Chart Visualization -->
-      ${chartImages.riskRadarChart ? `
-      <div style="text-align: center; margin-bottom: 20px; page-break-inside: avoid;">
-        <img src="${chartImages.riskRadarChart}" style="max-width: 80%; max-height: 500px;" alt="Ethical Risk Radar Chart" />
+      <!-- NEW: Radar and Bar Chart Visualization Side by Side -->
+      <div style="display: flex; gap: 20px; align-items: start; margin-bottom: 20px; page-break-inside: avoid;">
+        ${chartImages.riskRadarChart ? `
+        <div style="flex: 1; text-align: center;">
+          <img src="${chartImages.riskRadarChart}" style="max-width: 100%; max-height: 400px;" alt="Ethical Risk Radar Chart" />
+          <p style="font-size: 8pt; color: #6b7280; margin-top: 5px;">Risk Radar (Normalized average ERC)</p>
+        </div>
+        ` : ''}
+        
+        ${chartImages.principleBarChart ? `
+        <div style="flex: 1; text-align: center;">
+          <img src="${chartImages.principleBarChart}" style="max-width: 100%; max-height: 400px;" alt="Principle Risk Bar Chart" />
+          <p style="font-size: 8pt; color: #6b7280; margin-top: 5px;">Relative Risk Contribution</p>
+        </div>
+        ` : ''}
+      </div>
+
+      <!-- NEW: Importance Ranking Chart -->
+      ${chartImages.ethicalImportanceRanking ? `
+      <div style="margin-bottom: 30px; page-break-inside: avoid; background: #f9fafb; padding: 20px; border-radius: 8px;">
+        <h4 style="margin-top: 0; color: #374151; margin-bottom: 15px;">Ethical Importance Weighting</h4>
+        <div style="text-align: center;">
+          <img src="${chartImages.ethicalImportanceRanking}" style="max-width: 90%; max-height: 350px;" alt="Principle Importance Chart" />
+        </div>
+        <p style="font-size: 8pt; color: #6b7280; margin-top: 10px; font-style: italic;">
+          This chart visualizes the importance weights assigned to each principle, influencing the final risk calculation.
+        </p>
       </div>
       ` : ''}
 
@@ -341,6 +374,23 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
   <div class="page">
     <div class="section" id="section-tensions">
       <h2>Ethical Tensions</h2>
+      
+      <!-- NEW: Tension Analytics Charts -->
+      <div style="display: flex; gap: 20px; margin-bottom: 30px; page-break-inside: avoid;">
+        ${chartImages.tensionSeverityChart ? `
+        <div style="flex: 1; text-align: center; background: #fffcfc; padding: 15px; border-radius: 8px; border: 1px solid #fee2e2;">
+          <h4 style="font-size: 10pt; color: #991b1b; margin-bottom: 10px;">Severity Distribution</h4>
+          <img src="${chartImages.tensionSeverityChart}" style="max-width: 100%; max-height: 250px;" alt="Tension Severity Chart" />
+        </div>
+        ` : ''}
+        
+        ${chartImages.tensionReviewStateChart ? `
+        <div style="flex: 1; text-align: center; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <h4 style="font-size: 10pt; color: #1e40af; margin-bottom: 10px;">Review Progress</h4>
+          <img src="${chartImages.tensionReviewStateChart}" style="max-width: 100%; max-height: 250px;" alt="Tension Progress Chart" />
+        </div>
+        ` : ''}
+      </div>
       ${((options.analytics?.tensionsTable && options.analytics.tensionsTable.length > 0) || (tensions.list && tensions.list.length > 0)) ? `
       <table>
         <thead>
@@ -377,14 +427,32 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
   <!-- PAGE 3: METHODOLOGY & APPENDIX -->
   <div class="page">
     <div class="section">
-      <h2>Methodology & Data Sources</h2>
+      <h2>Methodology & Evidence Coverage</h2>
+      
+      <!-- NEW: Evidence Analytics Charts -->
+      <div style="display: flex; gap: 20px; margin-bottom: 30px; page-break-inside: avoid;">
+        ${chartImages.evidenceCoverageDonut ? `
+        <div style="flex: 1; text-align: center; background: #fcfdfd; padding: 15px; border-radius: 8px; border: 1px solid #ecfeff;">
+          <h4 style="font-size: 10pt; color: #0891b2; margin-bottom: 10px;">Evidence Participation</h4>
+          <img src="${chartImages.evidenceCoverageDonut}" style="max-width: 100%; max-height: 220px;" alt="Evidence Coverage" />
+        </div>
+        ` : ''}
+        
+        ${chartImages.evidenceTypeDonut ? `
+        <div style="flex: 1; text-align: center; background: #fcfdfd; padding: 15px; border-radius: 8px; border: 1px solid #ecfeff;">
+          <h4 style="font-size: 10pt; color: #0891b2; margin-bottom: 10px;">Evidence Types</h4>
+          <img src="${chartImages.evidenceTypeDonut}" style="max-width: 100%; max-height: 220px;" alt="Evidence Types" />
+        </div>
+        ` : ''}
+      </div>
+
       <p>This report matches the Z-Inspection methodology for ethical AI evaluation.</p>
       
       <h3>Risk Calculation</h3>
       <ul>
-        <li><strong>Question Risk:</strong> Importance (0-4) x Unmitigated Ethical Risk (0-1).</li>
-        <li><strong>Cumulative Risk Volume:</strong> Sum of all ERC contributions. Used to understand total magnitude of risk.</li>
-        <li><strong>Normalized Ethical Risk Level:</strong> Average ERC per question compared to 0-4 scale. This determines the Low/High/Critical label.</li>
+        <li><strong>Question Risk (ERC):</strong> Importance (0-4) x Unmitigated Ethical Risk (0-1).</li>
+        <li><strong>Cumulative Risk Volume:</strong> Sum of all ERC contributions. Used to understand total magnitude of risk for the project.</li>
+        <li><strong>Normalized Ethical Risk Level:</strong> Determined by the higher of the Overall average ERC and the Maximum individual Principle average. This promotes the risk label if any single principle (e.g. Accountability) identifies a critical failure, even if the overall project volume is low.</li>
       </ul>
       <p><em>Note: All numeric metrics are deterministic and traceable to MongoDB data.</em></p>
     </div>

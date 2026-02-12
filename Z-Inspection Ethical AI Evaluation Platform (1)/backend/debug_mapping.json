@@ -1,0 +1,783 @@
+{
+  "project": {
+    "id": "6985dc9a9ff7bb6bcd9d528e",
+    "name": "Tutor AI – Öğrenciye Özel Yapay Zekâ Destekli Eğitim Chatbotu"
+  },
+  "analysis": [
+    {
+      "userId": "6985c22c9ff7bb6bcd9d45ea",
+      "totalAnswers": 12,
+      "questions": [
+        {
+          "id": "695d814a205aa3b04599f597",
+          "code": "T1",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "695d814a205aa3b04599f5a6",
+          "code": "T2",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9366f16d2d4966357c",
+          "code": "H1",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663583",
+          "code": "H2",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d4966358a",
+          "code": "S1",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "principleKey": "technical_robustness_safety",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663591",
+          "code": "P1",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d49663598",
+          "code": "P2",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d4966359e",
+          "code": "F1",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "principleKey": "diversity_fairness",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d496635a5",
+          "code": "W1",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing"
+        },
+        {
+          "id": "693c6b9666f16d2d496635a8",
+          "code": "W2",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635ae",
+          "code": "A1",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635b4",
+          "code": "A2",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        }
+      ]
+    },
+    {
+      "userId": "6985c22c9ff7bb6bcd9d45ea",
+      "totalAnswers": 11,
+      "questions": [
+        {
+          "id": "693ff488f7ebb7baa6f68ebe",
+          "code": "H6",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "693ff489f7ebb7baa6f68ec7",
+          "code": "H10",
+          "principle": "HUMAN AGENCY & OVERSIGHT"
+        },
+        {
+          "id": "693ff489f7ebb7baa6f68eca",
+          "code": "S2",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "693ff489f7ebb7baa6f68ecd",
+          "code": "P4",
+          "principle": "PRIVACY & DATA GOVERNANCE"
+        },
+        {
+          "id": "693ff489f7ebb7baa6f68ed0",
+          "code": "T9",
+          "principle": "TRANSPARENCY"
+        },
+        {
+          "id": "693ff48af7ebb7baa6f68ed3",
+          "code": "F2",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "riskScore": 2
+        },
+        {
+          "id": "693ff48af7ebb7baa6f68eda",
+          "code": "F3",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS"
+        },
+        {
+          "id": "693ff48af7ebb7baa6f68edd",
+          "code": "W7",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "riskScore": 2
+        },
+        {
+          "id": "693ff48af7ebb7baa6f68ee8",
+          "code": "A5",
+          "principle": "ACCOUNTABILITY"
+        },
+        {
+          "id": "693ff48bf7ebb7baa6f68eeb",
+          "code": "A11",
+          "principle": "ACCOUNTABILITY"
+        },
+        {
+          "id": "693ff48bf7ebb7baa6f68eee",
+          "code": "A12",
+          "principle": "ACCOUNTABILITY"
+        }
+      ]
+    },
+    {
+      "userId": "6985db129ff7bb6bcd9d5042",
+      "totalAnswers": 12,
+      "questions": [
+        {
+          "id": "695d814a205aa3b04599f597",
+          "code": "T1",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "695d814a205aa3b04599f5a6",
+          "code": "T2",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9366f16d2d4966357c",
+          "code": "H1",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663583",
+          "code": "H2",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d4966358a",
+          "code": "S1",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "principleKey": "technical_robustness_safety",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663591",
+          "code": "P1",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d49663598",
+          "code": "P2",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d4966359e",
+          "code": "F1",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "principleKey": "diversity_fairness",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d496635a5",
+          "code": "W1",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing"
+        },
+        {
+          "id": "693c6b9666f16d2d496635a8",
+          "code": "W2",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635ae",
+          "code": "A1",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635b4",
+          "code": "A2",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        }
+      ]
+    },
+    {
+      "userId": "6985db129ff7bb6bcd9d5042",
+      "totalAnswers": 21,
+      "questions": [
+        {
+          "id": "693ffee80cc22d24b3857aff",
+          "code": "L1",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffee90cc22d24b3857b07",
+          "code": "L2",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffee90cc22d24b3857b0f",
+          "code": "L3",
+          "principle": "LAWFULNESS & COMPLIANCE"
+        },
+        {
+          "id": "693ffee90cc22d24b3857b12",
+          "code": "L4",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION"
+        },
+        {
+          "id": "693ffee90cc22d24b3857b15",
+          "code": "L5",
+          "principle": "PURPOSE LIMITATION & DATA MINIMIZATION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeea0cc22d24b3857b1c",
+          "code": "L6",
+          "principle": "PURPOSE LIMITATION & DATA MINIMIZATION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeea0cc22d24b3857b23",
+          "code": "L7",
+          "principle": "PRIVACY & DATA PROTECTION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeea0cc22d24b3857b2a",
+          "code": "L8",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeea0cc22d24b3857b32",
+          "code": "L9",
+          "principle": "PRIVACY & DATA PROTECTION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeeb0cc22d24b3857b39",
+          "code": "L10",
+          "principle": "PRIVACY & DATA PROTECTION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeeb0cc22d24b3857b40",
+          "code": "L11",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeeb0cc22d24b3857b47",
+          "code": "L12",
+          "principle": "USER RIGHTS & AUTONOMY",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeeb0cc22d24b3857b4e",
+          "code": "L13",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY"
+        },
+        {
+          "id": "693ffeec0cc22d24b3857b51",
+          "code": "L14",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeec0cc22d24b3857b58",
+          "code": "L15",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeec0cc22d24b3857b60",
+          "code": "L16",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeec0cc22d24b3857b68",
+          "code": "L17",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeed0cc22d24b3857b70",
+          "code": "L18",
+          "principle": "HUMAN OVERSIGHT & CONTROL",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeed0cc22d24b3857b78",
+          "code": "L19",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeed0cc22d24b3857b80",
+          "code": "L20",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "riskScore": 2
+        },
+        {
+          "id": "693ffeed0cc22d24b3857b87",
+          "code": "L21",
+          "principle": "TRANSPARENCY & EXPLAINABILITY",
+          "riskScore": 2
+        }
+      ]
+    },
+    {
+      "userId": "698c359d9ff7bb6bcd9e7094",
+      "totalAnswers": 12,
+      "questions": [
+        {
+          "id": "695d814a205aa3b04599f597",
+          "code": "T1",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "695d814a205aa3b04599f5a6",
+          "code": "T2",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9366f16d2d4966357c",
+          "code": "H1",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663583",
+          "code": "H2",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d4966358a",
+          "code": "S1",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "principleKey": "technical_robustness_safety",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663591",
+          "code": "P1",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d49663598",
+          "code": "P2",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d4966359e",
+          "code": "F1",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "principleKey": "diversity_fairness",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d496635a5",
+          "code": "W1",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing"
+        },
+        {
+          "id": "693c6b9666f16d2d496635a8",
+          "code": "W2",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635ae",
+          "code": "A1",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635b4",
+          "code": "A2",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        }
+      ]
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "totalAnswers": 12,
+      "questions": [
+        {
+          "id": "695d814a205aa3b04599f597",
+          "code": "T1",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "695d814a205aa3b04599f5a6",
+          "code": "T2",
+          "principle": "TRANSPARENCY",
+          "principleKey": "transparency_explainability",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9366f16d2d4966357c",
+          "code": "H1",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663583",
+          "code": "H2",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "principleKey": "human_agency_oversight",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d4966358a",
+          "code": "S1",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "principleKey": "technical_robustness_safety",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9466f16d2d49663591",
+          "code": "P1",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d49663598",
+          "code": "P2",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "principleKey": "privacy_data_governance",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d4966359e",
+          "code": "F1",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "principleKey": "diversity_fairness",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9566f16d2d496635a5",
+          "code": "W1",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing"
+        },
+        {
+          "id": "693c6b9666f16d2d496635a8",
+          "code": "W2",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "principleKey": "societal_wellbeing",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635ae",
+          "code": "A1",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        },
+        {
+          "id": "693c6b9666f16d2d496635b4",
+          "code": "A2",
+          "principle": "ACCOUNTABILITY",
+          "principleKey": "accountability_responsibility",
+          "riskScore": 2
+        }
+      ]
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "totalAnswers": 12,
+      "questions": [
+        {
+          "id": "69400288b84136831bdea38e",
+          "code": "T1_TECH",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "riskScore": 2
+        },
+        {
+          "id": "69400288b84136831bdea396",
+          "code": "T2_TECH",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "69400288b84136831bdea399",
+          "code": "T3",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "69400288b84136831bdea39c",
+          "code": "T4",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "69400289b84136831bdea39f",
+          "code": "T5",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "69400289b84136831bdea3a2",
+          "code": "T6",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "69400289b84136831bdea3a5",
+          "code": "T7",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "riskScore": 2
+        },
+        {
+          "id": "69400289b84136831bdea3ad",
+          "code": "T8",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "riskScore": 2
+        },
+        {
+          "id": "6940028ab84136831bdea3b5",
+          "code": "T9",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "riskScore": 2
+        },
+        {
+          "id": "6940028ab84136831bdea3bd",
+          "code": "T10",
+          "principle": "TRANSPARENCY"
+        },
+        {
+          "id": "6940028ab84136831bdea3c0",
+          "code": "T11",
+          "principle": "PRIVACY & DATA GOVERNANCE"
+        },
+        {
+          "id": "6940028ab84136831bdea3c3",
+          "code": "T12",
+          "principle": "ACCOUNTABILITY"
+        }
+      ]
+    },
+    {
+      "userId": "698c359d9ff7bb6bcd9e7094",
+      "totalAnswers": 27,
+      "questions": [
+        {
+          "id": "6946acd0650113a211cbfcb7",
+          "code": "E1",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd1650113a211cbfcbf",
+          "code": "E2",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd1650113a211cbfcc6",
+          "code": "E3",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd1650113a211cbfcce",
+          "code": "E4",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING"
+        },
+        {
+          "id": "6946acd2650113a211cbfcd1",
+          "code": "E5",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd2650113a211cbfcd7",
+          "code": "E6",
+          "principle": "HUMAN AGENCY & OVERSIGHT"
+        },
+        {
+          "id": "6946acd2650113a211cbfcda",
+          "code": "E7",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd3650113a211cbfce1",
+          "code": "E8",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING"
+        },
+        {
+          "id": "6946acd3650113a211cbfce4",
+          "code": "E9",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd4650113a211cbfceb",
+          "code": "E10",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd4650113a211cbfcf1",
+          "code": "E11",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd5650113a211cbfcf7",
+          "code": "E12",
+          "principle": "ACCOUNTABILITY",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd5650113a211cbfcfc",
+          "code": "E13",
+          "principle": "ACCOUNTABILITY",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd5650113a211cbfd01",
+          "code": "E14",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd6650113a211cbfd09",
+          "code": "E15",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING"
+        },
+        {
+          "id": "6946acd6650113a211cbfd0c",
+          "code": "E16",
+          "principle": "TRANSPARENCY"
+        },
+        {
+          "id": "6946acd6650113a211cbfd0f",
+          "code": "E17",
+          "principle": "TRANSPARENCY"
+        },
+        {
+          "id": "6946acd7650113a211cbfd12",
+          "code": "E18",
+          "principle": "HUMAN AGENCY & OVERSIGHT"
+        },
+        {
+          "id": "6946acd7650113a211cbfd15",
+          "code": "E19",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY"
+        },
+        {
+          "id": "6946acd7650113a211cbfd18",
+          "code": "E20",
+          "principle": "ACCOUNTABILITY"
+        },
+        {
+          "id": "6946acd8650113a211cbfd1b",
+          "code": "E21",
+          "principle": "HUMAN AGENCY & OVERSIGHT"
+        },
+        {
+          "id": "6946acd8650113a211cbfd1e",
+          "code": "E22",
+          "principle": "ACCOUNTABILITY"
+        },
+        {
+          "id": "6946acd8650113a211cbfd21",
+          "code": "E23",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING"
+        },
+        {
+          "id": "6946acd9650113a211cbfd24",
+          "code": "E24",
+          "principle": "ACCOUNTABILITY",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd9650113a211cbfd2a",
+          "code": "E25",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acd9650113a211cbfd30",
+          "code": "E26",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "riskScore": 2
+        },
+        {
+          "id": "6946acda650113a211cbfd36",
+          "code": "E27",
+          "principle": "TRANSPARENCY",
+          "riskScore": 2
+        }
+      ]
+    }
+  ]
+}

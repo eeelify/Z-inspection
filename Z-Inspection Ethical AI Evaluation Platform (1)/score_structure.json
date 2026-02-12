@@ -1,0 +1,257 @@
+{
+  "_id": "698721799eec21150e2210e6",
+  "questionnaireKey": "general-v1",
+  "projectId": "6985dc9a9ff7bb6bcd9d528e",
+  "userId": "6985c22c9ff7bb6bcd9d45ea",
+  "__v": 0,
+  "byPrinciple": {
+    "TRANSPARENCY": {
+      "n": 2,
+      "risk": 0,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "695d814a205aa3b04599f597",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        },
+        {
+          "questionId": "695d814a205aa3b04599f5a6",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    },
+    "HUMAN AGENCY & OVERSIGHT": {
+      "n": 2,
+      "risk": 1,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "693c6b9466f16d2d49663583",
+          "answerSeverity": 0.5,
+          "finalRiskContribution": 1,
+          "importance": 2
+        },
+        {
+          "questionId": "693c6b9366f16d2d4966357c",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    },
+    "TECHNICAL ROBUSTNESS & SAFETY": {
+      "n": 1,
+      "risk": 0,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "693c6b9466f16d2d4966358a",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    },
+    "PRIVACY & DATA GOVERNANCE": {
+      "n": 2,
+      "risk": 0,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "693c6b9466f16d2d49663591",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        },
+        {
+          "questionId": "693c6b9566f16d2d49663598",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    },
+    "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+      "n": 1,
+      "risk": 0,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "693c6b9566f16d2d4966359e",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    },
+    "SOCIETAL & INTERPERSONAL WELL-BEING": {
+      "n": 2,
+      "risk": 0.5,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "693c6b9666f16d2d496635a8",
+          "answerSeverity": 0.25,
+          "finalRiskContribution": 0.5,
+          "importance": 2
+        },
+        {
+          "questionId": "693c6b9566f16d2d496635a5",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    },
+    "ACCOUNTABILITY": {
+      "n": 2,
+      "risk": 1,
+      "avgImportance": 2,
+      "highImportanceRatio": 0,
+      "topDrivers": [
+        {
+          "questionId": "693c6b9666f16d2d496635ae",
+          "answerSeverity": 0.5,
+          "finalRiskContribution": 1,
+          "importance": 2
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635b4",
+          "answerSeverity": 0,
+          "finalRiskContribution": 0,
+          "importance": 2
+        }
+      ]
+    }
+  },
+  "byQuestion": [],
+  "computedAt": "2026-02-12T15:50:16.712Z",
+  "createdAt": "2026-02-07T11:26:49.049Z",
+  "questionBreakdown": [
+    {
+      "questionId": "695d814a205aa3b04599f597",
+      "principle": "TRANSPARENCY",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc994"
+    },
+    {
+      "questionId": "695d814a205aa3b04599f5a6",
+      "principle": "TRANSPARENCY",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc995"
+    },
+    {
+      "questionId": "693c6b9366f16d2d4966357c",
+      "principle": "HUMAN AGENCY & OVERSIGHT",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc996"
+    },
+    {
+      "questionId": "693c6b9466f16d2d49663583",
+      "principle": "HUMAN AGENCY & OVERSIGHT",
+      "answerSeverity": 0.5,
+      "finalRiskContribution": 1,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc997"
+    },
+    {
+      "questionId": "693c6b9466f16d2d4966358a",
+      "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc998"
+    },
+    {
+      "questionId": "693c6b9466f16d2d49663591",
+      "principle": "PRIVACY & DATA GOVERNANCE",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc999"
+    },
+    {
+      "questionId": "693c6b9566f16d2d49663598",
+      "principle": "PRIVACY & DATA GOVERNANCE",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc99a"
+    },
+    {
+      "questionId": "693c6b9566f16d2d4966359e",
+      "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc99b"
+    },
+    {
+      "questionId": "693c6b9566f16d2d496635a5",
+      "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc99c"
+    },
+    {
+      "questionId": "693c6b9666f16d2d496635a8",
+      "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+      "answerSeverity": 0.25,
+      "finalRiskContribution": 0.5,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc99d"
+    },
+    {
+      "questionId": "693c6b9666f16d2d496635ae",
+      "principle": "ACCOUNTABILITY",
+      "answerSeverity": 0.5,
+      "finalRiskContribution": 1,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc99e"
+    },
+    {
+      "questionId": "693c6b9666f16d2d496635b4",
+      "principle": "ACCOUNTABILITY",
+      "answerSeverity": 0,
+      "finalRiskContribution": 0,
+      "importance": 2,
+      "triggeredRules": [],
+      "_id": "698df6b8139060884edcc99f"
+    }
+  ],
+  "role": "ethical-expert",
+  "scoringModelVersion": "strict_ethical_v3_cumulative",
+  "totals": {
+    "overallRisk": 2.5,
+    "n": 12
+  },
+  "updatedAt": "2026-02-12T15:50:16.712Z"
+}

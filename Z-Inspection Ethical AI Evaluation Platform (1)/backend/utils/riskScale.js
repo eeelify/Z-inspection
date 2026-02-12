@@ -17,7 +17,10 @@
  * NULL/undefined = Not evaluated (N/A) - NOT the same as 0
  */
 
+const ercConfig = require('../config/ercThresholds.v1');
+
 /**
+
  * Clamp score to valid range [0, 4]
  * @param {number|null|undefined} score - Input score
  * @returns {number|null} Clamped score or null if invalid
@@ -38,29 +41,9 @@ function clampScore(score) {
  * @returns {string} Risk classification: "MINIMAL_RISK" | "LOW_RISK" | "MEDIUM_RISK" | "HIGH_RISK" | "CRITICAL_RISK" | "N/A"
  */
 function classifyRisk(score) {
-  // NULL/undefined means not evaluated
-  if (score === null || score === undefined || isNaN(score)) {
-    return "N/A";
-  }
-
-  // Validate and clamp range
-  const clamped = clampScore(score);
-  if (clamped === null) {
-    return "N/A";
-  }
-
-  // CORRECT SCALE: Higher score = Higher risk
-  // Canonical thresholds (aligned with riskUtils):
-  // < 0.5: Minimal
-  // < 1.5: Low
-  // < 2.5: Medium
-  // < 3.5: High
-  // >= 3.5: Critical
-  if (clamped >= 3.5) return "CRITICAL_RISK";
-  if (clamped >= 2.5) return "HIGH_RISK";
-  if (clamped >= 1.5) return "MEDIUM_RISK";
-  if (clamped >= 0.5) return "LOW_RISK";
-  return "MINIMAL_RISK"; // clamped < 0.5
+  const result = ercConfig.getRiskLevel(score);
+  if (result.level === 'UNKNOWN') return 'N/A';
+  return `${result.level}_RISK`;
 }
 
 /**
@@ -172,23 +155,8 @@ function validateRiskScaleNotInverted(score, interpretedRisk) {
  * @returns {string} Hex color code
  */
 function colorForScore(score) {
-  if (score === null || score === undefined || isNaN(score)) {
-    return "#9ca3af"; // Gray for N/A or unknown
-  }
-
-  const clamped = clampScore(score);
-  if (clamped === null) {
-    return "#9ca3af"; // Gray
-  }
-
-  // CORRECT SCALE: 0 = green (safe), 4 = red (critical)
-  // Use canonical thresholds for consistent colors
-  // PALETTE UPDATE (Jan 2026): Minimal=Green, Low=LightGreen, Moderate=Amber, High=Red
-  if (clamped < 0.5) return "#4CAF50";   // Green - MINIMAL
-  if (clamped < 1.6) return "#edbf4bff";   // Yellow - LOW (User Request: Sarı)
-  if (clamped < 2.5) return "#EF6C00";   // Dark Orange - MEDIUM (User Request: Koyu Turuncu)
-  if (clamped < 3.5) return "#D32F2F";   // Dark Red - HIGH (User Request)
-  return "#B71C1C";                      // Very Dark Red - CRITICAL
+  const result = ercConfig.getRiskLevel(score);
+  return result.color || "#9ca3af";
 }
 
 /**

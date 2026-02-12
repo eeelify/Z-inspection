@@ -1,0 +1,9 @@
+­şôè [DEBUG buildReportMetrics] Found 8 total responses
+­şôè [DEBUG buildReportMetrics] Found 8 responses with answers
+­şôè [DEBUG getProjectEvaluators] Found 8 responses with answers
+­şôè [DEBUG buildReportMetrics] Found 8 Score documents (all questionnaires)
+­şôè [DEBUG buildPrincipleScores] Found 8 Score documents for project 6985dc9a9ff7bb6bcd9d528e
+­şöı [DEBUG buildReportMetrics] Mapping 7 principles to byPrincipleOverall
+Ô£à [DEBUG buildReportMetrics] byPrincipleOverall populated: 7 principles
+­şÜÇ [DEBUG buildReportMetrics] Calling buildDashboardMetrics...
+­şöı [DEBUG buildDashboardMetrics] Args: {

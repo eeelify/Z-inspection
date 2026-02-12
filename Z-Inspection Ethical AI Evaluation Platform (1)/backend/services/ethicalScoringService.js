@@ -56,7 +56,9 @@ function normalizePrinciple(principle) {
     'privacy_data_governance': 'PRIVACY & DATA GOVERNANCE',
     'diversity_fairness': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
     'societal_wellbeing': 'SOCIETAL & INTERPERSONAL WELL-BEING',
-    'accountability': 'ACCOUNTABILITY'
+    'accountability': 'ACCOUNTABILITY',
+    'transparency_explainability': 'TRANSPARENCY',
+    'accountability_responsibility': 'ACCOUNTABILITY'
   };
   if (snakeMap[principle.toLowerCase()]) return snakeMap[principle.toLowerCase()];
 
@@ -163,13 +165,10 @@ async function computeEthicalScores(projectId, userId = null, questionnaireKey =
         if (ans.answerSeverity !== undefined && ans.answerSeverity !== null) {
           severity = Number(ans.answerSeverity);
         } else if (ans.answerScore !== undefined && ans.answerScore !== null) {
-          // LEGACY MAPPING: Only if strictly necessary and annotated
-          // console.warn(`Mapping legacy answerScore to severity for ${question.code}`);
-          // severity = 1 - ans.answerScore; // INVERTED LEGACY LOGIC
-          // STRICT MODE: REFUSE TO GUESS. 
-          // If we must handle legacy, we should do it explicitly. 
-          // User Requirement: "answerScore MUST NOT EXIST" / "Legacy data MUST render report INVALID"
-          // So here we leave severity as null.
+          // LEGACY MAPPING: Enabled to support answers saved by evaluationService
+          // Formula: Risk (Severity) = 1 - Safety (Answer Score)
+          // User Requirement: "Risk Score = Etik Önemi × (1 – Cevap Ağırlığı)"
+          severity = 1 - Number(ans.answerScore);
         }
 
         // Check if question is unanswered (optional check)

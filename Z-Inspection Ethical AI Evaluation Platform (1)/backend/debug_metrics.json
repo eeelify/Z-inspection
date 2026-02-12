@@ -1,0 +1,14 @@
+{
+  "scoringDisclosure": {
+    "totalQuestions": 159,
+    "quantitativeQuestions": 86,
+    "qualitativeQuestions": 73,
+    "text": "73 qualitative (open-text) questions are excluded from quantitative scoring. Quantitative risk assessment is based on 86 questions with predefined answer options.",
+    "methodology": "ERC (Ethical Risk Contribution) = Importance × Severity"
+  },
+  "counts": {
+    "totalQuestions": 159,
+    "quantitativeQuestions": 86,
+    "qualitativeQuestions": 73
+  }
+}

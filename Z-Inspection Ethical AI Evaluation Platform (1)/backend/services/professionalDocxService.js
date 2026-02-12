@@ -269,24 +269,33 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     });
   } else {
     // Fallback: generate from metrics
-    const overallAvg = reportMetrics.scoring.totals?.overallAvg || 0;
-    // Use riskLabel function for consistent mapping (0 = minimal risk, 4 = critical risk)
-    const riskLevel = riskLabel(overallAvg);
-    children.push(createParagraph(`• Normalized Ethical Risk Level: ${riskLevel} (Average score: ${safeToFixed(overallAvg, 2)} / 4)`));
+    const overallTotals = reportMetrics.overallTotals || {};
+    const normalizedAvg = overallTotals.averageERC || reportMetrics.scoring.totals?.overallAvg || 0;
+    const displayLabel = overallTotals.normalizedLabel || riskLabel(normalizedAvg);
+
+    children.push(createParagraph(`• Normalized Ethical Risk Level: ${displayLabel} (Average ERC: ${safeToFixed(normalizedAvg, 2)} / 4)`));
     children.push(createParagraph(`• ${reportMetrics.coverage.expertsSubmittedCount} evaluator(s) submitted evaluations`));
     children.push(createParagraph(`• ${reportMetrics.tensions.summary.total} ethical tensions identified`));
   }
 
   // ADDED: Cumulative Risk Volume Context (Mandatory)
+  const overallTotals = reportMetrics.overallTotals || {};
   const scoringDisclosure = reportMetrics.scoringDisclosure || {};
-  const cumulativeVolume = reportMetrics.overallTotals?.cumulativeRiskVolume || 0;
+  const cumulativeVolume = overallTotals.cumulativeRiskVolume || 0;
 
   children.push(createParagraph(''));
-  children.push(createParagraph('Scoring Context:', { bold: true }));
+  children.push(createParagraph('Scoring Audit & Sensitivity:', { bold: true }));
   children.push(createParagraph(`Cumulative Risk Volume: ${safeToFixed(cumulativeVolume, 2)}`));
+  children.push(createParagraph(`Raw Average ERC (Mean): ${safeToFixed(overallTotals.rawAverageERC, 2)}`));
+  children.push(createParagraph(`Max Principle Average (Sensitivity): ${safeToFixed(overallTotals.maxPrincipleAverage, 2)}`));
+
+  if (overallTotals.maxPrincipleAverage > (overallTotals.rawAverageERC + 0.1)) {
+    children.push(createParagraph(`ℹ️ NOTE: Overall risk label promoted due to Max Principle Sensitivity override to prevent dilution.`, { italics: true, color: '1e40af' }));
+  }
+
   children.push(createParagraph(`Based on ${scoringDisclosure.quantitativeQuestions || 'N/A'} quantitative questions`));
   children.push(createParagraph(`(Maximum possible cumulative volume: ${scoringDisclosure.quantitativeQuestions ? (scoringDisclosure.quantitativeQuestions * 4).toFixed(2) : 'N/A'})`, { italics: true }));
-  children.push(createParagraph('ERC values below are normalized on a 0–4 scale.', { italics: true }));
+  children.push(createParagraph('All ERC values are normalized on a 0–4 scale.', { italics: true }));
 
   children.push(createParagraph(''));
 
@@ -335,10 +344,10 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
         new TableRow({
           children: [
             new TableCell({ children: [createParagraph(principle)] }),
-            new TableCell({ children: [createParagraph(safeToFixed(principleData.avgScore, 2) + ' / 4')] }),
+            new TableCell({ children: [createParagraph(safeToFixed(principleData.avg || principleData.avgScore || principleData.averageRisk, 2) + ' / 4')] }),
             new TableCell({ children: [createParagraph(`${safeToFixed(principleData.riskPct, 1, '0.0')}%`)] }),
             new TableCell({ children: [createParagraph(`${safeToFixed(principleData.safePct, 1, '0.0')}%`)] }),
-            new TableCell({ children: [createParagraph(`${principleData.safeCount}/${principleData.notSafeCount}`)] }),
+            new TableCell({ children: [createParagraph(`${principleData.safeCount || 0}/${principleData.notSafeCount || 0}`)] }),
             new TableCell({ children: [createParagraph(notes[0] || '')] })
           ]
         })
@@ -366,11 +375,11 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
     children.push(createParagraph('Legend & Thresholds:', { bold: true }));
     children.push(createParagraph('Scale 0–4 (0 = lowest risk, 4 = highest risk)'));
     children.push(createParagraph('Thresholds:'));
-    children.push(createParagraph('• 0.0–0.5 = Minimal'));
-    children.push(createParagraph('• 0.5–1.5 = Low'));
-    children.push(createParagraph('• 1.5–2.5 = Medium'));
-    children.push(createParagraph('• 2.5–3.5 = High'));
-    children.push(createParagraph('• 3.5–4.0 = Critical'));
+    children.push(createParagraph('• 0.0–0.8 = Minimal'));
+    children.push(createParagraph('• 0.8–1.6 = Low'));
+    children.push(createParagraph('• 1.6–2.4 = Moderate'));
+    children.push(createParagraph('• 2.4–3.2 = High'));
+    children.push(createParagraph('• 3.2–4.0 = Critical'));
 
     // Calculate and show evaluator counts and N/A excluded
     const principles = Object.keys(reportMetrics.scoring.byPrincipleOverall);

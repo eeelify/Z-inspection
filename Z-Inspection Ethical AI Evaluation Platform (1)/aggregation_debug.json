@@ -1,0 +1,62 @@
+{
+  "totalScores": 8,
+  "evaluatorScores": 8,
+  "byQuestionnaire": {
+    "general-v1": [
+      {
+        "userId": "6985c22c9ff7bb6bcd9d45ea",
+        "questionCount": 12,
+        "totalRisk": 2.5
+      },
+      {
+        "userId": "6985db129ff7bb6bcd9d5042",
+        "questionCount": 12,
+        "totalRisk": 1.5
+      },
+      {
+        "userId": "698c359d9ff7bb6bcd9e7094",
+        "questionCount": 12,
+        "totalRisk": 3.5
+      },
+      {
+        "userId": "69660b928cb1f9896e7d1561",
+        "questionCount": 12,
+        "totalRisk": 5
+      }
+    ],
+    "ethical-expert-v1": [
+      {
+        "userId": "6985c22c9ff7bb6bcd9d45ea",
+        "questionCount": 11,
+        "totalRisk": 3
+      }
+    ],
+    "legal-expert-v1": [
+      {
+        "userId": "6985db129ff7bb6bcd9d5042",
+        "questionCount": 21,
+        "totalRisk": 1.5
+      }
+    ],
+    "technical-expert-v1": [
+      {
+        "userId": "69660b928cb1f9896e7d1561",
+        "questionCount": 12,
+        "totalRisk": 4
+      }
+    ],
+    "education-expert-v1": [
+      {
+        "userId": "698c359d9ff7bb6bcd9e7094",
+        "questionCount": 27,
+        "totalRisk": 0.5
+      }
+    ]
+  },
+  "aggregatedResult": {
+    "totalQuestions": 119,
+    "totalRisk": 21.5,
+    "averageERC": 0.18067226890756302,
+    "normalizedERC": 0.7226890756302521
+  }
+}

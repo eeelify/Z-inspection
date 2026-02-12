@@ -28,6 +28,7 @@ const educationExpertQuestions = [
       tr: 'Öğrencilerin dijital okuryazarlık seviyesi sistemi güvenli ve etkili kullanmak için yeterli mi?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -53,6 +54,7 @@ const educationExpertQuestions = [
       tr: 'Sağlanan eğitim materyalleri ve onboarding rehberleri yeterli, anlaşılır ve pedagojik olarak uygun mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -78,6 +80,7 @@ const educationExpertQuestions = [
       tr: 'Sistemin çıktılarının öğretmen talimatlarıyla çelişme veya ulusal müfredattan sapma riski var mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -104,6 +107,7 @@ const educationExpertQuestions = [
       tr: 'Sistem, karmaşık konuları aşırı basitleştirerek derin öğrenmeyi olumsuz etkileyebilir mi?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -123,6 +127,7 @@ const educationExpertQuestions = [
       tr: 'Sistem etkileşimli (Sokratik) öğrenmeyi mi destekliyor, yoksa öğrencileri pasif kullanıcı hâline mi getiriyor?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -147,6 +152,7 @@ const educationExpertQuestions = [
       tr: 'Kullanıcılar için ek eğitim veya uyum süreci ihtiyacı görüyor musunuz?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -166,6 +172,7 @@ const educationExpertQuestions = [
       tr: 'Öğrenciler yanlış veya düşük kaliteli AI çıktısını fark edebilecek yeterlilikteler mi ve AI\'ya aşırı güvenme (automation bias) riski var mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -191,6 +198,7 @@ const educationExpertQuestions = [
       tr: 'Sistemin uzun süreli kullanımı öğrencilerde dijital yorgunluk, dikkat dağınıklığı veya bilişsel yük oluşturabilir mi?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -210,6 +218,7 @@ const educationExpertQuestions = [
       tr: 'Dijital becerisi düşük öğrenciler sistem çıktılarıyla ilgili daha fazla zorluk yaşayabilir mi?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -235,6 +244,7 @@ const educationExpertQuestions = [
       tr: 'Sistem dezavantajlı veya özel gereksinimli öğrenciler için yeterince kapsayıcı ve erişilebilir mi?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -259,6 +269,7 @@ const educationExpertQuestions = [
       tr: 'Sistem öğrenci verilerini KVKK/GDPR ve AI Act veri yönetişimi gerekliliklerine uygun şekilde işliyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -283,6 +294,7 @@ const educationExpertQuestions = [
       tr: 'Öğretmen Etik Beyan Formu\'nu doldurmuş ve gerekli idari izinleri almış mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -306,6 +318,7 @@ const educationExpertQuestions = [
       tr: 'Bir Yapay Zekâ Etiği Ekibi veya resmi itiraz/gözetim mekanizması var mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -329,6 +342,7 @@ const educationExpertQuestions = [
       tr: 'Sistem yanlış, uydurma (halüsinasyon) veya pedagojik açıdan zararlı bilgi üretme riski taşıyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -355,6 +369,7 @@ const educationExpertQuestions = [
       tr: 'Sistem öğrencilerin kopya çekmesini, intihal yapmasını veya öğrenmeyi atlamasını kolaylaştırıyor mu?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -374,6 +389,7 @@ const educationExpertQuestions = [
       tr: 'Sistemin kullandığı bilgi kaynakları güvenilir, güncel ve akademik olarak geçerli mi?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -393,6 +409,7 @@ const educationExpertQuestions = [
       tr: 'Sistem çıktılarının doğrulanması veya anlaşılması için yeterli açıklanabilirlik ve şeffaflık sunuyor mu?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -412,6 +429,7 @@ const educationExpertQuestions = [
       tr: 'Öğrenciler AI\'a aşırı güvenip bilgiyi doğrulamadan kabul etme eğiliminde olabilir mi?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -431,6 +449,7 @@ const educationExpertQuestions = [
       tr: 'Sistem öğrencileri yanlış yönlendirebilecek belirsiz veya yanıltıcı çıktılar üretebilir mi?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -450,6 +469,7 @@ const educationExpertQuestions = [
       tr: 'Öğrencilerin sistemi zararlı, etik dışı veya amacı dışında kullanma ihtimali var mı?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -469,6 +489,7 @@ const educationExpertQuestions = [
       tr: 'Sistem kullanımında öğretmen gözetimi (human-in-the-loop) mekanizmaları yeterli mi?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -488,6 +509,7 @@ const educationExpertQuestions = [
       tr: 'Hangi ek önlemleri, sınıf içi kuralları veya kullanım sınırlarını önerirsiniz?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -507,6 +529,7 @@ const educationExpertQuestions = [
       tr: 'Sistem öğrenci öğrenmesini daha iyi desteklemesi için hangi iyileştirmeleri önerirsiniz?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -526,6 +549,7 @@ const educationExpertQuestions = [
       tr: 'Sistem, AB AI Act\'e göre "eğitim için yüksek riskli sistem" kategorisine giriyor mu (örn. değerlendirme, performans ölçme vb.)?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -550,6 +574,7 @@ const educationExpertQuestions = [
       tr: 'AI Act\'in zorunlu kıldığı insan gözetimi (müdahale, durdurma, çıktıları kontrol etme) mekanizmaları açıkça tanımlanmış mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -574,6 +599,7 @@ const educationExpertQuestions = [
       tr: 'Sistem, AI Act\'te yasaklanan uygulamalardan (manipülatif yönlendirme, çocukları istismar eden hedefleme) hiçbirini içeriyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -598,6 +624,7 @@ const educationExpertQuestions = [
       tr: 'Eğitimsel kararların izlenebilirliğini ve denetlenebilirliğini sağlamak için sistem otomatik olarak log kaydı tutuyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,

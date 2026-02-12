@@ -1,0 +1,115 @@
+{
+  "total": 159,
+  "breakdown": {
+    "general-v1": {
+      "total": 12,
+      "quant": 11,
+      "qual": 1
+    },
+    "ethical-v1": {
+      "total": 12,
+      "quant": 3,
+      "qual": 9
+    },
+    "medical-v1": {
+      "total": 25,
+      "quant": 9,
+      "qual": 16
+    },
+    "ethical-expert-v1": {
+      "total": 11,
+      "quant": 3,
+      "qual": 8
+    },
+    "medical-expert-v1": {
+      "total": 25,
+      "quant": 9,
+      "qual": 16
+    },
+    "legal-expert-v1": {
+      "total": 21,
+      "quant": 18,
+      "qual": 3
+    },
+    "technical-expert-v1": {
+      "total": 12,
+      "quant": 4,
+      "qual": 8
+    },
+    "education-expert-v1": {
+      "total": 27,
+      "quant": 15,
+      "qual": 12
+    },
+    "test_q_698de495c7a828cc324959f1": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de4adc0342484b1751a7b": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de4dbccfd961dd5767a2f": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de504a2cce8e5f81a7787": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de51c8b761091f50e2eaa": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de631cd7094ccf10a5fbf": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de66f67c514225d1b4b36": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de684de20d95cf1f72510": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de6b7b6271aee4cc36126": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de6f74726ab4bd8a3cb5e": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de776fb229f609835f8c4": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de793ae824bcc515a457e": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de7ac5b5e6d898e758d3a": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    },
+    "test_q_698de7bac6b0295891270f5b": {
+      "total": 1,
+      "quant": 1,
+      "qual": 0
+    }
+  }
+}

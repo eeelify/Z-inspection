@@ -1,0 +1,133 @@
+[
+  {
+    "code": "H6",
+    "text": "Does the AI system carry a risk of influencing users' autonomy or decision-making processes (e.g., cognitive/behavioral manipulation) in ethically unacceptable ways? What is the potential for this risk to overlap with practices prohibited under EU AI Act Article 5?",
+    "importance": 2,
+    "options": [
+      {
+        "key": "high_risk",
+        "text": "High risk / Yüksek risk",
+        "legacyScore": 1
+      },
+      {
+        "key": "moderate_risk",
+        "text": "Moderate risk / Orta risk",
+        "legacyScore": 2
+      },
+      {
+        "key": "low_risk",
+        "text": "Low risk / Düşük risk",
+        "legacyScore": 3
+      },
+      {
+        "key": "no_risk",
+        "text": "No risk / Risk yok",
+        "legacyScore": 4
+      },
+      {
+        "key": "not_sure",
+        "text": "Not sure / Emin değilim",
+        "legacyScore": 2
+      }
+    ]
+  },
+  {
+    "code": "H10",
+    "text": "If it is a High-Risk system, do the human oversight procedures required by the AI Act adequately define the ethical ability and responsibility to override the AI's risky decisions?",
+    "options": []
+  },
+  {
+    "code": "S2",
+    "text": "How do you assess the potential harm the AI system may cause and its potential to affect fundamental rights? Has a Fundamental Rights Impact Assessment (FRIA) been conducted?",
+    "options": []
+  },
+  {
+    "code": "P4",
+    "text": "Does the use of Sensitive Data (e.g., health, race, biometric data) ethically raise the risk of bias, societal unfairness, or stigmatization potential to an unacceptable level? What is the ethical justification for using this data?",
+    "options": []
+  },
+  {
+    "code": "T9",
+    "text": "If the system is a 'limited-risk' system, is the user's ethical right to know that the output is AI-generated provided clearly and comprehensibly?",
+    "options": []
+  },
+  {
+    "code": "F2",
+    "text": "Could the system produce systematic unfairness or disproportionate impacts on certain groups?",
+    "importance": 2,
+    "options": [
+      {
+        "key": "high_risk",
+        "text": "High risk / Yüksek risk",
+        "legacyScore": 1
+      },
+      {
+        "key": "moderate_risk",
+        "text": "Moderate risk / Orta risk",
+        "legacyScore": 2
+      },
+      {
+        "key": "low_risk",
+        "text": "Low risk / Düşük risk",
+        "legacyScore": 3
+      },
+      {
+        "key": "not_sure",
+        "text": "Not sure / Emin değilim",
+        "legacyScore": 2
+      }
+    ]
+  },
+  {
+    "code": "F3",
+    "text": "Are there identifiable sources of bias in the data, model, or system design? If so, what ethical and technical mitigation strategies have been implemented to address these biases?",
+    "options": []
+  },
+  {
+    "code": "W7",
+    "text": "Does the AI system respect freedom of expression and access to information? How are potential risks of unintentional restriction or censorship managed?",
+    "importance": 2,
+    "options": [
+      {
+        "key": "fully_respects",
+        "text": "Fully respects / Tamamen saygı gösteriyor",
+        "legacyScore": 4
+      },
+      {
+        "key": "partially_respects",
+        "text": "Partially respects / Kısmen saygı gösteriyor",
+        "legacyScore": 3
+      },
+      {
+        "key": "may_unintentionally_restrict",
+        "text": "May unintentionally restrict / İstemeden kısıtlama yaratabilir",
+        "legacyScore": 2
+      },
+      {
+        "key": "significantly_restricts",
+        "text": "Significantly restricts / Önemli ölçüde kısıtlayabilir",
+        "legacyScore": 1
+      },
+      {
+        "key": "not_applicable",
+        "text": "Not applicable / Uygulanabilir değil",
+        "legacyScore": 3
+      }
+    ]
+  },
+  {
+    "code": "A5",
+    "text": "Do you consider the system's outcomes and decisions ethically defensible in light of ethical principles?",
+    "options": []
+  },
+  {
+    "code": "A11",
+    "text": "How are ethical accountability mechanisms established among the system's developers, users, and affected third parties? Are the complaint and appeal processes regarding AI decisions ethically fair?",
+    "options": []
+  },
+  {
+    "code": "A12",
+    "text": "Which ethical aspects of the system need improvement?",
+    "options": []
+  }
+]

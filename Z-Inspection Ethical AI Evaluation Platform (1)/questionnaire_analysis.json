@@ -1,0 +1,4035 @@
+{
+  "projectId": "6985dc9a9ff7bb6bcd9d528e",
+  "projectTitle": "Tutor AI – Öğrenciye Özel Yapay Zekâ Destekli Eğitim Chatbotu",
+  "questionnaireBreakdown": {
+    "general-v1": {
+      "count": 4,
+      "responses": [
+        {
+          "_id": "698721789ff7bb6bcd9db4b8",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "6985dd2a9eec21150e2202c3",
+          "userId": "6985c22c9ff7bb6bcd9d45ea",
+          "role": "ethical-expert",
+          "questionnaireKey": "general-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "695d814a205aa3b04599f597",
+              "questionCode": "T1",
+              "answer": {
+                "choiceKey": "mostly_clear",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "695d814a205aa3b04599f5a6",
+              "questionCode": "T2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9366f16d2d4966357c",
+              "questionCode": "H1",
+              "answer": {
+                "choiceKey": "slightly",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663583",
+              "questionCode": "H2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 2,
+              "importanceScore": null,
+              "answerSeverity": 0.5,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d4966358a",
+              "questionCode": "S1",
+              "answer": {
+                "choiceKey": "very_likely",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663591",
+              "questionCode": "P1",
+              "answer": {
+                "choiceKey": "not_very_confident",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d49663598",
+              "questionCode": "P2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d4966359e",
+              "questionCode": "F1",
+              "answer": {
+                "choiceKey": "definitely_not",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d496635a5",
+              "questionCode": "W1",
+              "answer": {
+                "text": "evet, adalet önemli.Güvensizliğe yol açabilir.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635a8",
+              "questionCode": "W2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635ae",
+              "questionCode": "A1",
+              "answer": {
+                "choiceKey": "somewhat",
+                "multiChoiceKeys": []
+              },
+              "score": 2,
+              "importanceScore": null,
+              "answerSeverity": 0.5,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635b4",
+              "questionCode": "A2",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-07T11:46:20.088Z",
+          "createdAt": "2026-02-07T11:26:48.014Z",
+          "__v": 24
+        },
+        {
+          "_id": "6988e1dd9ff7bb6bcd9dbde9",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "6985dcc39eec21150e2202bf",
+          "userId": "6985db129ff7bb6bcd9d5042",
+          "role": "legal-expert",
+          "questionnaireKey": "general-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "695d814a205aa3b04599f597",
+              "questionCode": "T1",
+              "answer": {
+                "choiceKey": "very_clear",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "695d814a205aa3b04599f5a6",
+              "questionCode": "T2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9366f16d2d4966357c",
+              "questionCode": "H1",
+              "answer": {
+                "choiceKey": "fully",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663583",
+              "questionCode": "H2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d4966358a",
+              "questionCode": "S1",
+              "answer": {
+                "choiceKey": "very_likely",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663591",
+              "questionCode": "P1",
+              "answer": {
+                "choiceKey": "not_at_all",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d49663598",
+              "questionCode": "P2",
+              "answer": {
+                "choiceKey": "partially",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d4966359e",
+              "questionCode": "F1",
+              "answer": {
+                "choiceKey": "not_sure",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d496635a5",
+              "questionCode": "W1",
+              "answer": {
+                "text": "Kesinlikle etkileyecektir. Özellikle insan iletişiminin önem kazandığı mesleklerde daha etkili olacaktır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635a8",
+              "questionCode": "W2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635ae",
+              "questionCode": "A1",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635b4",
+              "questionCode": "A2",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-08T19:29:07.296Z",
+          "createdAt": "2026-02-08T19:19:57.161Z",
+          "__v": 7
+        },
+        {
+          "_id": "698c39d29ff7bb6bcd9e9200",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "698c36fb9eec21150e224681",
+          "userId": "698c359d9ff7bb6bcd9e7094",
+          "role": "education-expert",
+          "questionnaireKey": "general-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "695d814a205aa3b04599f597",
+              "questionCode": "T1",
+              "answer": {
+                "choiceKey": "somewhat_unclear",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "695d814a205aa3b04599f5a6",
+              "questionCode": "T2",
+              "answer": {
+                "choiceKey": "partially",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9366f16d2d4966357c",
+              "questionCode": "H1",
+              "answer": {
+                "choiceKey": "mostly",
+                "multiChoiceKeys": []
+              },
+              "score": 2,
+              "importanceScore": null,
+              "answerSeverity": 0.5,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663583",
+              "questionCode": "H2",
+              "answer": {
+                "choiceKey": "sometimes",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d4966358a",
+              "questionCode": "S1",
+              "answer": {
+                "choiceKey": "possible",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663591",
+              "questionCode": "P1",
+              "answer": {
+                "choiceKey": "not_at_all",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d49663598",
+              "questionCode": "P2",
+              "answer": {
+                "choiceKey": "partially",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d4966359e",
+              "questionCode": "F1",
+              "answer": {
+                "choiceKey": "probably_not",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d496635a5",
+              "questionCode": "W1",
+              "answer": {
+                "text": "Eğitimde güven; öğrencinin rehberlik için öğretmene duyduğu inanç ve öğretmenin, öğrencinin gelişimini doğru yönlendirdiği kabulü üzerine kuruludur. Tutor AI asenkron bir yardımcı olarak tasarlansa da fiilî kullanımda öğretmen etkileşiminin yerini kısmen alabilmektedir. Sistemin, ulusal müfredatla uyumu garanti edilmediği için öğretmen talimatlarıyla çelişen veya pedagojik bağlamdan kopuk açıklamalar üretmesi, öğrencinin öğretmene duyduğu akademik güveni zedeleyebilir. Ayrıca bu durum, öğretmen ile öğrenci arasındaki sosyal ilişkiyi zayıflatarak süreci mekanik bir düzleme çekme riski taşımaktadır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635a8",
+              "questionCode": "W2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635ae",
+              "questionCode": "A1",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635b4",
+              "questionCode": "A2",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-11T17:18:19.450Z",
+          "createdAt": "2026-02-11T08:12:02.075Z",
+          "__v": 50
+        },
+        {
+          "_id": "698c60939ff7bb6bcd9edcf7",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "6985dcdb9eec21150e2202c1",
+          "userId": "69660b928cb1f9896e7d1561",
+          "role": "technical-expert",
+          "questionnaireKey": "general-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "695d814a205aa3b04599f597",
+              "questionCode": "T1",
+              "answer": {
+                "choiceKey": "mostly_clear",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "695d814a205aa3b04599f5a6",
+              "questionCode": "T2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9366f16d2d4966357c",
+              "questionCode": "H1",
+              "answer": {
+                "choiceKey": "mostly",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663583",
+              "questionCode": "H2",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 2,
+              "importanceScore": null,
+              "answerSeverity": 0.5,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d4966358a",
+              "questionCode": "S1",
+              "answer": {
+                "choiceKey": "possible",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9466f16d2d49663591",
+              "questionCode": "P1",
+              "answer": {
+                "choiceKey": "not_very_confident",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d49663598",
+              "questionCode": "P2",
+              "answer": {
+                "choiceKey": "partially",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d4966359e",
+              "questionCode": "F1",
+              "answer": {
+                "choiceKey": "definitely_not",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9566f16d2d496635a5",
+              "questionCode": "W1",
+              "answer": {
+                "text": "No I dont think this system could affect the trust. ",
+                "multiChoiceKeys": []
+              },
+              "score": 0,
+              "importanceScore": null,
+              "answerSeverity": 1,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635a8",
+              "questionCode": "W2",
+              "answer": {
+                "choiceKey": "depends",
+                "multiChoiceKeys": []
+              },
+              "score": 2,
+              "importanceScore": null,
+              "answerSeverity": 0.5,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635ae",
+              "questionCode": "A1",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693c6b9666f16d2d496635b4",
+              "questionCode": "A2",
+              "answer": {
+                "choiceKey": "not_sure",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-11T11:14:04.080Z",
+          "createdAt": "2026-02-11T10:57:23.114Z",
+          "__v": 25
+        }
+      ],
+      "totalAnswers": 48
+    },
+    "ethical-expert-v1": {
+      "count": 1,
+      "responses": [
+        {
+          "_id": "698722969ff7bb6bcd9db63a",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "6985dd2a9eec21150e2202c3",
+          "userId": "6985c22c9ff7bb6bcd9d45ea",
+          "role": "ethical-expert",
+          "questionnaireKey": "ethical-expert-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "693ff488f7ebb7baa6f68ebe",
+              "questionCode": "H6",
+              "answer": {
+                "choiceKey": "moderate_risk",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff489f7ebb7baa6f68ec7",
+              "questionCode": "H10",
+              "answer": {
+                "text": "Tanımlanmıyor. Birincil kullanıcı tamamen anlam bulamayabilir.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff489f7ebb7baa6f68eca",
+              "questionCode": "S2",
+              "answer": {
+                "text": "Tutor AI’nin potansiyel zararları ve temel haklar üzerindeki etkileri, use case düzeyinde nitel olarak tanımlanmıştır. Sistem; özellikle bilişsel özerklik, eğitimde eşitlik, çocukların korunması ve psikolojik bütünlük gibi temel haklar üzerinde dolaylı etkilere sahip olabilir. Bununla birlikte, bu etkilerin kapsamını, şiddetini ve olasılığını sistematik biçimde analiz eden resmî bir Temel Haklar Etki Değerlendirmesi (FRIA) henüz gerçekleştirilmemiştir. Mevcut değerlendirme, risklerin farkında olunduğunu ancak bunların henüz yapılandırılmış ve belgelenmiş bir FRIA süreciyle ele alınmadığını göstermektedir.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff489f7ebb7baa6f68ecd",
+              "questionCode": "P4",
+              "answer": {
+                "text": "Kabul edilmez değil ancak olasılık orta seviyede riskli. Veride çeşitlilik yok.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff489f7ebb7baa6f68ed0",
+              "questionCode": "T9",
+              "answer": {
+                "text": "Tutor AI, sohbet tabanlı ve eğitim amaçlı bir yapay zekâ sistemi olarak sınırlı riskli bir sistem kapsamında değerlendirilebilir. Ancak mevcut use case’te, kullanıcılara üretilen çıktıların bir yapay zekâ tarafından oluşturulduğunu açık, anlaşılır ve bağlayıcı biçimde bildiren bir bilgilendirme veya işaretleme mekanizması tanımlanmamıştır. Bu nedenle, kullanıcının yapay zekâ ile etkileşimde olduğunu bilme yönündeki etik hakkının sistematik olarak ve tutarlı biçimde sağlandığı söylenemez.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff48af7ebb7baa6f68ed3",
+              "questionCode": "F2",
+              "answer": {
+                "choiceKey": "moderate_risk",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff48af7ebb7baa6f68eda",
+              "questionCode": "F3",
+              "answer": {
+                "text": "Tutor AI’nin eğitim verileri, ağırlıklı olarak İngilizce ve belirli akademik bağlamları yansıtan içeriklerden oluştuğu için dilsel, kültürel ve pedagojik önyargı kaynakları barındırma potansiyeline sahiptir. Ayrıca model mimarisinin genelleştirme yapısı, farklı öğrenme stilleri ve akademik altyapılara sahip kullanıcılar açısından orantısız etkilere yol açabilir. Ancak mevcut use case kapsamında bu önyargıları nicel olarak tespit eden bir analiz veya sistematik bir etik değerlendirme yapılmamıştır. Önyargıları azaltmaya yönelik bazı genel teknik yaklaşımlar (örneğin yanıt kontrolü veya yönlendirme stratejileri) bulunsa da, bunlar açık, belgelenmiş ve ölçülebilir etik ve teknik azaltma stratejileri olarak tanımlanmamıştır.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff48af7ebb7baa6f68edd",
+              "questionCode": "W7",
+              "answer": {
+                "choiceKey": "may_unintentionally_restrict",
+                "multiChoiceKeys": []
+              },
+              "score": 2,
+              "importanceScore": null,
+              "answerSeverity": 0.5,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff48af7ebb7baa6f68ee8",
+              "questionCode": "A5",
+              "answer": {
+                "text": "hayır bulmuyorum. Şeffaf bir sistem değil atrıca adil bir sistem de değil. Kültürel etkiler bulunuyor.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff48bf7ebb7baa6f68eeb",
+              "questionCode": "A11",
+              "answer": {
+                "text": "Tutor AI kapsamında, geliştiriciler, kullanıcılar ve etkilenen üçüncü taraflar arasında etik hesap verebilirliği açık biçimde düzenleyen kurumsal veya teknik mekanizmalar tanımlanmamıştır. AI tarafından üretilen çıktılara ilişkin sorumluluk paylaşımı belirsiz olup, hatalı veya zararlı yönlendirmeler durumunda kullanıcıların başvurabileceği yapılandırılmış, şeffaf ve izlenebilir bir şikâyet veya itiraz süreci bulunmamaktadır. Bu nedenle mevcut durumda, AI kararlarına ilişkin etik hesap verebilirlik ve itiraz mekanizmalarının adil ve yeterli biçimde tesis edildiği söylenemez.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ff48bf7ebb7baa6f68eee",
+              "questionCode": "A12",
+              "answer": {
+                "text": "adalet,şeffaflık,objektiflik ve denetlenebilirlik.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-07T11:46:20.093Z",
+          "createdAt": "2026-02-07T11:31:34.467Z",
+          "__v": 12
+        }
+      ],
+      "totalAnswers": 11
+    },
+    "legal-expert-v1": {
+      "count": 1,
+      "responses": [
+        {
+          "_id": "6988e3499ff7bb6bcd9dbea2",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "6985dcc39eec21150e2202bf",
+          "userId": "6985db129ff7bb6bcd9d5042",
+          "role": "legal-expert",
+          "questionnaireKey": "legal-expert-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "693ffee80cc22d24b3857aff",
+              "questionCode": "L1",
+              "answer": {
+                "choiceKey": "not_enough_info",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffee90cc22d24b3857b07",
+              "questionCode": "L2",
+              "answer": {
+                "choiceKey": "unknown",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffee90cc22d24b3857b0f",
+              "questionCode": "L3",
+              "answer": {
+                "text": "Bu konuda yeterli bir bilgi bulunmuyor",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffee90cc22d24b3857b12",
+              "questionCode": "L4",
+              "answer": {
+                "text": "Yapılmamış.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffee90cc22d24b3857b15",
+              "questionCode": "L5",
+              "answer": {
+                "choiceKey": "no_unclear",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeea0cc22d24b3857b1c",
+              "questionCode": "L6",
+              "answer": {
+                "choiceKey": "not_respected",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeea0cc22d24b3857b23",
+              "questionCode": "L7",
+              "answer": {
+                "choiceKey": "not_defined",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeea0cc22d24b3857b2a",
+              "questionCode": "L8",
+              "answer": {
+                "choiceKey": "not_compliant",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeea0cc22d24b3857b32",
+              "questionCode": "L9",
+              "answer": {
+                "choiceKey": "no_clear_measures",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeeb0cc22d24b3857b39",
+              "questionCode": "L10",
+              "answer": {
+                "choiceKey": "not_restricted",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeeb0cc22d24b3857b40",
+              "questionCode": "L11",
+              "answer": {
+                "choiceKey": "no_procedure",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeeb0cc22d24b3857b47",
+              "questionCode": "L12",
+              "answer": {
+                "choiceKey": "not_supported",
+                "multiChoiceKeys": []
+              },
+              "score": 1,
+              "importanceScore": null,
+              "answerSeverity": 0.75,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeeb0cc22d24b3857b4e",
+              "questionCode": "L13",
+              "answer": {
+                "text": "Sorumluluğun kimde olduğu açık değil.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeec0cc22d24b3857b51",
+              "questionCode": "L14",
+              "answer": {
+                "choiceKey": "not_defined",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeec0cc22d24b3857b58",
+              "questionCode": "L15",
+              "answer": {
+                "choiceKey": "not_enough_info",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeec0cc22d24b3857b60",
+              "questionCode": "L16",
+              "answer": {
+                "choiceKey": "not_sure",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeec0cc22d24b3857b68",
+              "questionCode": "L17",
+              "answer": {
+                "choiceKey": "non_compliant",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeed0cc22d24b3857b70",
+              "questionCode": "L18",
+              "answer": {
+                "choiceKey": "not_defined",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeed0cc22d24b3857b78",
+              "questionCode": "L19",
+              "answer": {
+                "choiceKey": "not_prepared",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeed0cc22d24b3857b80",
+              "questionCode": "L20",
+              "answer": {
+                "choiceKey": "not_defined",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "693ffeed0cc22d24b3857b87",
+              "questionCode": "L21",
+              "answer": {
+                "choiceKey": "not_defined",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-08T19:29:07.143Z",
+          "createdAt": "2026-02-08T19:26:01.801Z",
+          "__v": 6
+        }
+      ],
+      "totalAnswers": 21
+    },
+    "technical-expert-v1": {
+      "count": 1,
+      "responses": [
+        {
+          "_id": "698c61dc9ff7bb6bcd9ede88",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "6985dcdb9eec21150e2202c1",
+          "userId": "69660b928cb1f9896e7d1561",
+          "role": "technical-expert",
+          "questionnaireKey": "technical-expert-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "69400288b84136831bdea38e",
+              "questionCode": "T1_TECH",
+              "answer": {
+                "choiceKey": "yes_fully_sufficient",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400288b84136831bdea396",
+              "questionCode": "T2_TECH",
+              "answer": {
+                "text": "The system's language proficiency may be incomplete; therefore, it may provide incorrect responses or misleading information due to errors or misconceptions",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400288b84136831bdea399",
+              "questionCode": "T3",
+              "answer": {
+                "text": "There are evident technical risks: The technical processes regarding the collection, cleaning, transformation, and labeling of training data have not been documented in detail. It remains unclear how duplicated, outdated, or pedagogically problematic content within the dataset is filtered out. Furthermore, the existence of a systematic control mechanism addressing risks such as data leakage, representation imbalance, and incorrect labeling during the data processing stage has not been verified.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400288b84136831bdea39c",
+              "questionCode": "T4",
+              "answer": {
+                "text": "No, there are evident technical risks in this regard. The technical processes concerning the collection, cleaning, transformation, and labeling of training data have not been documented in detail. Consequently, it remains unclear how duplicated, outdated, or pedagogically problematic content within the dataset is filtered out.\n\nFurthermore, the existence of a systematic control mechanism addressing risks such as data leakage, representation imbalance, and incorrect labeling during the data processing stage has not been verified. Without such a mechanism, the dataset cannot be guaranteed to be representative, which significantly increases the likelihood of bias, edge-case failures, and distribution issues.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400289b84136831bdea39f",
+              "questionCode": "T5",
+              "answer": {
+                "text": "Currently, Tutor AI lacks a dedicated monitoring infrastructure to track model drift, data distribution shifts, or performance degradation over time. There are no automated pipelines in place to detect when the statistical properties of the input data diverge from the training set (data drift) or when the model's predictive power begins to decay (model drift).\n\nFurthermore, the system’s resilience has not been systematically evaluated; specifically, there is no formal testing framework to assess system behavior when encountering incomplete or corrupted inputs. Consequently, established MLOps metrics and specialized monitoring tools are not currently utilized in the production environment.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400289b84136831bdea3a2",
+              "questionCode": "T6",
+              "answer": {
+                "text": "Tutor AI currently lacks a systematic testing framework to ensure consistent behavior under conditions of missing data, corrupted inputs, or technical instability. There is no dedicated monitoring infrastructure to detect performance degradation, model drift, or data distribution changes, which leaves the system's operational resilience unverified. Furthermore, quantitative metrics regarding latency or behavior under concurrent user loads have not yet been measured , and there are no documented security tests against adversarial attacks like prompt injection or context exploitation. Consequently, the system’s ability to maintain performance integrity under varying operational stresses remains unconfirmed and undocumented",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400289b84136831bdea3a5",
+              "questionCode": "T7",
+              "answer": {
+                "choiceKey": "no_resilience",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "69400289b84136831bdea3ad",
+              "questionCode": "T8",
+              "answer": {
+                "choiceKey": "not_exposed",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6940028ab84136831bdea3b5",
+              "questionCode": "T9",
+              "answer": {
+                "choiceKey": "no_security",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6940028ab84136831bdea3bd",
+              "questionCode": "T10",
+              "answer": {
+                "text": "The explainability level of Tutor AI is currently insufficient for technical debugging, auditing, or stakeholder understanding, as the active use of methods such as SHAP, LIME, or other explainable AI (XAI) techniques has not been verified. The system does not explain the reasoning behind its responses to students, and its internal decision-making processes remain opaque to users. This lack of transparency creates a significant limitation for technical stakeholders attempting to understand system behavior or perform audits. Furthermore, there is no documented evaluation regarding how the model produces its answers, which hinders the ability to identify the root causes of potential errors or pedagogical misalignments.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6940028ab84136831bdea3c0",
+              "questionCode": "T11",
+              "answer": {
+                "text": "The documentation indicates that there is no verified information regarding the protection of personal data through these methods. Specifically, there is no shared or confirmed data concerning the system's anonymization techniques or its specific data deletion and retention policies. This lack of transparency creates significant uncertainty regarding legal compliance and the overall security of personal information across various processing stages. Furthermore, technical details regarding encryption during API access or storage have not been provided or verified within the current use case.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6940028ab84136831bdea3c3",
+              "questionCode": "T12",
+              "answer": {
+                "text": "To enhance the security, robustness, reliability, and compliance of Tutor AI, the system requires the implementation of a structured MLOps infrastructure to monitor model drift, data distribution shifts, and performance degradation, which are currently unaddressed. Technical processes for data collection, cleaning, and labeling must be rigorously documented to eliminate \"data leakage\" and representation imbalances, as these systematic control mechanisms are currently unverified. Security should be fortified through documented adversarial testing against prompt injection and context exploitation, alongside the integration of explainable AI (XAI) methods like SHAP or LIME to enable effective auditing and debugging. Finally, ensuring compliance necessitates the adoption of robust encryption and anonymization protocols, the completion of a formal Data Protection Impact Assessment (DPIA), and the establishment of a clear governance structure to manage the risks associated with minor users and pedagogical misalignments.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-11T11:14:04.096Z",
+          "createdAt": "2026-02-11T11:02:52.379Z",
+          "__v": 13
+        }
+      ],
+      "totalAnswers": 12
+    },
+    "education-expert-v1": {
+      "count": 1,
+      "responses": [
+        {
+          "_id": "698c64aa9ff7bb6bcd9ee626",
+          "projectId": "6985dc9a9ff7bb6bcd9d528e",
+          "assignmentId": "698c36fb9eec21150e224681",
+          "userId": "698c359d9ff7bb6bcd9e7094",
+          "role": "education-expert",
+          "questionnaireKey": "education-expert-v1",
+          "questionnaireVersion": 1,
+          "answers": [
+            {
+              "questionId": "6946acd0650113a211cbfcb7",
+              "questionCode": "E1",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd1650113a211cbfcbf",
+              "questionCode": "E2",
+              "answer": {
+                "choiceKey": "insufficient",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd1650113a211cbfcc6",
+              "questionCode": "E3",
+              "answer": {
+                "choiceKey": "risk_5",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd1650113a211cbfcce",
+              "questionCode": "E4",
+              "answer": {
+                "text": "Sistem, hem bireysel gelişim hem de toplumsal adalet üzerinde kritik riskler barındırmaktadır. Her ne kadar öğrenciyi sürece aktif katılmaya teşvik etmeyi hedeflese de ; yanıtların eleştirel değerlendirilmesini zorunlu kılan bir mekanizmanın bulunmaması ve müfredat uyumunun garanti edilmemesi , 'yanlış veya eksik öğrenme' ile 'pedagojik aşırı basitleştirme' risklerini beraberinde getirmektedir. Bu durum, öğrencilerin konuyu derinlemesine kavramak yerine süreci \"bypass\" ederek doğrudan cevap kopyalamasına ve uzun vadede akademik bağımlılık geliştirerek bilişsel özerkliklerini kaybetmelerine yol açabilir. Ayrıca, akademik altyapısı güçlü öğrencilerin sistemden daha fazla fayda sağlaması ve dijital becerisi düşük veya dil bariyeri olan öğrenciler için özel bir kapsayıcılık önleminin bulunmaması , eğitimde fırsat eşitliğini zedeleyerek toplumsal adaleti olumsuz etkileme potansiyeli taşımaktadır. Son olarak, öğretmen-öğrenci arasındaki güvene dayalı sosyal ilişkinin mekanik bir düzleme çekilmesi ve çevresel sürdürülebilirliğe dair bir verinin bulunmaması, sistemin toplumsal ve çevresel refah üzerindeki etkilerinin kapsamlı bir denetimden geçirilmesini zorunlu kılmaktadır.\n\n",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd2650113a211cbfcd1",
+              "questionCode": "E5",
+              "answer": {
+                "choiceKey": "passive_use",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd2650113a211cbfcd7",
+              "questionCode": "E6",
+              "answer": {
+                "text": "Tutor AI sisteminin mevcut yapısıyla kullanıcıyı merkeze alan bir yaklaşımdan ziyade, denetimsiz bir teknolojik bağımlılık riski taşıdığı görülmektedir. Sistem dokümantasyonunda öğretmenler \"temel aktör\" olarak nitelendirilse de , bu rolün gerektirdiği zorunlu alistırma (onboarding) süreçlerinin, etik beyan formlarının ve müdahale yetkilerinin tanımlanmamış olması, insan gözetimini tamamen \"varsayımsal\" bir düzeyde bırakmaktadır. Bu durum, müfredat uyumu garanti edilmeyen sistem çıktılarının , pedagojik bir süzgeçten geçmeksizin doğrudan öğrencilere ulaşmasına ve öğretmen-öğrenci arasındaki güvene dayalı ilişkinin mekanikleşmesine yol açmaktadır.\n\nÖğrenciler açısından ise, yanıtların doğruluğunu sorgulatan bağlayıcı bir mekanizmanın yokluğu , bireyleri sistemin her çıktısını mutlak doğru kabul eden \"otomasyon yanlılığına\" (automation bias) ve bilişsel özerkliğin kaybına sürüklemektedir. Şeffaflık ve hak arama süreçlerindeki kritik eksiklikler; kullanıcıların bir yapay zekâ ile etkileşimde olduklarına dair açık bir bildirim almamaları ve hatalı yönlendirmeler karşısında başvurabilecekleri bir şikâyet mekanizmasının bulunmamasıyla birleştiğinde , sistemin hesap verebilirliğini ve toplumsal iyi oluşa katkısını ciddi şekilde zayıflatmaktadır. Dolayısıyla, hem öğretmenlerin \"fiili\" denetimini sağlayacak operasyonel altyapının kurulması hem de öğrencilerin AI okuryazarlığı becerilerinin geliştirilmesi, sistemin etik ve güvenli bir eğitim aracı haline gelebilmesi için vazgeçilmez bir zorunluluktur.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd2650113a211cbfcda",
+              "questionCode": "E7",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd3650113a211cbfce1",
+              "questionCode": "E8",
+              "answer": {
+                "text": "Tutor AI'nin uzun süreli kullanımının öğrenciler üzerindeki \"bilişsel yük\", \"dikkat düzeyi\" veya \"dijital yorgunluk\" gibi etkilerini izlemeye veya ölçmeye yönelik yapılandırılmış bir değerlendirme mekanizması bulunmamaktadır. Sistem, yönlendirici soru sorma yöntemleriyle kullanıcıların düşünme süreçlerini şekillendirebilir (bilişsel yönlendirme). Pedagojik bir amaçla tasarlansa da, bu durumun kontrolsüz kalması öğrencinin zihinsel süreçlerini yorabilir veya manipüle edebilir. Sistemin olası olumsuz sonuçları arasında, öğrencilerin \"akademik bağımlılık\" geliştirme riski açıkça belirtilmiştir. Bu durum, öğrencinin bağımsız çalışma kapasitesini ve zihinsel dayanıklılığını zayıflatarak uzun vadede öğrenme özerkliğine zarar verebilir.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd3650113a211cbfce4",
+              "questionCode": "E9",
+              "answer": {
+                "choiceKey": "yes",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd4650113a211cbfceb",
+              "questionCode": "E10",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd4650113a211cbfcf1",
+              "questionCode": "E11",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd5650113a211cbfcf7",
+              "questionCode": "E12",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd5650113a211cbfcfc",
+              "questionCode": "E13",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd5650113a211cbfd01",
+              "questionCode": "E14",
+              "answer": {
+                "choiceKey": "risk_5",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd6650113a211cbfd09",
+              "questionCode": "E15",
+              "answer": {
+                "text": "Sistemin sunduğu hızlı ve açıklayıcı yanıtlar, öğrenciler tarafından konuyu derinlemesine irdelemek yerine doğrudan bir 'cevap anahtarı' gibi kullanılma riski taşımaktadır. Dokümanda, öğrencilerin sistemi öğrenme sürecini tamamen atlayarak hedefe kestirmeden ulaşma eğilimi açıkça ifade edilmiştir. Ayrıca sistemin, kopya ve intihal gibi akademik dürüstlüğü ihlal eden kullanımları otomatik olarak tespit eden veya engelleyen bir teknik mekanizmaya sahip olmadığı vurgulanmıştır. Çoğu senaryoda öğretmen gözetiminin bulunmaması, öğrencilerin sistemden aldıkları bilgileri sorgulamadan veya kendi süzgeçlerinden geçirmeden doğrudan eğitim süreçlerine entegre etmelerine yol açmaktadır. Bunun uzun vadeli bir sonucu olarak, öğrencilerin kendi bilişsel çabaları yerine sisteme aşırı güven duymaları ve 'akademik bağımlılık' geliştirmeleri olası riskler arasında yer almaktadır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd6650113a211cbfd0c",
+              "questionCode": "E16",
+              "answer": {
+                "text": "Sistem \"açık kaynak ders materyalleri\" ve \"akademik kitaplar\" gibi kaynakları kullandığını belirtse de, bu verilerin pedagojik uygunluğu, güncelliği ve kapsayıcılığına ilişkin bağımsız bir denetim raporu bulunmamaktadır. Hangi kaynakların seçildiği ve bunların akademik standartlara uygun olup olmadığı şeffaf değildir.Veri işleme süreçleri şeffaf olmadığı için, veri setinde \"yinelenen, güncelliğini yitirmiş veya pedagojik açıdan sorunlu\" içeriklerin nasıl ayıklandığı belirsizdir. Sistemin eski veya geçerliliğini yitirmiş bilgileri kullanıp kullanmadığı doğrulanamamaktadır. Sistemin ürettiği içeriklerin ulusal müfredatla tam uyumlu olacağı garanti edilmemektedir. Kullanıcıya sunulan bilginin hangi kaynağa dayandığı veya hangi mantıkla türetildiği (explainability) kullanıcıya sunulmamaktadır. Özetle kaynakların kalitesi, güncelliği ve akademik geçerliliği konusunda herhangi bir garanti ya da doğrulama mekanizması mevcut değildir.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd6650113a211cbfd0f",
+              "questionCode": "E17",
+              "answer": {
+                "text": "Sistem, bir yanıtı üretirken hangi mantıksal silsileyi izlediğini veya neden belirli bir pedagojik yaklaşımı seçtiğini kullanıcıya açıklamamaktadır. Bu durum, eğitimde kritik öneme sahip olan \"neden-sonuç ilişkisinin kurulması\" sürecini sekteye uğratmaktadır. Kullanıcılar, sistemin kararlarını anlamak için gerekli olan arka plan bilgisine erişememektedir. Sistem çıktılarının doğrulanabilmesi için en temel gereksinim olan \"kaynak belirtme\" mekanizması Tutor AI'da tanımlanmamıştır. Bir öğrenci veya öğretmen, sunulan bilginin doğruluğunu teyit etmek istediğinde sistemin hangi veri tabanından, kitaptan veya müfredat başlığından yararlandığını görememektedir.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd7650113a211cbfd12",
+              "questionCode": "E18",
+              "answer": {
+                "text": "İnsan doğası gereği \"en az çaba ilkesine\" (principle of least effort) meyillidir. Belgede sistemin hızlı ve açıklayıcı yanıtlar sunduğu, ancak öğrencileri bu yanıtları doğrulamaya zorlayan bir mekanizmanın olmadığı açıkça belirtilmiştir. Öğretmen gözetiminin de \"varsayımsal\" kalması, öğrencinin zorlandığı anda derinlemesine düşünmek yerine AI'yı bir \"cevap anahtarı\" olarak kullanmasını kaçınılmaz bir alışkanlığa dönüştürecektir. \nBelgede müfredat uyumunun garanti edilmediği ve halüsinasyon riskine karşı teknik bir filtreleme bulunmadığı vurgulanmıştır. Yapay zekanın ikna edici ama hatalı içerik üretme potansiyeli, akademik altyapısı zayıf öğrencilerde yanlış bilgiyi kalıcı bir öğrenme çıktısına dönüştürme riskini kaçınılmaz kılmaktadır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd7650113a211cbfd15",
+              "questionCode": "E19",
+              "answer": {
+                "text": "Büyük dil modellerinin doğası gereği, sistemin gerçekte var olmayan bilgileri oldukça ikna edici ve profesyonel bir üslupla sunma (halüsinasyon) riski bulunmaktadır. Nitekim dokümantasyonda, üretilen yanıtların her zaman %100 doğru, güncel veya ulusal müfredat standartlarıyla tam uyumlu olacağına dair bir garanti verilmediği açıkça ifade edilmiştir. Bu durum, sistemin öğrencinin soru bağlamını veya bilgi düzeyini yanlış yorumlamasıyla birleştiğinde; teknik olarak doğru görünse bile öğrenci için kafa karıştırıcı, belirsiz ve pedagojik açıdan hatalı yönlendirmeler içeren açıklamaların ortaya çıkmasına neden olabilmektedir.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd7650113a211cbfd18",
+              "questionCode": "E20",
+              "answer": {
+                "text": "Tutor AI sisteminde tespit edilen en belirgin 'amacı dışında kullanım' riski, öğrencilerin öğrenme sürecini tamamen devre dışı bırakma (learning bypass) eğilimidir. Sistemin sunduğu açıklayıcı yanıtlar, konuyu kavramaktan ziyade doğrudan cevap kopyalama veya intihal yoluyla ödev tamamlama aracı olarak suiistimal edilmeye açıktır. Akademik bir destek ünitesi olarak kurgulanmasına rağmen; öğrencilerin sistemi stres, kaygı veya kişisel sorunlarını paylaştıkları bir 'duygusal dayanak' olarak kullanma ihtimali de ciddi bir risk unsuru oluşturmaktadır. Sistemin bu tür etkileşimleri hedeflememesi, 'özel nitelikli kişisel veri' kapsamına girebilecek bu hassas bilgilerin denetimsiz ve rastlantısal olarak işlenmesi tehlikesini ortadan kaldırmamaktadır.\n\nÖte yandan, öğrencilerin kasıtlı manipülasyonları (prompt injection) sonucunda sistemin etik dışı, yanlı veya müfredat dışı içerikler üretmeye zorlanma ihtimali mevcuttur. Tüm bu zararlı kullanım senaryolarında, yasal ve etik sorumluluğun kimde olduğuna dair (geliştirici, öğretmen veya kurum) somut bir hesap verebilirlik çerçevesinin bulunmaması, sistemin kurumsal güvenilirliğini zayıflatmaktadır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd8650113a211cbfd1b",
+              "questionCode": "E21",
+              "answer": {
+                "text": "Belgelerde öğretmenler, sistemi pedagojik hedeflerle uyumlu şekilde yönlendiren temel aktörler olarak öngörülse de, bu gözetim rolü uygulama sahasında karşılığı olmayan 'varsayımsal' bir tanımlamadan ibaret kalmıştır. Operasyonel süreçlerdeki belirsizlik nedeniyle sistem kullanımı çoğu senaryoda öğretmen denetimi olmaksızın gerçekleşmekte; öğrenme sürecini şekillendiren pedagojik içerikler, herhangi bir 'insan onayına' tabi tutulmadan otomatik olarak üretilmektedir.\n\nİnsan özerkliğinin en kritik unsuru olan 'müdahale yetkisi' sistemde yapılandırılmamıştır. Sistemin, öğretmen etkileşiminin yerini kısmen doldurabildiğine dair itiraf, mevcut gözetim mekanizmalarının yetersizliğini açıkça ortaya koymaktadır. Öğretmenin sistem üzerinde bir 'acil durdurma' (kill-switch) veya içerik filtreleme yetkisine sahip olmaması, pedagojik kontrolün tamamen algoritmaya devredilmesi riskini doğurmaktadır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd8650113a211cbfd1e",
+              "questionCode": "E22",
+              "answer": {
+                "text": "Öğrenci, AI'dan aldığı her bilgiyi defterine veya ödevine aktarırken yanına şu notu düşmelidir: \"Bu bilgiyi [Kaynak Adı] üzerinden doğruladım. Öğrenciler sistemin yaptığı bir hatayı (halüsinasyon) bulup sınıfta sunmalı, bu sayede eleştirel dijital okuryazarlık geliştirilmelidir. Sistem sınırsız bir kaynak olarak değil, sadece dersin \"araştırma\" veya \"pekiştirme\" evrelerinde, belirli dakikalar içinde (örn. son 15 dakika) kullanılmalıdır.\nEtik Kullanım Sözleşmesi: Dönem başında öğrenci, veli ve öğretmen tarafından imzalanan, sistemin \"kopya amaçlı kullanılmayacağını\" taahhüt eden kısa bir sözleşme. Öğrenci kişisel veya duygusal bir veri paylaştığında (stres, ailevi sorun vb.), sistemin anında \"Bu konuda sana yardımcı olamam, lütfen okul rehberlik servisine başvur\" diyerek görüşmeyi sonlandırması ve durumu anonim olarak öğretmene raporlaması sağlanmalıdır.",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd8650113a211cbfd21",
+              "questionCode": "E23",
+              "answer": {
+                "text": "Sisteme zorunlu bir \"İpucu Aşamalandırma\" katmanı eklenmelidir. \nAI, sorunun cevabını hemen vermek yerine, öğrenciyi cevaba götürecek yönlendirici sorular sormalıdır. \nHer açıklamanın altına, öğrencinin elindeki fiziksel ders kitabına atıf yapan sayfa numaraları veya resmî eğitim portallarına (örn. EBA) yönlendiren bağlantılar eklenmelidir. Farklı öğrenme stilleri ve özel gereksinimler için \"Çoklu Temsil\" özelliği getirilmelidir.\nAI, öğrencinin hata yaptığı noktalarda sadece doğruyu söylememeli, hatanın mantıksal kökenini analiz etmelidir (örn: \"Bu işlemde işlem önceliğini unuttuğun için hatalı sonuca ulaştın\").\nSisteme \"Dikkat Araları\" ve kullanım sınırları eklenmelidir. Uzun süreli etkileşimlerde sistem, öğrenciye ekran dışı bir aktivite (örn: \"Şimdi öğrendiğin bu kavramı defterine kısaca not et ve 5 dakika ara ver\") önermelidir.",
+                "multiChoiceKeys": []
+              },
+              "score": 3,
+              "importanceScore": null,
+              "answerSeverity": 0.25,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd9650113a211cbfd24",
+              "questionCode": "E24",
+              "answer": {
+                "choiceKey": "under_evaluation",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd9650113a211cbfd2a",
+              "questionCode": "E25",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acd9650113a211cbfd30",
+              "questionCode": "E26",
+              "answer": {
+                "choiceKey": "need_investigation",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            },
+            {
+              "questionId": "6946acda650113a211cbfd36",
+              "questionCode": "E27",
+              "answer": {
+                "choiceKey": "no",
+                "multiChoiceKeys": []
+              },
+              "score": 4,
+              "importanceScore": null,
+              "answerSeverity": 0,
+              "notes": null,
+              "evidence": []
+            }
+          ],
+          "status": "draft",
+          "updatedAt": "2026-02-11T17:18:19.665Z",
+          "createdAt": "2026-02-11T11:14:50.494Z",
+          "__v": 33
+        }
+      ],
+      "totalAnswers": 27
+    }
+  },
+  "scoreBreakdown": {
+    "general-v1": [
+      {
+        "_id": "698721799eec21150e2210e6",
+        "questionnaireKey": "general-v1",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "userId": "6985c22c9ff7bb6bcd9d45ea",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "695d814a205aa3b04599f597",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "695d814a205aa3b04599f5a6",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 2,
+            "risk": 1,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d49663583",
+                "answerSeverity": 0.5,
+                "finalRiskContribution": 1,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9366f16d2d4966357c",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d4966358a",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d49663591",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9566f16d2d49663598",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d4966359e",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 2,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9666f16d2d496635a8",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9566f16d2d496635a5",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "ACCOUNTABILITY": {
+            "n": 2,
+            "risk": 1,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9666f16d2d496635ae",
+                "answerSeverity": 0.5,
+                "finalRiskContribution": 1,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635b4",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:16.712Z",
+        "createdAt": "2026-02-07T11:26:49.049Z",
+        "questionBreakdown": [
+          {
+            "questionId": "695d814a205aa3b04599f597",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc994"
+          },
+          {
+            "questionId": "695d814a205aa3b04599f5a6",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc995"
+          },
+          {
+            "questionId": "693c6b9366f16d2d4966357c",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc996"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663583",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.5,
+            "finalRiskContribution": 1,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc997"
+          },
+          {
+            "questionId": "693c6b9466f16d2d4966358a",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc998"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663591",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc999"
+          },
+          {
+            "questionId": "693c6b9566f16d2d49663598",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc99a"
+          },
+          {
+            "questionId": "693c6b9566f16d2d4966359e",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc99b"
+          },
+          {
+            "questionId": "693c6b9566f16d2d496635a5",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc99c"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635a8",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc99d"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635ae",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0.5,
+            "finalRiskContribution": 1,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc99e"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635b4",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6b8139060884edcc99f"
+          }
+        ],
+        "role": "ethical-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 2.5,
+          "n": 12
+        },
+        "updatedAt": "2026-02-12T15:50:16.712Z"
+      },
+      {
+        "_id": "6988e1de9eec21150e2223ae",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "userId": "6985db129ff7bb6bcd9d5042",
+        "questionnaireKey": "general-v1",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 2,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "695d814a205aa3b04599f597",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "695d814a205aa3b04599f5a6",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9366f16d2d4966357c",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9466f16d2d49663583",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d4966358a",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 2,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d49663598",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9466f16d2d49663591",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 1,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d4966359e",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d496635a5",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635a8",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "ACCOUNTABILITY": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9666f16d2d496635ae",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635b4",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:19.843Z",
+        "createdAt": "2026-02-08T19:19:58.167Z",
+        "questionBreakdown": [
+          {
+            "questionId": "695d814a205aa3b04599f597",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca11"
+          },
+          {
+            "questionId": "695d814a205aa3b04599f5a6",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca12"
+          },
+          {
+            "questionId": "693c6b9366f16d2d4966357c",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca13"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663583",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca14"
+          },
+          {
+            "questionId": "693c6b9466f16d2d4966358a",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca15"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663591",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca16"
+          },
+          {
+            "questionId": "693c6b9566f16d2d49663598",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca17"
+          },
+          {
+            "questionId": "693c6b9566f16d2d4966359e",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca18"
+          },
+          {
+            "questionId": "693c6b9566f16d2d496635a5",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca19"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635a8",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca1a"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635ae",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca1b"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635b4",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bb139060884edcca1c"
+          }
+        ],
+        "role": "legal-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 1.5,
+          "n": 12
+        },
+        "updatedAt": "2026-02-12T15:50:19.843Z"
+      },
+      {
+        "_id": "698c39d39eec21150e2246c6",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "questionnaireKey": "general-v1",
+        "userId": "698c359d9ff7bb6bcd9e7094",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 2,
+            "risk": 1,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "695d814a205aa3b04599f597",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "695d814a205aa3b04599f5a6",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 2,
+            "risk": 1.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9366f16d2d4966357c",
+                "answerSeverity": 0.5,
+                "finalRiskContribution": 1,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9466f16d2d49663583",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d4966358a",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 2,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d49663598",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9466f16d2d49663591",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 1,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d4966359e",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d496635a5",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635a8",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "ACCOUNTABILITY": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9666f16d2d496635ae",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635b4",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:23.531Z",
+        "createdAt": "2026-02-11T08:12:03.053Z",
+        "questionBreakdown": [
+          {
+            "questionId": "695d814a205aa3b04599f597",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccaad"
+          },
+          {
+            "questionId": "695d814a205aa3b04599f5a6",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccaae"
+          },
+          {
+            "questionId": "693c6b9366f16d2d4966357c",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.5,
+            "finalRiskContribution": 1,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccaaf"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663583",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab0"
+          },
+          {
+            "questionId": "693c6b9466f16d2d4966358a",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab1"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663591",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab2"
+          },
+          {
+            "questionId": "693c6b9566f16d2d49663598",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab3"
+          },
+          {
+            "questionId": "693c6b9566f16d2d4966359e",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab4"
+          },
+          {
+            "questionId": "693c6b9566f16d2d496635a5",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab5"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635a8",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab6"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635ae",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab7"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635b4",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6bf139060884edccab8"
+          }
+        ],
+        "role": "education-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 3.5,
+          "n": 12
+        },
+        "updatedAt": "2026-02-12T15:50:23.532Z"
+      },
+      {
+        "_id": "698c60949eec21150e2248e4",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "userId": "69660b928cb1f9896e7d1561",
+        "questionnaireKey": "general-v1",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "695d814a205aa3b04599f597",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "695d814a205aa3b04599f5a6",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 2,
+            "risk": 1.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d49663583",
+                "answerSeverity": 0.5,
+                "finalRiskContribution": 1,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9366f16d2d4966357c",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d4966358a",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9466f16d2d49663591",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9566f16d2d49663598",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d4966359e",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 2,
+            "risk": 3,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9566f16d2d496635a5",
+                "answerSeverity": 1,
+                "finalRiskContribution": 2,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635a8",
+                "answerSeverity": 0.5,
+                "finalRiskContribution": 1,
+                "importance": 2
+              }
+            ]
+          },
+          "ACCOUNTABILITY": {
+            "n": 2,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693c6b9666f16d2d496635b4",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693c6b9666f16d2d496635ae",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:25.030Z",
+        "createdAt": "2026-02-11T10:57:24.108Z",
+        "questionBreakdown": [
+          {
+            "questionId": "695d814a205aa3b04599f597",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaed"
+          },
+          {
+            "questionId": "695d814a205aa3b04599f5a6",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaee"
+          },
+          {
+            "questionId": "693c6b9366f16d2d4966357c",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaef"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663583",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.5,
+            "finalRiskContribution": 1,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf0"
+          },
+          {
+            "questionId": "693c6b9466f16d2d4966358a",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf1"
+          },
+          {
+            "questionId": "693c6b9466f16d2d49663591",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf2"
+          },
+          {
+            "questionId": "693c6b9566f16d2d49663598",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf3"
+          },
+          {
+            "questionId": "693c6b9566f16d2d4966359e",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf4"
+          },
+          {
+            "questionId": "693c6b9566f16d2d496635a5",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 1,
+            "finalRiskContribution": 2,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf5"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635a8",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0.5,
+            "finalRiskContribution": 1,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf6"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635ae",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf7"
+          },
+          {
+            "questionId": "693c6b9666f16d2d496635b4",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c1139060884edccaf8"
+          }
+        ],
+        "role": "technical-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 5,
+          "n": 12
+        },
+        "updatedAt": "2026-02-12T15:50:25.030Z"
+      }
+    ],
+    "ethical-expert-v1": [
+      {
+        "_id": "698722979eec21150e2210f0",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "userId": "6985c22c9ff7bb6bcd9d45ea",
+        "questionnaireKey": "ethical-expert-v1",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff489f7ebb7baa6f68ed0",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 2,
+            "risk": 1,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff488f7ebb7baa6f68ebe",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693ff489f7ebb7baa6f68ec7",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff489f7ebb7baa6f68eca",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 1,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff489f7ebb7baa6f68ecd",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 2,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff48af7ebb7baa6f68eda",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693ff48af7ebb7baa6f68ed3",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 1,
+            "risk": 1,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff48af7ebb7baa6f68edd",
+                "answerSeverity": 0.5,
+                "finalRiskContribution": 1,
+                "importance": 2
+              }
+            ]
+          },
+          "ACCOUNTABILITY": {
+            "n": 3,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ff48af7ebb7baa6f68ee8",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ff48bf7ebb7baa6f68eeb",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ff48bf7ebb7baa6f68eee",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:18.326Z",
+        "createdAt": "2026-02-07T11:31:35.430Z",
+        "questionBreakdown": [
+          {
+            "questionId": "693ff488f7ebb7baa6f68ebe",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9d6"
+          },
+          {
+            "questionId": "693ff489f7ebb7baa6f68ec7",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9d7"
+          },
+          {
+            "questionId": "693ff489f7ebb7baa6f68eca",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9d8"
+          },
+          {
+            "questionId": "693ff489f7ebb7baa6f68ecd",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9d9"
+          },
+          {
+            "questionId": "693ff489f7ebb7baa6f68ed0",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9da"
+          },
+          {
+            "questionId": "693ff48af7ebb7baa6f68ed3",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9db"
+          },
+          {
+            "questionId": "693ff48af7ebb7baa6f68eda",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9dc"
+          },
+          {
+            "questionId": "693ff48af7ebb7baa6f68edd",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0.5,
+            "finalRiskContribution": 1,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9dd"
+          },
+          {
+            "questionId": "693ff48af7ebb7baa6f68ee8",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9de"
+          },
+          {
+            "questionId": "693ff48bf7ebb7baa6f68eeb",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9df"
+          },
+          {
+            "questionId": "693ff48bf7ebb7baa6f68eee",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6ba139060884edcc9e0"
+          }
+        ],
+        "role": "ethical-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 3,
+          "n": 11
+        },
+        "updatedAt": "2026-02-12T15:50:18.326Z"
+      }
+    ],
+    "legal-expert-v1": [
+      {
+        "_id": "6988e34a9eec21150e2223bd",
+        "questionnaireKey": "legal-expert-v1",
+        "userId": "6985db129ff7bb6bcd9d5042",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ffeed0cc22d24b3857b87",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 2,
+            "risk": 1.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ffeeb0cc22d24b3857b47",
+                "answerSeverity": 0.75,
+                "finalRiskContribution": 1.5,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeed0cc22d24b3857b70",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 4,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ffee90cc22d24b3857b12",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeeb0cc22d24b3857b40",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeec0cc22d24b3857b58",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeed0cc22d24b3857b80",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 5,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ffee90cc22d24b3857b15",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeea0cc22d24b3857b1c",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeea0cc22d24b3857b23",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeea0cc22d24b3857b32",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeeb0cc22d24b3857b39",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 0,
+            "risk": 0,
+            "avgImportance": 0,
+            "highImportanceRatio": 0,
+            "topDrivers": []
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 0,
+            "risk": 0,
+            "avgImportance": 0,
+            "highImportanceRatio": 0,
+            "topDrivers": []
+          },
+          "ACCOUNTABILITY": {
+            "n": 9,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "693ffee80cc22d24b3857aff",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffee90cc22d24b3857b07",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffee90cc22d24b3857b0f",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeea0cc22d24b3857b2a",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "693ffeeb0cc22d24b3857b4e",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:22.257Z",
+        "createdAt": "2026-02-08T19:26:02.805Z",
+        "questionBreakdown": [
+          {
+            "questionId": "693ffee80cc22d24b3857aff",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca65"
+          },
+          {
+            "questionId": "693ffee90cc22d24b3857b07",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca66"
+          },
+          {
+            "questionId": "693ffee90cc22d24b3857b0f",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca67"
+          },
+          {
+            "questionId": "693ffee90cc22d24b3857b12",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca68"
+          },
+          {
+            "questionId": "693ffee90cc22d24b3857b15",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca69"
+          },
+          {
+            "questionId": "693ffeea0cc22d24b3857b1c",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca6a"
+          },
+          {
+            "questionId": "693ffeea0cc22d24b3857b23",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca6b"
+          },
+          {
+            "questionId": "693ffeea0cc22d24b3857b2a",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca6c"
+          },
+          {
+            "questionId": "693ffeea0cc22d24b3857b32",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca6d"
+          },
+          {
+            "questionId": "693ffeeb0cc22d24b3857b39",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca6e"
+          },
+          {
+            "questionId": "693ffeeb0cc22d24b3857b40",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca6f"
+          },
+          {
+            "questionId": "693ffeeb0cc22d24b3857b47",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0.75,
+            "finalRiskContribution": 1.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca70"
+          },
+          {
+            "questionId": "693ffeeb0cc22d24b3857b4e",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca71"
+          },
+          {
+            "questionId": "693ffeec0cc22d24b3857b51",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca72"
+          },
+          {
+            "questionId": "693ffeec0cc22d24b3857b58",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca73"
+          },
+          {
+            "questionId": "693ffeec0cc22d24b3857b60",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca74"
+          },
+          {
+            "questionId": "693ffeec0cc22d24b3857b68",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca75"
+          },
+          {
+            "questionId": "693ffeed0cc22d24b3857b70",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca76"
+          },
+          {
+            "questionId": "693ffeed0cc22d24b3857b78",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca77"
+          },
+          {
+            "questionId": "693ffeed0cc22d24b3857b80",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca78"
+          },
+          {
+            "questionId": "693ffeed0cc22d24b3857b87",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6be139060884edcca79"
+          }
+        ],
+        "role": "legal-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 1.5,
+          "n": 21
+        },
+        "updatedAt": "2026-02-12T15:50:22.257Z"
+      }
+    ],
+    "technical-expert-v1": [
+      {
+        "_id": "698c61dd9eec21150e2248f0",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "questionnaireKey": "technical-expert-v1",
+        "userId": "69660b928cb1f9896e7d1561",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 1,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6940028ab84136831bdea3bd",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 0,
+            "risk": 0,
+            "avgImportance": 0,
+            "highImportanceRatio": 0,
+            "topDrivers": []
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 9,
+            "risk": 3,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "69400288b84136831bdea38e",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "69400288b84136831bdea396",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "69400288b84136831bdea39c",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "69400289b84136831bdea39f",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "69400289b84136831bdea3a2",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 1,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6940028ab84136831bdea3c0",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 0,
+            "risk": 0,
+            "avgImportance": 0,
+            "highImportanceRatio": 0,
+            "topDrivers": []
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 0,
+            "risk": 0,
+            "avgImportance": 0,
+            "highImportanceRatio": 0,
+            "topDrivers": []
+          },
+          "ACCOUNTABILITY": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6940028ab84136831bdea3c3",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:27.515Z",
+        "createdAt": "2026-02-11T11:02:53.356Z",
+        "questionBreakdown": [
+          {
+            "questionId": "69400288b84136831bdea38e",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb3a"
+          },
+          {
+            "questionId": "69400288b84136831bdea396",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb3b"
+          },
+          {
+            "questionId": "69400288b84136831bdea399",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb3c"
+          },
+          {
+            "questionId": "69400288b84136831bdea39c",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb3d"
+          },
+          {
+            "questionId": "69400289b84136831bdea39f",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb3e"
+          },
+          {
+            "questionId": "69400289b84136831bdea3a2",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb3f"
+          },
+          {
+            "questionId": "69400289b84136831bdea3a5",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb40"
+          },
+          {
+            "questionId": "69400289b84136831bdea3ad",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb41"
+          },
+          {
+            "questionId": "6940028ab84136831bdea3b5",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb42"
+          },
+          {
+            "questionId": "6940028ab84136831bdea3bd",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb43"
+          },
+          {
+            "questionId": "6940028ab84136831bdea3c0",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb44"
+          },
+          {
+            "questionId": "6940028ab84136831bdea3c3",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c3139060884edccb45"
+          }
+        ],
+        "role": "technical-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 4,
+          "n": 12
+        },
+        "updatedAt": "2026-02-12T15:50:27.515Z"
+      }
+    ],
+    "education-expert-v1": [
+      {
+        "_id": "698c64ab9eec21150e224932",
+        "questionnaireKey": "education-expert-v1",
+        "projectId": "6985dc9a9ff7bb6bcd9d528e",
+        "userId": "698c359d9ff7bb6bcd9e7094",
+        "__v": 0,
+        "byPrinciple": {
+          "TRANSPARENCY": {
+            "n": 3,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd6650113a211cbfd0c",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd6650113a211cbfd0f",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acda650113a211cbfd36",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "HUMAN AGENCY & OVERSIGHT": {
+            "n": 10,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd0650113a211cbfcb7",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd1650113a211cbfcbf",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd1650113a211cbfcc6",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd2650113a211cbfcd1",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd2650113a211cbfcd7",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "TECHNICAL ROBUSTNESS & SAFETY": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd5650113a211cbfd01",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd7650113a211cbfd15",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "PRIVACY & DATA GOVERNANCE": {
+            "n": 1,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd4650113a211cbfcf1",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "DIVERSITY, NON-DISCRIMINATION & FAIRNESS": {
+            "n": 2,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd3650113a211cbfce4",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd4650113a211cbfceb",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "SOCIETAL & INTERPERSONAL WELL-BEING": {
+            "n": 4,
+            "risk": 0.5,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd8650113a211cbfd21",
+                "answerSeverity": 0.25,
+                "finalRiskContribution": 0.5,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd1650113a211cbfcce",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd3650113a211cbfce1",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd6650113a211cbfd09",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          },
+          "ACCOUNTABILITY": {
+            "n": 5,
+            "risk": 0,
+            "avgImportance": 2,
+            "highImportanceRatio": 0,
+            "topDrivers": [
+              {
+                "questionId": "6946acd5650113a211cbfcf7",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd5650113a211cbfcfc",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd7650113a211cbfd18",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd8650113a211cbfd1e",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              },
+              {
+                "questionId": "6946acd9650113a211cbfd24",
+                "answerSeverity": 0,
+                "finalRiskContribution": 0,
+                "importance": 2
+              }
+            ]
+          }
+        },
+        "byQuestion": [],
+        "computedAt": "2026-02-12T15:50:30.537Z",
+        "createdAt": "2026-02-11T11:14:51.473Z",
+        "questionBreakdown": [
+          {
+            "questionId": "6946acd0650113a211cbfcb7",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb99"
+          },
+          {
+            "questionId": "6946acd1650113a211cbfcbf",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb9a"
+          },
+          {
+            "questionId": "6946acd1650113a211cbfcc6",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb9b"
+          },
+          {
+            "questionId": "6946acd1650113a211cbfcce",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb9c"
+          },
+          {
+            "questionId": "6946acd2650113a211cbfcd1",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb9d"
+          },
+          {
+            "questionId": "6946acd2650113a211cbfcd7",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb9e"
+          },
+          {
+            "questionId": "6946acd2650113a211cbfcda",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccb9f"
+          },
+          {
+            "questionId": "6946acd3650113a211cbfce1",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba0"
+          },
+          {
+            "questionId": "6946acd3650113a211cbfce4",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba1"
+          },
+          {
+            "questionId": "6946acd4650113a211cbfceb",
+            "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba2"
+          },
+          {
+            "questionId": "6946acd4650113a211cbfcf1",
+            "principle": "PRIVACY & DATA GOVERNANCE",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba3"
+          },
+          {
+            "questionId": "6946acd5650113a211cbfcf7",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba4"
+          },
+          {
+            "questionId": "6946acd5650113a211cbfcfc",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba5"
+          },
+          {
+            "questionId": "6946acd5650113a211cbfd01",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba6"
+          },
+          {
+            "questionId": "6946acd6650113a211cbfd09",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba7"
+          },
+          {
+            "questionId": "6946acd6650113a211cbfd0c",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba8"
+          },
+          {
+            "questionId": "6946acd6650113a211cbfd0f",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccba9"
+          },
+          {
+            "questionId": "6946acd7650113a211cbfd12",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbaa"
+          },
+          {
+            "questionId": "6946acd7650113a211cbfd15",
+            "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbab"
+          },
+          {
+            "questionId": "6946acd7650113a211cbfd18",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbac"
+          },
+          {
+            "questionId": "6946acd8650113a211cbfd1b",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbad"
+          },
+          {
+            "questionId": "6946acd8650113a211cbfd1e",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbae"
+          },
+          {
+            "questionId": "6946acd8650113a211cbfd21",
+            "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+            "answerSeverity": 0.25,
+            "finalRiskContribution": 0.5,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbaf"
+          },
+          {
+            "questionId": "6946acd9650113a211cbfd24",
+            "principle": "ACCOUNTABILITY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbb0"
+          },
+          {
+            "questionId": "6946acd9650113a211cbfd2a",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbb1"
+          },
+          {
+            "questionId": "6946acd9650113a211cbfd30",
+            "principle": "HUMAN AGENCY & OVERSIGHT",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbb2"
+          },
+          {
+            "questionId": "6946acda650113a211cbfd36",
+            "principle": "TRANSPARENCY",
+            "answerSeverity": 0,
+            "finalRiskContribution": 0,
+            "importance": 2,
+            "triggeredRules": [],
+            "_id": "698df6c6139060884edccbb3"
+          }
+        ],
+        "role": "education-expert",
+        "scoringModelVersion": "strict_ethical_v3_cumulative",
+        "totals": {
+          "overallRisk": 0.5,
+          "n": 27
+        },
+        "updatedAt": "2026-02-12T15:50:30.537Z"
+      }
+    ]
+  },
+  "totalResponses": 8,
+  "totalScores": 8
+}

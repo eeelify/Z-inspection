@@ -461,10 +461,10 @@ exports.generateReport = async (req, res) => {
       reportMetrics = await buildReportMetrics(projectId, null);
 
       // PHASE 3 FIX: Enforce enrichment explicitly since service layer missed it
-      const { enrichReportMetrics } = require('../services/reportEnrichmentService');
-      // Calculate rough counts from scoring if available, or pass empty (Risk Volume is priority)
-      const approxCounts = { total: 0, quantitative: 0, qualitative: 0 };
-      reportMetrics = enrichReportMetrics(reportMetrics, approxCounts);
+      // REMOVED: reportMetricsService now handles enrichment internally. Manual enrichment here with zero counts was overwriting valid data.
+      // const { enrichReportMetrics } = require('../services/reportEnrichmentService');
+      // const approxCounts = { total: 0, quantitative: 0, qualitative: 0 };
+      // reportMetrics = enrichReportMetrics(reportMetrics, approxCounts);
 
 
       // PHASE 4: Inject validation results and apply suppression if invalid
@@ -773,9 +773,12 @@ exports.generateReport = async (req, res) => {
       geminiNarrative = await generateReport(analysisDataWithCharts);
 
       // DEFENSIVE VALIDATION: Validate narrative quality
-      if (!geminiNarrative || geminiNarrative.trim().length === 0) {
-        throw new Error('Empty narrative generated');
+      // generateReport returns a structured object, not a string
+      const narrativeKeys = geminiNarrative ? Object.keys(geminiNarrative) : [];
+      if (!geminiNarrative || narrativeKeys.length === 0) {
+        throw new Error('Empty narrative generated (no sections found)');
       }
+      console.log(`✅ AI Narrative generated with ${narrativeKeys.length} sections`);
     } catch (geminiError) {
       console.warn(`⚠️  Gemini narrative generation failed: ${geminiError.message}`);
       console.warn('   Generating fallback narrative with metrics only...');

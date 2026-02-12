@@ -33,6 +33,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi kişisel verileri GDPR/KVKK ile uyumlu şekilde işliyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -57,6 +58,7 @@ const legalExpertQuestions = [
       tr: 'Kişisel veriler işlenmeden önce açık rıza veya geçerli bir hukuki dayanak sağlanıyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -118,6 +120,7 @@ const legalExpertQuestions = [
       tr: 'Kişisel veriler yalnızca belirli, açık ve meşru amaçlar için mi toplanıyor?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -142,6 +145,7 @@ const legalExpertQuestions = [
       tr: 'Veri minimizasyonu ilkesine uyuluyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -166,6 +170,7 @@ const legalExpertQuestions = [
       tr: 'Veri saklama süreleri belirlenmiş ve hukuken uygun mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -190,6 +195,7 @@ const legalExpertQuestions = [
       tr: 'Uluslararası veri aktarımları hukuki gerekliliklere uygun mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -215,6 +221,7 @@ const legalExpertQuestions = [
       tr: 'Kişisel verileri korumak için yeterli teknik ve idari önlemler alınmış mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -239,6 +246,7 @@ const legalExpertQuestions = [
       tr: 'Kişisel verilere erişim yalnızca yetkili kişilerle mi sınırlı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -263,6 +271,7 @@ const legalExpertQuestions = [
       tr: 'Veri ihlallerinin tespiti ve bildirilmesi için net bir prosedür var mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -287,6 +296,7 @@ const legalExpertQuestions = [
       tr: 'Kullanıcılar veri haklarını etkin şekilde kullanabiliyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -329,6 +339,7 @@ const legalExpertQuestions = [
       tr: 'Yüksek Riskli sistemin tüm yaşam döngüsü boyunca AI Act\'e uyumunu denetleyen ve sürdüren resmi bir Kalite Yönetim Sistemi (QMS) hukuki olarak tanımlanmış ve uygulanmakta mıdır?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -353,6 +364,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi, AB Yapay Zekâ Tüzüğü\'nde tanımlanan risk kategorilerine göre doğru şekilde sınıflandırılmış mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -378,6 +390,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi, AI Act Madde 5 kapsamında yer alan; manipülasyon, kırılgan grupların istismarı, sosyal puanlama veya hukuka aykırı biyometrik tanımlama gibi yasaklı uygulamalardan herhangi birini içeriyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -403,6 +416,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi yüksek riskli olarak sınıflandırılmışsa, AI Act\'te zorunlu kılınan yükümlülüklere genel olarak hukuki uyum gösteriyor mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -428,6 +442,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi üzerindeki insan gözetimi; sorumlular, müdahale gerektiren durumlar ve müdahale edilmediğinde doğacak hukuki sonuçlar bağlayıcı belgelerde açıkça tanımlanmış mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -453,6 +468,7 @@ const legalExpertQuestions = [
       tr: 'AI Act kapsamında zorunlu olan uygunluk değerlendirmesi ve dokümantasyon hazırlanmış mı?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -478,6 +494,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi piyasaya arz edildikten veya kullanıma alındıktan sonra; performans izleme, ciddi olayların tespiti, kayıt altına alınması ve zamanında bildirilmesi için bağlayıcı mekanizmalar mevcut mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -502,6 +519,7 @@ const legalExpertQuestions = [
       tr: 'AI sistemi sınırlı riskli bir sistemse (ör. chatbot), kullanıcılara bir YZ ile etkileşimde olduklarını açıkça bildiren hukuki mekanizmalar mevcut mu?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,

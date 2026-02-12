@@ -1,0 +1,897 @@
+{
+  "projectId": "6985dc9a9ff7bb6bcd9d528e",
+  "projectTitle": "Tutor AI – Öğrenciye Özel Yapay Zekâ Destekli Eğitim Chatbotu",
+  "responseCount": 8,
+  "scoreCount": 8,
+  "expertResponses": [
+    {
+      "userId": "6985c22c9ff7bb6bcd9d45ea",
+      "role": "ethical-expert",
+      "status": "draft",
+      "totalAnswers": 12,
+      "answerDetails": [
+        {
+          "questionId": "695d814a205aa3b04599f597",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 0.75,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "695d814a205aa3b04599f5a6",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9366f16d2d4966357c",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663583",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d4966358a",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "answerScore": 0.25,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663591",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0.25,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d49663598",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d4966359e",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d496635a5",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635a8",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635ae",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635b4",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "6985c22c9ff7bb6bcd9d45ea",
+      "role": "ethical-expert",
+      "status": "draft",
+      "totalAnswers": 11,
+      "answerDetails": [
+        {
+          "questionId": "693ff488f7ebb7baa6f68ebe",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff489f7ebb7baa6f68ec7",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff489f7ebb7baa6f68eca",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff489f7ebb7baa6f68ecd",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff489f7ebb7baa6f68ed0",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff48af7ebb7baa6f68ed3",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff48af7ebb7baa6f68eda",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff48af7ebb7baa6f68edd",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff48af7ebb7baa6f68ee8",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff48bf7ebb7baa6f68eeb",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ff48bf7ebb7baa6f68eee",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "6985db129ff7bb6bcd9d5042",
+      "role": "legal-expert",
+      "status": "draft",
+      "totalAnswers": 12,
+      "answerDetails": [
+        {
+          "questionId": "695d814a205aa3b04599f597",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "695d814a205aa3b04599f5a6",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9366f16d2d4966357c",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663583",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d4966358a",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "answerScore": 0.25,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663591",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d49663598",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d4966359e",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d496635a5",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635a8",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635ae",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635b4",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "6985db129ff7bb6bcd9d5042",
+      "role": "legal-expert",
+      "status": "draft",
+      "totalAnswers": 21,
+      "answerDetails": [
+        {
+          "questionId": "693ffee80cc22d24b3857aff",
+          "questionText": "[object Object]",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffee90cc22d24b3857b07",
+          "questionText": "[object Object]",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffee90cc22d24b3857b0f",
+          "questionText": "[object Object]",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffee90cc22d24b3857b12",
+          "questionText": "[object Object]",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffee90cc22d24b3857b15",
+          "questionText": "[object Object]",
+          "principle": "PURPOSE LIMITATION & DATA MINIMIZATION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeea0cc22d24b3857b1c",
+          "questionText": "[object Object]",
+          "principle": "PURPOSE LIMITATION & DATA MINIMIZATION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeea0cc22d24b3857b23",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA PROTECTION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeea0cc22d24b3857b2a",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeea0cc22d24b3857b32",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA PROTECTION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeeb0cc22d24b3857b39",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA PROTECTION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeeb0cc22d24b3857b40",
+          "questionText": "[object Object]",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeeb0cc22d24b3857b47",
+          "questionText": "[object Object]",
+          "principle": "USER RIGHTS & AUTONOMY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeeb0cc22d24b3857b4e",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeec0cc22d24b3857b51",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeec0cc22d24b3857b58",
+          "questionText": "[object Object]",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeec0cc22d24b3857b60",
+          "questionText": "[object Object]",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeec0cc22d24b3857b68",
+          "questionText": "[object Object]",
+          "principle": "LAWFULNESS & COMPLIANCE",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeed0cc22d24b3857b70",
+          "questionText": "[object Object]",
+          "principle": "HUMAN OVERSIGHT & CONTROL",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeed0cc22d24b3857b78",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY & RESPONSIBILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeed0cc22d24b3857b80",
+          "questionText": "[object Object]",
+          "principle": "RISK MANAGEMENT & HARM PREVENTION",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693ffeed0cc22d24b3857b87",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY & EXPLAINABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "698c359d9ff7bb6bcd9e7094",
+      "role": "education-expert",
+      "status": "draft",
+      "totalAnswers": 12,
+      "answerDetails": [
+        {
+          "questionId": "695d814a205aa3b04599f597",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "695d814a205aa3b04599f5a6",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9366f16d2d4966357c",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0.75,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663583",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0.75,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d4966358a",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663591",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d49663598",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d4966359e",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "answerScore": 0.25,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d496635a5",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635a8",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635ae",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635b4",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "role": "technical-expert",
+      "status": "draft",
+      "totalAnswers": 12,
+      "answerDetails": [
+        {
+          "questionId": "695d814a205aa3b04599f597",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 0.75,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "695d814a205aa3b04599f5a6",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9366f16d2d4966357c",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0.75,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663583",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d4966358a",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9466f16d2d49663591",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0.25,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d49663598",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d4966359e",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9566f16d2d496635a5",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635a8",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635ae",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "693c6b9666f16d2d496635b4",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0.25,
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "role": "technical-expert",
+      "status": "draft",
+      "totalAnswers": 12,
+      "answerDetails": [
+        {
+          "questionId": "69400288b84136831bdea38e",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400288b84136831bdea396",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400288b84136831bdea399",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400288b84136831bdea39c",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400289b84136831bdea39f",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400289b84136831bdea3a2",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400289b84136831bdea3a5",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "69400289b84136831bdea3ad",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6940028ab84136831bdea3b5",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6940028ab84136831bdea3bd",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6940028ab84136831bdea3c0",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6940028ab84136831bdea3c3",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    },
+    {
+      "userId": "698c359d9ff7bb6bcd9e7094",
+      "role": "education-expert",
+      "status": "draft",
+      "totalAnswers": 27,
+      "answerDetails": [
+        {
+          "questionId": "6946acd0650113a211cbfcb7",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd1650113a211cbfcbf",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd1650113a211cbfcc6",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd1650113a211cbfcce",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd2650113a211cbfcd1",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd2650113a211cbfcd7",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd2650113a211cbfcda",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 1,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd3650113a211cbfce1",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd3650113a211cbfce4",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd4650113a211cbfceb",
+          "questionText": "[object Object]",
+          "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd4650113a211cbfcf1",
+          "questionText": "[object Object]",
+          "principle": "PRIVACY & DATA GOVERNANCE",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd5650113a211cbfcf7",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd5650113a211cbfcfc",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd5650113a211cbfd01",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd6650113a211cbfd09",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd6650113a211cbfd0c",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd6650113a211cbfd0f",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd7650113a211cbfd12",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd7650113a211cbfd15",
+          "questionText": "[object Object]",
+          "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd7650113a211cbfd18",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd8650113a211cbfd1b",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd8650113a211cbfd1e",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd8650113a211cbfd21",
+          "questionText": "[object Object]",
+          "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd9650113a211cbfd24",
+          "questionText": "[object Object]",
+          "principle": "ACCOUNTABILITY",
+          "answerScore": 0.5,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd9650113a211cbfd2a",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acd9650113a211cbfd30",
+          "questionText": "[object Object]",
+          "principle": "HUMAN AGENCY & OVERSIGHT",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        },
+        {
+          "questionId": "6946acda650113a211cbfd36",
+          "questionText": "[object Object]",
+          "principle": "TRANSPARENCY",
+          "answerScore": 0,
+          "calculatedERCForThisAnswer": null
+        }
+      ]
+    }
+  ],
+  "scoreDetails": [
+    {
+      "userId": "6985c22c9ff7bb6bcd9d45ea",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "6985c22c9ff7bb6bcd9d45ea",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "6985db129ff7bb6bcd9d5042",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "6985db129ff7bb6bcd9d5042",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "698c359d9ff7bb6bcd9e7094",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "69660b928cb1f9896e7d1561",
+      "byPrincipleOverall": []
+    },
+    {
+      "userId": "698c359d9ff7bb6bcd9e7094",
+      "byPrincipleOverall": []
+    }
+  ]
+}

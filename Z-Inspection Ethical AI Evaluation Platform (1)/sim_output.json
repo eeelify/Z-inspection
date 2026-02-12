@@ -1,0 +1,42 @@
+{
+  "project": {
+    "title": "Tutor AI – Öğrenciye Özel Yapay Zekâ Destekli Eğitim Chatbotu",
+    "id": "6985dc9a9ff7bb6bcd9d528e"
+  },
+  "counts": {
+    "responses": 8,
+    "scores": 8
+  },
+  "responseStatuses": [
+    "draft",
+    "draft",
+    "draft",
+    "draft",
+    "draft",
+    "draft",
+    "draft",
+    "draft"
+  ],
+  "testResults": {
+    "metricsReturned": true,
+    "hasOverallTotals": true,
+    "hasScoringDisclosure": true,
+    "overallTotalsKeys": [
+      "cumulativeRiskVolume",
+      "quantitativeQuestionCount",
+      "averageERC",
+      "normalizedRiskLevel",
+      "normalizedLabel",
+      "normalizedColor",
+      "overallRisk",
+      "riskLabel"
+    ],
+    "scoringKeys": [
+      "totalsOverall",
+      "byPrincipleOverall",
+      "byRole",
+      "byPrincipleTable"
+    ]
+  },
+  "message": "✅ SUCCESS: buildReportMetrics returned valid metrics with overallTotals!"
+}

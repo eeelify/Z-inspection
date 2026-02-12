@@ -1,0 +1,110 @@
+[
+  {
+    "questionNumber": 1,
+    "principle": "TRANSPARENCY",
+    "questionText": "AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 2,
+    "principle": "TRANSPARENCY",
+    "questionText": "Sistemin bazen hatalı veya belirsiz olabileceğini anlıyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 3,
+    "principle": "HUMAN AGENCY & OVERSIGHT",
+    "questionText": "AI sistemini kullanırken kontrolün sizde olduğunu hissediyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 4,
+    "principle": "HUMAN AGENCY & OVERSIGHT",
+    "questionText": "Sistemin çıktısına katılmamayı rahatça hisseder misiniz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0.5,
+    "importance": 2,
+    "riskContribution": 1
+  },
+  {
+    "questionNumber": 5,
+    "principle": "TECHNICAL ROBUSTNESS & SAFETY",
+    "questionText": "Fark edilmezse bu sistemin hatalı çıktıları gerçek zarara yol açabilir mi?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 6,
+    "principle": "PRIVACY & DATA GOVERNANCE",
+    "questionText": "Kişisel veya hassas verilerinizin sorumlu şekilde işlendiğine güveniyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 7,
+    "principle": "PRIVACY & DATA GOVERNANCE",
+    "questionText": "Sistem tarafından sizinle ilgili hangi verilerin kullanıldığı açık mı?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 8,
+    "principle": "DIVERSITY, NON-DISCRIMINATION & FAIRNESS",
+    "questionText": "Sistemin farklı kişilere adil davranacağını düşünüyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 9,
+    "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+    "questionText": "Bu AI sisteminin insanlar arasındaki güveni etkileyebileceğini düşünüyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  },
+  {
+    "questionNumber": 10,
+    "principle": "SOCIETAL & INTERPERSONAL WELL-BEING",
+    "questionText": "Bu AI sistemi kullanıldığında kullanıcıların veya etkilenen kişilerin bilgilendirilmesi gerekir mi?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0.25,
+    "importance": 2,
+    "riskContribution": 0.5
+  },
+  {
+    "questionNumber": 11,
+    "principle": "ACCOUNTABILITY",
+    "questionText": "Sistem bir sorun veya zarar oluşturursa kime başvuracağınızı veya ne yapacağınızı biliyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0.5,
+    "importance": 2,
+    "riskContribution": 1
+  },
+  {
+    "questionNumber": 12,
+    "principle": "ACCOUNTABILITY",
+    "questionText": "Sistemin yanlış veya amaç dışı kullanımını önlemek için yeterli önlemler olduğunu düşünüyor musunuz?",
+    "selectedOption": "N/A",
+    "optionSeverity": 0,
+    "importance": 2,
+    "riskContribution": 0
+  }
+]

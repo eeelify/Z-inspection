@@ -5,7 +5,8 @@
  */
 
 const mongoose = require('mongoose');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Connect to MongoDB - Use same connection string as server.js
 const MONGO_URI = process.env.MONGO_URI;
@@ -33,6 +34,7 @@ const ethicalExpertQuestions = [
       tr: 'Yapay zeka sistemi kullanıcı davranışlarını manipüle etme veya özerkliği sınırlama açısından ne düzeyde risk oluşturmaktadır?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -78,6 +80,7 @@ const ethicalExpertQuestions = [
       tr: 'Kullanıcıların yapay zeka destekli kararları geçersiz kılabilmesi veya sorgulayabilmesi için hangi önlemler veya mekanizmalar bulunmaktadır?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -99,6 +102,7 @@ const ethicalExpertQuestions = [
       tr: 'AI sisteminin neden olabileceği potansiyel zararı ve temel hakları etkileme potansiyelini nasıl değerlendiriyorsunuz? Temel Haklar Etki Değerlendirmesi (FRIA) yapıldı mı?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -119,6 +123,7 @@ const ethicalExpertQuestions = [
       tr: 'Hassas Verilerin (örn. sağlık, ırk, biyometrik veri) kullanımı, etik olarak önyargı, toplumsal adaletsizlik veya damgalanma potansiyeli riskini kabul edilemez bir seviyeye yükseltiyor mu? Bu verilerin kullanımının etik gerekçesi nedir?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -139,6 +144,7 @@ const ethicalExpertQuestions = [
       tr: 'Sistem \'sınırlı riskli\' bir sistem ise, kullanıcının çıktının AI tarafından üretildiğini bilme etik hakkı açık ve anlaşılır bir şekilde sağlanıyor mu?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -159,6 +165,7 @@ const ethicalExpertQuestions = [
       tr: 'Sistem bireyler veya gruplar açısından önyargı, ayrımcılık veya adaletsiz muamele bakımından ne düzeyde risk oluşturmaktadır?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -199,6 +206,7 @@ const ethicalExpertQuestions = [
       tr: 'Yapay zeka sistemi içindeki önyargı veya ayrımcılığı tespit etmek, önlemek veya azaltmak için alınan önlemleri açıklayınız.'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -219,6 +227,7 @@ const ethicalExpertQuestions = [
       tr: 'Yapay zeka sistemi ifade özgürlüğünü veya bilgiye erişimi nasıl etkilemektedir?'
     },
     answerType: 'single_choice',
+    riskScore: 4,
     scoring: {
       answerScoreRange: '0-1',
       importanceHandledSeparately: true,
@@ -248,7 +257,7 @@ const ethicalExpertQuestions = [
       {
         key: 'not_applicable',
         label: { en: 'Not applicable', tr: 'Uygulanabilir değil' },
-        answerScore: 0.75
+        answerScore: 0.5
       }
     ],
     required: true,
@@ -264,6 +273,7 @@ const ethicalExpertQuestions = [
       tr: 'Bu yapay zeka sisteminin kullanımından kaynaklanabilecek olası sosyal veya kişilerarası zararları açıklayınız.'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -284,6 +294,7 @@ const ethicalExpertQuestions = [
       tr: 'Yapay zeka sistemi için hesap verebilirlik ve sorumluluk nasıl tanımlanmakta ve uygulanmaktadır?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -302,6 +313,7 @@ const ethicalExpertQuestions = [
       tr: 'Yapay zeka sistemiyle ilgili etik şikayetlerin veya olayların ele alınması için net süreçler mevcut mu?'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -320,6 +332,7 @@ const ethicalExpertQuestions = [
       tr: 'Yapay zeka sisteminin hesap verebilirliği ve yönetişimiyle ilgili ek bilgileri paylaşınız.'
     },
     answerType: 'open_text',
+    riskScore: 4,
     scoring: {
       method: 'manual_risk_input',
       answerScoreRequired: true,
@@ -334,19 +347,19 @@ async function seedEthicalExpertQuestions() {
   try {
     console.log('Starting ethical expert questions seeding...');
 
-    // Use ethical-v1 questionnaire
-    let questionnaire = await Questionnaire.findOne({ key: 'ethical-v1' });
+    // Use ethical-expert-v1 questionnaire
+    let questionnaire = await Questionnaire.findOne({ key: 'ethical-expert-v1' });
     if (!questionnaire) {
       questionnaire = await Questionnaire.create({
-        key: 'ethical-v1',
+        key: 'ethical-expert-v1',
         title: 'Ethical Expert Questions v1',
         language: 'en-tr',
         version: 1,
         isActive: true
       });
-      console.log('✅ Created questionnaire: ethical-v1');
+      console.log('✅ Created questionnaire: ethical-expert-v1');
     } else {
-      console.log('ℹ️ Questionnaire ethical-v1 already exists');
+      console.log('ℹ️ Questionnaire ethical-expert-v1 already exists');
     }
 
     // Create questions
@@ -356,13 +369,13 @@ async function seedEthicalExpertQuestions() {
 
     for (const qData of ethicalExpertQuestions) {
       const existing = await Question.findOne({
-        questionnaireKey: 'ethical-v1',
+        questionnaireKey: 'ethical-expert-v1',
         code: qData.code
       });
 
       if (!existing) {
         await Question.create({
-          questionnaireKey: 'ethical-v1',
+          questionnaireKey: 'ethical-expert-v1',
           ...qData
         });
         created++;
@@ -370,7 +383,7 @@ async function seedEthicalExpertQuestions() {
       } else {
         // Update existing question if it exists
         await Question.findOneAndUpdate(
-          { questionnaireKey: 'ethical-v1', code: qData.code },
+          { questionnaireKey: 'ethical-expert-v1', code: qData.code },
           {
             ...qData,
             updatedAt: new Date()
@@ -384,7 +397,7 @@ async function seedEthicalExpertQuestions() {
     console.log('\n✅ Ethical expert questions seeding complete!');
     console.log(`Created: ${created}, Updated: ${updated}, Skipped: ${skipped}`);
 
-    // Clear cache for ethical-v1 questions
+    // Clear cache for ethical-expert-v1 questions
     console.log('\n🔄 Clearing questions cache...');
     try {
       const http = require('http');
@@ -405,7 +418,7 @@ async function seedEthicalExpertQuestions() {
         // Server might not be running, that's okay
         console.log('ℹ️ Could not clear cache (server might not be running)');
       });
-      req.write(JSON.stringify({ questionnaireKey: 'ethical-v1' }));
+      req.write(JSON.stringify({ questionnaireKey: 'ethical-expert-v1' }));
       req.end();
     } catch (err) {
       // Ignore cache clearing errors

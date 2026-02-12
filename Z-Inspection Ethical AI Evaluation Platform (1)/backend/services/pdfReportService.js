@@ -220,7 +220,7 @@ async function generatePDFReport(projectId, questionnaireKey = 'general-v1', opt
       console.warn('⚠️ Gemini narrative generation failed, using fallback:', geminiError.message);
       geminiNarrative = {
         executiveSummary: [
-          `Normalized Ethical Risk Level: ${reportMetrics.scoring.totalsOverall?.avg?.toFixed(2) || 'N/A'}/4.0`,
+          `Normalized Ethical Risk Level: ${reportMetrics.overallTotals?.normalizedLabel || 'N/A'} (Average ERC: ${reportMetrics.overallTotals?.averageERC?.toFixed(2) || 'N/A'}/4.0)`,
           `${reportMetrics.coverage.expertsSubmittedCount || 0} of ${reportMetrics.coverage.assignedExpertsCount || 0} assigned experts completed evaluations`,
           `${reportMetrics.tensions.summary?.total || 0} ethical tensions identified`
         ],

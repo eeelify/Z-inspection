@@ -30,11 +30,11 @@ module.exports = {
      * NEVER applied to cumulative sums!
      */
     thresholds: {
-        MINIMAL: { min: 0.0, max: 0.8, label: 'Minimal Risk', color: '#4CAF50' },
-        LOW: { min: 0.8, max: 1.6, label: 'Low Risk', color: '#8BC34A' },
-        MODERATE: { min: 1.6, max: 2.4, label: 'Moderate Risk', color: '#FFC107' },
-        HIGH: { min: 2.4, max: 3.2, label: 'High Risk', color: '#FF9800' },
-        CRITICAL: { min: 3.2, max: 4.0, label: 'Critical Risk', color: '#F44336' }
+        MINIMAL: { min: 0.0, max: 0.5, label: 'Minimal Risk', color: '#4CAF50' },
+        LOW: { min: 0.5, max: 1.5, label: 'Low Risk', color: '#edbf4bff' },
+        MODERATE: { min: 1.5, max: 2.5, label: 'Moderate Risk', color: '#EF6C00' },
+        HIGH: { min: 2.5, max: 3.5, label: 'High Risk', color: '#D32F2F' },
+        CRITICAL: { min: 3.5, max: 4.0, label: 'Critical Risk', color: '#B71C1C' }
     },
 
     /**
@@ -46,8 +46,9 @@ module.exports = {
         }
 
         const value = Number(ercValue);
+        const thresholds = module.exports.thresholds;
 
-        for (const [level, threshold] of Object.entries(this.thresholds)) {
+        for (const [level, threshold] of Object.entries(thresholds)) {
             if (value >= threshold.min && value < threshold.max) {
                 return { level, ...threshold };
             }
