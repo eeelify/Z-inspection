@@ -318,12 +318,22 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         <p style="margin-bottom: 0px; font-size: 10pt; font-style: italic;">${geminiNarrative.qualitativeAnalysis.interpretation || ''}</p>
       </div>
 
-      ${geminiNarrative.qualitativeAnalysis.insights ? geminiNarrative.qualitativeAnalysis.insights.map(item => `
+    ${geminiNarrative.qualitativeAnalysis.principleAnalysis ? geminiNarrative.qualitativeAnalysis.principleAnalysis.map(item => `
+        <div style="margin-bottom: 25px; border-bottom: 1px solid #e5e7eb; padding-bottom: 20px; page-break-inside: avoid;">
+          <h3 style="font-size: 14pt; color: #111827; margin-bottom: 15px; border-left: 4px solid #3b82f6; padding-left: 10px;">
+            ${item.principle}
+          </h3>
+
+          <div style="font-size: 11pt; line-height: 1.6; color: #374151; text-align: justify;">
+            ${item.analysis || item.insight || 'No analysis provided.'}
+          </div>
+        </div>
+      `).join('') : (geminiNarrative.qualitativeAnalysis.insights ? geminiNarrative.qualitativeAnalysis.insights.map(item => `
         <div style="margin-bottom: 15px;">
           <h3 style="font-size: 12pt; color: #374151; margin-bottom: 5px;">${item.principle} – Qualitative Insights</h3>
           <p>${item.insight}</p>
         </div>
-      `).join('') : '<p>No specific qualitative insights recorded.</p>'}
+      `).join('') : '<p>No specific qualitative insights recorded.</p>')}
 
       <div style="margin-top: 20px; padding: 10px; background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; font-size: 9pt; border-radius: 4px;">
         <strong>Disclaimer:</strong> ${geminiNarrative.qualitativeAnalysis.disclaimer || 'Qualitative insights are for context only.'}

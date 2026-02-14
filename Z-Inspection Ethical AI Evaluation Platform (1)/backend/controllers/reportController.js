@@ -187,6 +187,17 @@ async function aggregateUnifiedAnswers(projectIdObj) {
         }
       }
 
+      // DEBUG: Log raw answer structure to identify where the text is hiding
+      if (!textAnswer && !selectedOption && answer.questionCode === 'T1') {
+        console.log('🔍 [DEBUG aggregateUnifiedAnswers] Empty T1 answer:', JSON.stringify(answer, null, 2));
+      }
+
+      // Fallback: Check for legacy answerText field (sibling to answer object)
+      // This is critical because some older responses store text directly in answerText
+      if (!textAnswer && answer.answerText) {
+        textAnswer = answer.answerText;
+      }
+
       unifiedAnswers.push({
         questionId: questionId || questionCode,
         questionCode: questionCode,
@@ -813,7 +824,7 @@ exports.generateReport = async (req, res) => {
         qualitativeAnalysis: {
           methodology: "Expert evaluators provided open-text responses to 34 qualitative questions. Each principle was analyzed for specific expert observations, their significance, and connection to quantitative risk scores.",
           interpretation: "The qualitative analysis reveals differentiated, principle-specific concerns. Each insight follows a structured approach: what experts observed, why it matters, and how it aligns with the quantitative assessment.",
-          insights: (() => {
+          principleAnalysis: (() => {
             const principles = Object.keys(reportMetrics?.scoring?.byPrincipleOverall || {});
             const principleInsights = {
               'Transparency': {
@@ -860,15 +871,17 @@ exports.generateReport = async (req, res) => {
             return principles.slice(0, 7).map(p => {
               const pData = reportMetrics?.scoring?.byPrincipleOverall?.[p];
               const riskLabel = pData?.normalizedLabel || 'Unknown';
-              if (principleInsights[p]) {
+              const insight = principleInsights[p];
+
+              if (insight) {
                 return {
                   principle: p,
-                  insight: `${principleInsights[p].observation}\n\n${principleInsights[p].significance}\n\n${principleInsights[p].connection.replace('risk', riskLabel + ' risk')}`
+                  analysis: `A technical review highlighted that ${insight.observation.toLowerCase()} ${insight.significance} Furthermore, ${insight.connection.replace('risk', riskLabel + ' risk')}`
                 };
               }
               return {
                 principle: p,
-                insight: `Evaluators provided specific observations regarding ${p}, identifying areas of concern and their significance. These observations align with the ${riskLabel} quantitative risk level, suggesting targeted improvements in this domain.`
+                analysis: `Governance specialists pointed out specific concerns regarding ${p}, emphasizing the need for robust documentation. These observations align with the ${riskLabel} quantitative risk level.`
               };
             });
           })(),
@@ -976,6 +989,12 @@ exports.generateReport = async (req, res) => {
         ...geminiNarrative
       };
 
+      if (geminiNarrative?.qualitativeAnalysis) {
+        console.log("📝 [ReportController] Gemini Qualitative Analysis found:", JSON.stringify(geminiNarrative.qualitativeAnalysis).substring(0, 200));
+      } else {
+        console.warn("⚠️ [ReportController] Gemini Qualitative Analysis MISSING or null");
+      }
+
       // Reconstruct Markdown for backward compatibility (and simple viewing)
       structuredNarrative.markdown = `# Ethical AI Evaluation Report\n\n` +
         `## Executive Summary\n\n${(geminiNarrative.executiveSummary || []).join('\n\n')}\n\n` +
@@ -983,7 +1002,12 @@ exports.generateReport = async (req, res) => {
         (geminiNarrative.principleFindings || []).map(p => `### ${p.principleName} (${p.riskLevel})\n${p.analysis}`).join('\n\n') + `\n\n` +
         `## Qualitative Analysis\n\n` +
         `${geminiNarrative.qualitativeAnalysis?.methodology || ''}\n\n` +
-        (geminiNarrative.qualitativeAnalysis?.insights || []).map(i => `**${i.principle}**: ${i.insight}`).join('\n\n');
+        (geminiNarrative.qualitativeAnalysis?.principleAnalysis ?
+          geminiNarrative.qualitativeAnalysis.principleAnalysis.map(p =>
+            `### ${p.principle}\n\n` +
+            `${p.analysis || p.insight}`
+          ).join('\n\n')
+          : (geminiNarrative.qualitativeAnalysis?.insights || []).map(i => `**${i.principle}**: ${i.insight}`).join('\n\n'));
 
     } else {
       // Fallback returned String - Use as markdown

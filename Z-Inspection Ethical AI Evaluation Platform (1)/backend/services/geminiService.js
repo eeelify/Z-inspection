@@ -41,7 +41,8 @@ const generationConfig = {
   temperature: 0.7,
   topP: 0.95,
   topK: 40,
-  maxOutputTokens: 8192
+  maxOutputTokens: 8192,
+  responseMimeType: "application/json"
 };
 
 /* ============================================================
@@ -50,7 +51,7 @@ const generationConfig = {
 
 async function testApiKey() {
   const modelsToTry = [
-    { id: "gemini-2.5-flash", names: ["models/gemini-2.5-flash", "gemini-2.5-flash"] }
+    { id: "gemini-1.5-flash", names: ["models/gemini-1.5-flash", "gemini-1.5-flash"] }
   ];
 
   let lastError = null;
@@ -124,32 +125,48 @@ Your task is LIMITED to:
 SECTION 5 – Qualitative Analysis of Open-Text Responses
 --------------------------------------------------
 
-IMPROVEMENT REQUIREMENTS:
-- Remove generic, repeated language.
-- Each ethical principle MUST contain unique insights.
-- For each principle:
-  1. Reference at least one concrete concern or observation.
-  2. Explain why it matters in this project context.
-  3. Explicitly link the insight to the existing quantitative risk level.
+--------------------------------------------------
+SECTION 5 – Qualitative Analysis of Open-Text Responses
+--------------------------------------------------
 
-You MUST:
-- Demonstrate that expert open-text responses were interpreted.
-- Use principle-specific terminology
-  (e.g. bias for fairness, explainability for transparency).
+This is NOT a compliance summary.
+This is interpretative ethical analysis.
 
-EXAMPLE OUTPUT FOR ONE PRINCIPLE (Transparency):
----
-Expert evaluators emphasized that transparency is partially addressed through internal documentation; however, several noted that explanations provided to candidates regarding automated screening outcomes remain limited.
+Do NOT use generic phrases such as:
+- "robust documentation"
+- "standard review recommended"
+- "need for greater attention"
+- "observations align with risk level"
+- repeating the principle name as analysis
 
-A recurring theme was the absence of clear, user-facing communication on how automated decisions influence candidate progression. While this does not constitute a systemic transparency failure, experts warned that insufficient disclosure could undermine stakeholder trust over time.
+Instead:
 
-These qualitative observations align with the quantitative assessment, which indicates a moderate transparency risk that could be mitigated through improved communication practices.
----
+For each of the following 7 ETHICAL PRINCIPLES, write ONE analytical paragraph (120–180 words):
+    - TRANSPARENCY
+    - HUMAN AGENCY & OVERSIGHT
+    - TECHNICAL ROBUSTNESS & SAFETY
+    - PRIVACY & DATA GOVERNANCE
+    - DIVERSITY, NON-DISCRIMINATION & FAIRNESS
+    - SOCIETAL & INTERPERSONAL WELL-BEING
+    - ACCOUNTABILITY
 
-You MUST NOT:
-- Use placeholder language.
-- Repeat the same phrasing across principles.
-- Claim lack of data or generation failure.
+    For each principle:
+    1. Identifies concrete tendencies emerging from the expert open-text responses.
+    2. CITATION REQUIREMENT: You MUST quote or reference specific questions (e.g., "In response to Q3 regarding fairness...") or specific expert phrasing.
+    3. Interprets what these tendencies reveal about the system’s ethical structure.
+    4. Highlights possible structural vulnerabilities or ethical tensions.
+5. Critically relates the qualitative insights to the quantitative risk score.
+   - If qualitative depth is weak, explicitly state this as a methodological limitation.
+   - Do NOT fabricate concerns not grounded in the responses.
+
+Important:
+- Each principle must be conceptually distinct.
+- Avoid repetition across principles.
+- Do not default to governance-compliance language.
+- Reasoned interpretation is expected.
+- Academic tone. If you produce generic governance language, rewrite internally before finalizing the output.
+- Output entirely in English.
+- TRANSLATION REQUIREMENT: If expert responses (quotes) are in a non-English language (e.g., Turkish), you MUST translate them into English for the narrative. Do NOT include the original non-English text. Keep the translated quote in quotation marks to attribute it to the expert, but ensure the reader sees only English text.
 
 --------------------------------------------------
 SECTION 6 – Ethical Tensions and Trade-Offs
@@ -170,16 +187,15 @@ SECTION 7 – Improvement Recommendations
 
 IMPROVEMENT REQUIREMENTS:
 - Keep the Short / Medium / Long-term structure unchanged.
-- For each time horizon:
-  - Ensure at least one recommendation is clearly linked
-    to a specific ethical principle or risk area.
-  - Make recommendations concrete and actionable
-    (avoid purely procedural statements).
+- CRITICAL: Recommendations MUST be derived DIRECTLY from the specific findings in Sections 5 (Qualitative Analysis) and 6 (Ethical Tensions).
+- Identify the specific weaknesses, gaps, or tensions you analyzed above.
+- Propose specific, actionable remedies for THOSE specific issues.
+- Reference specific questions (e.g., "Address the lack of explainability noted in Q12") or specific user groups (e.g., "Provide training for Education experts on bias mitigation").
 
 You MUST NOT:
-- Remove existing recommendations.
-- Introduce new risk categories.
-- Repeat the same recommendation across horizons.
+- Provide generic "best practices" that apply to any AI system (e.g., "Establish an AI ethics committee" without context).
+- Repeat recommendations.
+- Introduce new risk categories not mentioned in the analysis.
 
 --------------------------------------------------
 SECTION 8 – Conclusion
@@ -232,11 +248,23 @@ Return a RAW JSON OBJECT. No markdown formatting. No code blocks.
   ],
   "qualitativeAnalysis": {
     "methodology": "In addition to quantitative scoring, expert evaluators provided open-text responses...",
-    "interpretation": "Insights are grouped by ethical principle and interpreted as complementary context...",
-    "insights": [
+    "interpretation": "The following analytical summaries synthesize expert observations with quantitative risk assessments...",
+    "principleAnalysis": [
       {
         "principle": "Transparency",
-        "insight": "Experts noted..."
+        "analysis": "Single critical paragraph integrating tendency, structure, tensions, and risk relation..."
+      },
+      {
+        "principle": "Transparency",
+        "analysis": "Single critical paragraph integrating tendency, structure, tensions, and risk relation..."
+      },
+      {
+        "principle": "Fairness",
+        "analysis": "Single critical paragraph..."
+      },
+      {
+        "principle": "Privacy",
+        "analysis": "Single critical paragraph... (and so on for all 7 principles)"
       }
     ],
     "disclaimer": "The qualitative insights presented above are intended to provide contextual understanding..."
@@ -256,25 +284,21 @@ Return a RAW JSON OBJECT. No markdown formatting. No code blocks.
     }
   ],
   "improvementRecommendations": {
-    "shortTerm": ["Detailed action 1 with What/Why/How", "Detailed action 2", "Detailed action 3", "Detailed action 4"],
-    "mediumTerm": ["Strategic action 1 with justification", "Strategic action 2", "Strategic action 3", "Strategic action 4"],
-    "longTerm": ["Governance action 1 with impact", "Governance action 2", "Governance action 3", "Governance action 4"]
+    "shortTerm": ["Detailed action 1", "Detailed action 2", "Detailed action 3"],
+    "mediumTerm": ["Strategic action 1", "Strategic action 2", "Strategic action 3"],
+    "longTerm": ["Governance action 1", "Governance action 2", "Governance action 3"]
   },
   "conclusion": [
-    "First paragraph: Overall assessment of ethical risk synthesizing quantitative AND qualitative findings.",
-    "Second paragraph: Areas of strength and areas needing improvement.",
-    "Third paragraph: Final verdict on system readiness and future governance outlook."
-  ],
-  "limitations": [
-    "Qualitative questions capture contextual, ethical nuance...",
-    "Limitation 2..."
+    "First paragraph: Overall assessment...",
+    "Second paragraph: Strengths and weaknesses...",
+    "Third paragraph: Future governance..."
   ]
 }
 `;
 
   const modelNamesToTry = [
-    "models/gemini-2.5-flash",
-    "gemini-2.5-flash"
+    "gemini-2.0-flash", // Available as "Gemini 2 Flash"
+    "gemini-1.5-flash"  // Fallback
   ];
 
 
@@ -505,12 +529,38 @@ function buildUserPrompt(data) {
     });
     prompt += `\n`;
 
-    // Group by principle for better organization
+    console.log("📝 [Gemini Service] unifiedAnswers count:", unifiedAnswers?.length || 0);
+    if (unifiedAnswers?.length > 0) {
+      console.log("📝 [Gemini Service] First answer sample:", JSON.stringify(unifiedAnswers[0]).substring(0, 200));
+    }
+
     const answersByPrinciple = {};
     const answersWithoutPrinciple = [];
 
+    // Helper to normalize principle names to canonical list
+    const normalizePrinciple = (p) => {
+      if (!p) return null;
+      const upper = p.toUpperCase();
+      const map = {
+        'TRANSPARENCY': 'TRANSPARENCY',
+        'TRANSPARENCY & EXPLAINABILITY': 'TRANSPARENCY',
+        'HUMAN AGENCY & OVERSIGHT': 'HUMAN AGENCY & OVERSIGHT',
+        'HUMAN OVERSIGHT & CONTROL': 'HUMAN AGENCY & OVERSIGHT',
+        'TECHNICAL ROBUSTNESS & SAFETY': 'TECHNICAL ROBUSTNESS & SAFETY',
+        'PRIVACY & DATA GOVERNANCE': 'PRIVACY & DATA GOVERNANCE',
+        'PRIVACY & DATA PROTECTION': 'PRIVACY & DATA GOVERNANCE',
+        'DIVERSITY, NON-DISCRIMINATION & FAIRNESS': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS',
+        'FAIRNESS': 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS', // Frequent specific case
+        'SOCIETAL & INTERPERSONAL WELL-BEING': 'SOCIETAL & INTERPERSONAL WELL-BEING',
+        'ACCOUNTABILITY': 'ACCOUNTABILITY'
+      };
+      return map[upper] || upper;
+    };
+
     unifiedAnswers.forEach((answer) => {
-      const principle = answer.principle || 'UNCATEGORIZED';
+      let principle = answer.principle || 'UNCATEGORIZED';
+      principle = normalizePrinciple(principle);
+
       if (principle === 'UNCATEGORIZED' || !principle) {
         answersWithoutPrinciple.push(answer);
       } else {
