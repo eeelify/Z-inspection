@@ -15,9 +15,7 @@ interface GeneralQuestion {
   _id?: string;
   code: string;
   principle: string; // Ethical principle name
-  principleTr: string; // Turkish translation
   questionEn: string;
-  questionTr: string;
   type: 'multiple-choice' | 'text';
   options?: Array<string | { key: string; label: string }>;
   required?: boolean;
@@ -56,7 +54,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   const convertQuestion = (q: any): GeneralQuestion => {
     const questionId = q._id?.toString() || q.code;
     let options: Array<string | { key: string; label: string }> | undefined = undefined;
-    
+
     if (q.answerType === 'single_choice' && q.options && Array.isArray(q.options)) {
       options = q.options.map((opt: any) => {
         // Backend format: { key, label: { en, tr }, score }
@@ -64,7 +62,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
           return opt;
         }
         // Store both key and label for proper matching
-        const label = opt.label?.en || opt.label?.tr || opt.label || opt.key || String(opt);
+        const label = opt.label?.en || opt.label || opt.key || String(opt);
         const key = opt.key || label;
         return { key, label };
       });
@@ -75,9 +73,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
       _id: q._id?.toString(),
       code: q.code,
       principle: q.principle,
-      principleTr: principleTranslations[q.principle] || q.principle,
       questionEn: q.text?.en || q.text,
-      questionTr: q.text?.tr || q.text,
       type: q.answerType === 'open_text' ? 'text' : 'multiple-choice',
       options: options,
       required: q.required !== false
@@ -89,11 +85,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
     const loadQuestions = async () => {
       try {
         setLoading(true);
-        
+
         // Determine questionnaire key based on role
         const role = currentUser.role || 'any';
         let questionnaireKey = 'general-v1'; // Default for all roles
-        
+
         // Role-specific questionnaires
         if (role === 'ethical-expert') {
           questionnaireKey = 'ethical-expert-v1';
@@ -106,12 +102,12 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         } else if (role === 'education-expert') {
           questionnaireKey = 'education-expert-v1';
         }
-        
+
         // Fetch both role-specific and general questions in parallel for better performance
         // Add timeout to prevent hanging
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-        
+
         const [roleResponse, generalResponse] = await Promise.all([
           fetch(api(`/api/evaluations/questions?questionnaireKey=${questionnaireKey}&role=${role}`), {
             signal: controller.signal
@@ -120,17 +116,17 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             signal: controller.signal
           })
         ]);
-        
+
         clearTimeout(timeoutId);
-        
+
         let allQuestions: any[] = [];
-        
+
         // FIRST: Add general questions (order 1-12)
         if (generalResponse.ok) {
           const generalQuestions = await generalResponse.json();
           allQuestions = [...generalQuestions];
         }
-        
+
         // THEN: Add role-specific questions (order 13+), avoiding duplicates by code
         if (roleResponse.ok) {
           const roleQuestions = await roleResponse.json();
@@ -141,7 +137,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             }
           });
         }
-        
+
         // Convert and sort questions
         if (allQuestions.length > 0) {
           const convertedQuestions = allQuestions.map(convertQuestion).sort((a: GeneralQuestion, b: GeneralQuestion) => {
@@ -179,11 +175,11 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
       try {
         const projectId = project.id || (project as any)._id;
         const userId = currentUser.id || (currentUser as any)._id;
-        
+
         const response = await fetch(
           api(`/api/general-questions?projectId=${projectId}&userId=${userId}`)
         );
-        
+
         if (response.ok) {
           const data = await response.json();
           // Load from principles structure if available, otherwise from flat structure
@@ -203,20 +199,20 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 });
               }
             });
-            
+
             // Map answers and risks to all possible question key formats for easier lookup
             const mappedAnswers: Record<string, string> = {};
             const mappedRisks: Record<string, 0 | 1 | 2 | 3 | 4> = {};
-            
+
             generalQuestions.forEach(q => {
               const questionKey = getQuestionKey(q);
               // Find answer/risk by matching code, id, or _id
               const answerValue = loadedAnswers[q.code] || loadedAnswers[q.id] || loadedAnswers[q._id || ''] || loadedAnswers[questionKey];
-              const riskValue = loadedRisks[q.code] !== undefined ? loadedRisks[q.code] : 
-                              (loadedRisks[q.id] !== undefined ? loadedRisks[q.id] : 
-                              (loadedRisks[q._id || ''] !== undefined ? loadedRisks[q._id || ''] : 
-                              loadedRisks[questionKey]));
-              
+              const riskValue = loadedRisks[q.code] !== undefined ? loadedRisks[q.code] :
+                (loadedRisks[q.id] !== undefined ? loadedRisks[q.id] :
+                  (loadedRisks[q._id || ''] !== undefined ? loadedRisks[q._id || ''] :
+                    loadedRisks[questionKey]));
+
               if (answerValue) {
                 // Store under all possible keys for reliable lookup
                 mappedAnswers[q.id] = answerValue;
@@ -224,7 +220,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 if (q.code) mappedAnswers[q.code] = answerValue;
                 if (q._id) mappedAnswers[q._id] = answerValue;
               }
-              
+
               if (riskValue !== undefined) {
                 // Store under all possible keys for reliable lookup
                 mappedRisks[q.id] = riskValue;
@@ -233,7 +229,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 if (q._id) mappedRisks[q._id] = riskValue;
               }
             });
-            
+
             // Merge with loaded answers/risks to preserve any that don't match questions
             setAnswers({ ...loadedAnswers, ...mappedAnswers });
             setRisks({ ...loadedRisks, ...mappedRisks });
@@ -241,7 +237,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             // Fallback to flat structure
             const mappedAnswers: Record<string, string> = {};
             const mappedRisks: Record<string, 0 | 1 | 2 | 3 | 4> = {};
-            
+
             if (data.answers) {
               generalQuestions.forEach(q => {
                 const questionKey = getQuestionKey(q);
@@ -258,10 +254,10 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
             if (data.risks) {
               generalQuestions.forEach(q => {
                 const questionKey = getQuestionKey(q);
-                const riskValue = data.risks[q.code] !== undefined ? data.risks[q.code] : 
-                                (data.risks[q.id] !== undefined ? data.risks[q.id] : 
-                                (data.risks[q._id || ''] !== undefined ? data.risks[q._id || ''] : 
-                                data.risks[questionKey]));
+                const riskValue = data.risks[q.code] !== undefined ? data.risks[q.code] :
+                  (data.risks[q.id] !== undefined ? data.risks[q.id] :
+                    (data.risks[q._id || ''] !== undefined ? data.risks[q._id || ''] :
+                      data.risks[questionKey]));
                 if (riskValue !== undefined) {
                   mappedRisks[q.id] = riskValue;
                   mappedRisks[questionKey] = riskValue;
@@ -309,12 +305,12 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
       (risks[q.id] === 0 || risks[q.id] === 1 || risks[q.id] === 2 || risks[q.id] === 3 || risks[q.id] === 4)
         ? risks[q.id]
         : ((risks[key] === 0 || risks[key] === 1 || risks[key] === 2 || risks[key] === 3 || risks[key] === 4)
-            ? risks[key]
-            : ((q.code && (risks[q.code] === 0 || risks[q.code] === 1 || risks[q.code] === 2 || risks[q.code] === 3 || risks[q.code] === 4))
-                ? risks[q.code]
-                : (q._id && (risks[q._id] === 0 || risks[q._id] === 1 || risks[q._id] === 2 || risks[q._id] === 3 || risks[q._id] === 4)
-                    ? risks[q._id]
-                    : undefined)));
+          ? risks[key]
+          : ((q.code && (risks[q.code] === 0 || risks[q.code] === 1 || risks[q.code] === 2 || risks[q.code] === 3 || risks[q.code] === 4))
+            ? risks[q.code]
+            : (q._id && (risks[q._id] === 0 || risks[q._id] === 1 || risks[q._id] === 2 || risks[q._id] === 3 || risks[q._id] === 4)
+              ? risks[q._id]
+              : undefined)));
 
     const hasRisk = riskValue === 0 || riskValue === 1 || riskValue === 2 || riskValue === 3 || riskValue === 4;
     return hasAnswer && hasRisk;
@@ -332,7 +328,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
 
       // Organize answers and risks by principle
       const principles: Record<string, { answers: Record<string, string>, risks: Record<string, number> }> = {};
-      
+
       generalQuestions.forEach(q => {
         if (!principles[q.principle]) {
           principles[q.principle] = { answers: {}, risks: {} };
@@ -342,7 +338,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         // Check both id and code in answers/risks (for backward compatibility)
         const answerValue = answers[q.id] || answers[questionKey] || answers[q.code || ''];
         const riskValue = risks[q.id] !== undefined ? risks[q.id] : (risks[questionKey] !== undefined ? risks[questionKey] : risks[q.code || '']);
-        
+
         if (answerValue) {
           principles[q.principle].answers[questionKey] = answerValue;
         }
@@ -368,7 +364,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         const errorData = await response.json().catch(() => ({ error: 'Failed to save answers' }));
         throw new Error(errorData.error || 'Failed to save answers');
       }
-      
+
       const result = await response.json();
       return true;
     } catch (error: any) {
@@ -384,7 +380,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
     const questionKey = getQuestionKey(currentQuestion);
     const answerValue = answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''];
     const riskValue = risks[currentQuestion.id] !== undefined ? risks[currentQuestion.id] : (risks[questionKey] !== undefined ? risks[questionKey] : risks[currentQuestion.code || '']);
-    
+
     // Validate required question
     if (currentQuestion.required && !answerValue) {
       alert('Please answer this required question before proceeding.');
@@ -421,27 +417,27 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
 
   const getCompletionPercentage = () => {
     if (generalQuestions.length === 0) return 0;
-    
+
     const completed = generalQuestions.filter(q => {
       const questionKey = getQuestionKey(q);
       // Check all possible key formats for answer
       const hasAnswer = !!(
-        answers[q.id] || 
-        answers[questionKey] || 
+        answers[q.id] ||
+        answers[questionKey] ||
         answers[q.code || ''] ||
         answers[q._id || '']
       );
       // Check all possible key formats for risk
       const hasRisk = (
-        risks[q.id] !== undefined || 
-        risks[questionKey] !== undefined || 
+        risks[q.id] !== undefined ||
+        risks[questionKey] !== undefined ||
         risks[q.code || ''] !== undefined ||
         risks[q._id || ''] !== undefined
       );
       // Both answer and risk score are required for completion
       return hasAnswer && hasRisk;
     }).length;
-    
+
     return Math.round((completed / generalQuestions.length) * 100);
   };
 
@@ -449,14 +445,14 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
   const isQuestionCompleted = (q: GeneralQuestion): boolean => {
     const questionKey = getQuestionKey(q);
     const hasAnswer = !!(
-      answers[q.id] || 
-      answers[questionKey] || 
+      answers[q.id] ||
+      answers[questionKey] ||
       answers[q.code || ''] ||
       answers[q._id || '']
     );
     const hasRisk = (
-      risks[q.id] !== undefined || 
-      risks[questionKey] !== undefined || 
+      risks[q.id] !== undefined ||
+      risks[questionKey] !== undefined ||
       risks[q.code || ''] !== undefined ||
       risks[q._id || ''] !== undefined
     );
@@ -521,7 +517,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <button 
+              <button
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -535,7 +531,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                     console.error('Error in onBack:', error);
                     // Error is logged, parent component should handle navigation
                   }
-                }} 
+                }}
                 className="flex items-center text-gray-600 hover:text-gray-900 transition-colors bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-sm font-medium"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" /> Back
@@ -547,7 +543,7 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                 <p className="text-sm text-gray-600">{project.title}</p>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-4">
               <div className="text-right">
                 <p className="text-xs text-gray-500 font-medium">Progress</p>
@@ -579,27 +575,24 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                   const isCurrent = index === currentQuestionIndex;
                   const questionKey = getQuestionKey(q);
                   const questionNumber = index + 1;
-                  
+
                   return (
                     <button
                       key={q.id || index}
                       onClick={() => navigateToQuestion(index)}
-                      className={`w-full text-left p-3 rounded-lg mb-1 transition-all ${
-                        isCurrent
-                          ? 'bg-blue-50 border-2 border-blue-500 text-blue-900'
-                          : 'hover:bg-gray-50 border-2 border-transparent text-gray-700'
-                      }`}
+                      className={`w-full text-left p-3 rounded-lg mb-1 transition-all ${isCurrent
+                        ? 'bg-blue-50 border-2 border-blue-500 text-blue-900'
+                        : 'hover:bg-gray-50 border-2 border-transparent text-gray-700'
+                        }`}
                     >
                       <div className="flex items-center gap-2">
                         {isCompleted ? (
                           <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
                         ) : (
-                          <div className={`h-5 w-5 rounded-full border-2 flex-shrink-0 ${
-                            isCurrent ? 'border-blue-500 bg-blue-100' : 'border-gray-300'
-                          }`}>
-                            <span className={`text-xs font-medium flex items-center justify-center h-full ${
-                              isCurrent ? 'text-blue-600' : 'text-gray-400'
+                          <div className={`h-5 w-5 rounded-full border-2 flex-shrink-0 ${isCurrent ? 'border-blue-500 bg-blue-100' : 'border-gray-300'
                             }`}>
+                            <span className={`text-xs font-medium flex items-center justify-center h-full ${isCurrent ? 'text-blue-600' : 'text-gray-400'
+                              }`}>
                               {questionNumber}
                             </span>
                           </div>
@@ -608,9 +601,8 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
                           Q{questionNumber}
                         </span>
                       </div>
-                      <p className={`text-xs mt-1 truncate ${
-                        isCurrent ? 'text-blue-700' : 'text-gray-500'
-                      }`}>
+                      <p className={`text-xs mt-1 truncate ${isCurrent ? 'text-blue-700' : 'text-gray-500'
+                        }`}>
                         {q.questionEn.substring(0, 40)}...
                       </p>
                     </button>
@@ -634,269 +626,262 @@ export function GeneralQuestions({ project, currentUser, onBack, onComplete }: G
 
         <div className="flex-1 px-4 py-8 max-w-5xl mx-auto w-full flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto min-h-0 pb-24">
-          {/* Question Card */}
-          <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col min-h-0">
-            <div className="p-8 border-b border-gray-100 bg-white">
-              <div className="flex flex-wrap items-center gap-3 mb-4">
-              <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
-                Question {currentQuestionIndex + 1} of {generalQuestions.length}
-              </span>
+            {/* Question Card */}
+            <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col min-h-0">
+              <div className="p-8 border-b border-gray-100 bg-white">
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <span className="px-3 py-1 bg-blue-100 text-blue-600 text-sm font-medium rounded-full">
+                    Question {currentQuestionIndex + 1} of {generalQuestions.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(true)}
+                    className="md:hidden px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+                  >
+                    Q list
+                  </button>
+                  <span className="px-3 py-1 bg-purple-100 text-purple-600 text-sm font-medium rounded-full">
+                    {currentQuestion.principle}
+                  </span>
+                  {currentQuestion.required && (
+                    <span className="px-3 py-1 bg-red-50 text-red-600 text-sm font-medium rounded-full border border-red-100">
+                      Required
+                    </span>
+                  )}
+                </div>
+
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-3">
+                  {currentQuestion.questionEn}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Principle: {currentQuestion.principle}
+                </p>
+              </div>
+
+              <div className="p-8 bg-gray-50/30">
+                {currentQuestion.type === 'multiple-choice' && (
+                  <div className="space-y-3 max-w-2xl">
+                    {currentQuestion.options?.map((option, idx) => {
+                      const questionKey = getQuestionKey(currentQuestion);
+                      const optionKey = typeof option === 'string' ? option : option.key;
+                      const optionLabel = typeof option === 'string' ? option : option.label;
+                      const answerValue = answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''];
+                      // Check both key and label for flexibility
+                      const isSelected = answerValue === optionKey || answerValue === optionLabel;
+                      return (
+                        <label
+                          key={idx}
+                          className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${isSelected
+                            ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                            }`}
+                        >
+                          <div
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${isSelected
+                              ? 'border-blue-600 bg-blue-600'
+                              : 'border-gray-300 group-hover:border-blue-400'
+                              }`}
+                          >
+                            {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                          </div>
+                          <input
+                            type="radio"
+                            name={getQuestionKey(currentQuestion)}
+                            value={optionKey}
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const questionKey = getQuestionKey(currentQuestion);
+                              handleAnswerChange(questionKey, e.target.value);
+                              // Also update by id for backward compatibility
+                              if (currentQuestion.id !== questionKey) {
+                                handleAnswerChange(currentQuestion.id, e.target.value);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                          <span
+                            className={`text-lg font-medium transition-colors ${isSelected ? 'text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            {optionLabel}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {currentQuestion.type === 'text' && (
+                  <div className="relative max-w-3xl">
+                    <textarea
+                      value={(() => {
+                        const questionKey = getQuestionKey(currentQuestion);
+                        return answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''] || '';
+                      })()}
+                      onChange={(e) => {
+                        const questionKey = getQuestionKey(currentQuestion);
+                        handleAnswerChange(questionKey, e.target.value);
+                        // Also update by id for backward compatibility
+                        if (currentQuestion.id !== questionKey) {
+                          handleAnswerChange(currentQuestion.id, e.target.value);
+                        }
+                      }}
+                      rows={8}
+                      className="w-full px-5 py-4 text-lg text-gray-800 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none placeholder-gray-400 bg-white"
+                      placeholder="Type your answer here..."
+                    />
+                  </div>
+                )}
+
+                {/* Risk Score Selection (0-4) */}
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <div className="flex items-center gap-2 mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Importance Score for This Question</h3>
+                    <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
+                      Required
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-3 max-w-4xl">
+                    {([
+                      { value: 4, label: 'Very Important', desc: 'Critical question / This ethical principle should be dominant.', color: 'red' },
+                      { value: 3, label: 'Important', desc: 'Important question / This topic requires attention.', color: 'orange' },
+                      { value: 2, label: 'Moderately Important', desc: 'Moderately important / Should be considered.', color: 'yellow' },
+                      { value: 1, label: 'Less Important', desc: 'Less important / Minor consideration.', color: 'blue' },
+                      { value: 0, label: 'Not Important', desc: 'Not important / Negligible for this evaluation.', color: 'green' }
+                    ] as const).map(({ value, label, desc, color }) => {
+                      const questionKey = getQuestionKey(currentQuestion);
+                      // Get risk value - check all possible keys (same logic as working buttons 4, 3, 2)
+                      let riskValue: number | undefined = undefined;
+
+                      // Check all possible keys - handle 0 and 1 correctly
+                      if (currentQuestion.id !== undefined) {
+                        const idVal = risks[currentQuestion.id];
+                        if (idVal !== undefined && idVal !== null && typeof idVal === 'number' && idVal >= 0 && idVal <= 4) {
+                          riskValue = idVal;
+                        }
+                      }
+
+                      if (riskValue === undefined) {
+                        const keyVal = risks[questionKey];
+                        if (keyVal !== undefined && keyVal !== null && typeof keyVal === 'number' && keyVal >= 0 && keyVal <= 4) {
+                          riskValue = keyVal;
+                        }
+                      }
+
+                      if (riskValue === undefined && currentQuestion.code !== undefined) {
+                        const codeVal = risks[currentQuestion.code];
+                        if (codeVal !== undefined && codeVal !== null && typeof codeVal === 'number' && codeVal >= 0 && codeVal <= 4) {
+                          riskValue = codeVal;
+                        }
+                      }
+
+                      // Use explicit type check and equality (same as working buttons 4, 3, 2)
+                      const isSelected = typeof riskValue === 'number' && riskValue === value;
+
+                      // Color scheme: 4 = highest risk (red), 0 = no risk (green)
+                      const colorClasses = {
+                        red: isSelected ? 'border-red-700 bg-red-100 shadow-md ring-2 ring-red-200 ring-offset-2' : 'border-gray-200 hover:border-red-300 hover:bg-red-50',
+                        orange: isSelected ? 'border-orange-600 bg-orange-100 shadow-md ring-2 ring-orange-200 ring-offset-2' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50',
+                        yellow: isSelected ? 'border-yellow-600 bg-yellow-100 shadow-md ring-2 ring-yellow-200 ring-offset-2' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
+                        blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
+                        green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
+                      };
+                      const bgColorClasses = {
+                        red: isSelected ? 'bg-red-200 text-red-900' : 'bg-gray-100 text-gray-400',
+                        orange: isSelected ? 'bg-orange-200 text-orange-900' : 'bg-gray-100 text-gray-400',
+                        yellow: isSelected ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-100 text-gray-400',
+                        blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
+                        green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                      };
+                      return (
+                        <label
+                          key={value}
+                          className={`relative flex flex-col items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
+                        >
+                          <input
+                            type="radio"
+                            name={`risk-${getQuestionKey(currentQuestion)}`}
+                            value={value}
+                            checked={isSelected}
+                            onChange={() => {
+                              const questionKey = getQuestionKey(currentQuestion);
+                              const riskValue = value as 0 | 1 | 2 | 3 | 4;
+                              console.log(`🔵 Setting risk for question ${questionKey} to ${riskValue}`, {
+                                questionKey,
+                                questionId: currentQuestion.id,
+                                questionCode: currentQuestion.code,
+                                riskValue,
+                                value,
+                                currentRisks: risks
+                              });
+                              // Update state directly (same as working buttons 4, 3, 2)
+                              setRisks((prev) => {
+                                const updated = { ...prev };
+                                updated[questionKey] = riskValue;
+                                if (currentQuestion.id) {
+                                  updated[currentQuestion.id] = riskValue;
+                                }
+                                if (currentQuestion.code && currentQuestion.code !== questionKey) {
+                                  updated[currentQuestion.code] = riskValue;
+                                }
+                                console.log('✅ Updated risks state:', updated);
+                                return updated;
+                              });
+                            }}
+                            className="hidden"
+                          />
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>
+                            <span className="text-lg font-bold">{value}</span>
+                          </div>
+                          <span className={`text-xs font-bold text-center ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
+                            {label}
+                          </span>
+                          <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
+                            {desc}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Footer */}
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex justify-between items-center z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-shrink-0">
+            <button
+              onClick={handleBack}
+              className="flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+            >
+              <ChevronLeft className="w-5 h-5 mr-2" /> {isFirstQuestion ? 'Back' : 'Previous'}
+            </button>
+
+            <div className="flex items-center gap-4">
               <button
-                type="button"
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden px-3 py-1 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-100 hover:bg-blue-100"
+                onClick={saveAnswers}
+                disabled={saving}
+                className="px-6 py-3 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center"
               >
-                Q list
+                {saving ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-5 h-5 mr-2" />
+                )}
+                {saving ? 'Saving...' : 'Save Draft'}
               </button>
-              <span className="px-3 py-1 bg-purple-100 text-purple-600 text-sm font-medium rounded-full">
-                {currentQuestion.principle}
-              </span>
-              {currentQuestion.required && (
-                <span className="px-3 py-1 bg-red-50 text-red-600 text-sm font-medium rounded-full border border-red-100">
-                  Required
-                </span>
-              )}
-            </div>
-            
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight mb-3">
-              {currentQuestion.questionEn}
-            </h2>
-            <p className="text-lg text-gray-600 italic mb-2">
-              {currentQuestion.questionTr}
-            </p>
-            <p className="text-sm text-gray-500">
-              Principle: {currentQuestion.principleTr}
-            </p>
-          </div>
 
-          <div className="p-8 bg-gray-50/30">
-            {currentQuestion.type === 'multiple-choice' && (
-              <div className="space-y-3 max-w-2xl">
-                {currentQuestion.options?.map((option, idx) => {
-                  const questionKey = getQuestionKey(currentQuestion);
-                  const optionKey = typeof option === 'string' ? option : option.key;
-                  const optionLabel = typeof option === 'string' ? option : option.label;
-                  const answerValue = answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''];
-                  // Check both key and label for flexibility
-                  const isSelected = answerValue === optionKey || answerValue === optionLabel;
-                  return (
-                    <label
-                      key={idx}
-                      className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                        isSelected
-                          ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                          : 'border-gray-200 hover:border-blue-300 hover:bg-white'
-                      }`}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${
-                          isSelected
-                            ? 'border-blue-600 bg-blue-600'
-                            : 'border-gray-300 group-hover:border-blue-400'
-                        }`}
-                      >
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-                      <input
-                        type="radio"
-                        name={getQuestionKey(currentQuestion)}
-                        value={optionKey}
-                        checked={isSelected}
-                        onChange={(e) => {
-                          const questionKey = getQuestionKey(currentQuestion);
-                          handleAnswerChange(questionKey, e.target.value);
-                          // Also update by id for backward compatibility
-                          if (currentQuestion.id !== questionKey) {
-                            handleAnswerChange(currentQuestion.id, e.target.value);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <span
-                        className={`text-lg font-medium transition-colors ${
-                          isSelected ? 'text-blue-900' : 'text-gray-700'
-                        }`}
-                      >
-                        {optionLabel}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-
-            {currentQuestion.type === 'text' && (
-              <div className="relative max-w-3xl">
-                <textarea
-                  value={(() => {
-                    const questionKey = getQuestionKey(currentQuestion);
-                    return answers[currentQuestion.id] || answers[questionKey] || answers[currentQuestion.code || ''] || '';
-                  })()}
-                  onChange={(e) => {
-                    const questionKey = getQuestionKey(currentQuestion);
-                    handleAnswerChange(questionKey, e.target.value);
-                    // Also update by id for backward compatibility
-                    if (currentQuestion.id !== questionKey) {
-                      handleAnswerChange(currentQuestion.id, e.target.value);
-                    }
-                  }}
-                  rows={8}
-                  className="w-full px-5 py-4 text-lg text-gray-800 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none placeholder-gray-400 bg-white"
-                  placeholder="Type your answer here..."
-                />
-              </div>
-            )}
-
-            {/* Risk Score Selection (0-4) */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Importance Score for This Question</h3>
-                <span className="px-2.5 py-0.5 bg-red-50 text-red-600 text-xs font-medium rounded-full border border-red-100">
-                  Required
-                </span>
-              </div>
-              <div className="grid grid-cols-5 gap-3 max-w-4xl">
-                {([
-                  { value: 4, label: 'Very Important', labelTr: 'Çok Önemli', desc: 'Critical question / This ethical principle should be dominant.', descTr: 'Kritik soru / Bu etik ilke baskın olmalı.', color: 'red' },
-                  { value: 3, label: 'Important', labelTr: 'Önemli', desc: 'Important question / This topic requires attention.', descTr: 'Önemli soru / Bu konuya dikkat edilmeli.', color: 'orange' },
-                  { value: 2, label: 'Moderately Important', labelTr: 'Orta Derecede Önemli', desc: 'Moderately important / Should be considered.', descTr: 'Orta derecede önemli / Dikkate alınmalı.', color: 'yellow' },
-                  { value: 1, label: 'Less Important', labelTr: 'Az Önemli', desc: 'Less important / Minor consideration.', descTr: 'Az önemli / Küçük bir husus.', color: 'blue' },
-                  { value: 0, label: 'Not Important', labelTr: 'Önemsiz', desc: 'Not important / Negligible for this evaluation.', descTr: 'Önemsiz / Bu değerlendirme için ihmal edilebilir.', color: 'green' }
-                ] as const).map(({ value, label, labelTr, desc, descTr, color }) => {
-                  const questionKey = getQuestionKey(currentQuestion);
-                  // Get risk value - check all possible keys (same logic as working buttons 4, 3, 2)
-                  let riskValue: number | undefined = undefined;
-                  
-                  // Check all possible keys - handle 0 and 1 correctly
-                  if (currentQuestion.id !== undefined) {
-                    const idVal = risks[currentQuestion.id];
-                    if (idVal !== undefined && idVal !== null && typeof idVal === 'number' && idVal >= 0 && idVal <= 4) {
-                      riskValue = idVal;
-                    }
-                  }
-                  
-                  if (riskValue === undefined) {
-                    const keyVal = risks[questionKey];
-                    if (keyVal !== undefined && keyVal !== null && typeof keyVal === 'number' && keyVal >= 0 && keyVal <= 4) {
-                      riskValue = keyVal;
-                    }
-                  }
-                  
-                  if (riskValue === undefined && currentQuestion.code !== undefined) {
-                    const codeVal = risks[currentQuestion.code];
-                    if (codeVal !== undefined && codeVal !== null && typeof codeVal === 'number' && codeVal >= 0 && codeVal <= 4) {
-                      riskValue = codeVal;
-                    }
-                  }
-                  
-                  // Use explicit type check and equality (same as working buttons 4, 3, 2)
-                  const isSelected = typeof riskValue === 'number' && riskValue === value;
-                  
-                  // Color scheme: 4 = highest risk (red), 0 = no risk (green)
-                  const colorClasses = {
-                    red: isSelected ? 'border-red-700 bg-red-100 shadow-md ring-2 ring-red-200 ring-offset-2' : 'border-gray-200 hover:border-red-300 hover:bg-red-50',
-                    orange: isSelected ? 'border-orange-600 bg-orange-100 shadow-md ring-2 ring-orange-200 ring-offset-2' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50',
-                    yellow: isSelected ? 'border-yellow-600 bg-yellow-100 shadow-md ring-2 ring-yellow-200 ring-offset-2' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-50/30',
-                    blue: isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30',
-                    green: isSelected ? 'border-green-500 bg-green-50 shadow-md' : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
-                  };
-                  const bgColorClasses = {
-                    red: isSelected ? 'bg-red-200 text-red-900' : 'bg-gray-100 text-gray-400',
-                    orange: isSelected ? 'bg-orange-200 text-orange-900' : 'bg-gray-100 text-gray-400',
-                    yellow: isSelected ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-100 text-gray-400',
-                    blue: isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400',
-                    green: isSelected ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
-                  };
-                  return (
-                    <label
-                      key={value}
-                      className={`relative flex flex-col items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${colorClasses[color]}`}
-                    >
-                      <input
-                        type="radio"
-                        name={`risk-${getQuestionKey(currentQuestion)}`}
-                        value={value}
-                        checked={isSelected}
-                        onChange={() => {
-                          const questionKey = getQuestionKey(currentQuestion);
-                          const riskValue = value as 0 | 1 | 2 | 3 | 4;
-                          console.log(`🔵 Setting risk for question ${questionKey} to ${riskValue}`, {
-                            questionKey,
-                            questionId: currentQuestion.id,
-                            questionCode: currentQuestion.code,
-                            riskValue,
-                            value,
-                            currentRisks: risks
-                          });
-                          // Update state directly (same as working buttons 4, 3, 2)
-                          setRisks((prev) => {
-                            const updated = { ...prev };
-                            updated[questionKey] = riskValue;
-                            if (currentQuestion.id) {
-                              updated[currentQuestion.id] = riskValue;
-                            }
-                            if (currentQuestion.code && currentQuestion.code !== questionKey) {
-                              updated[currentQuestion.code] = riskValue;
-                            }
-                            console.log('✅ Updated risks state:', updated);
-                            return updated;
-                          });
-                        }}
-                        className="hidden"
-                      />
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>
-                        <span className="text-lg font-bold">{value}</span>
-                      </div>
-                      <span className={`text-xs font-bold text-center ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
-                        {label}
-                      </span>
-                      <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
-                      <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {descTr || desc}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              <button
+                onClick={handleNext}
+                disabled={saving}
+                className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
+              >
+                {isLastQuestion ? 'Complete' : 'Next Question'}{' '}
+                <ChevronRight className="w-5 h-5 ml-2" />
+              </button>
             </div>
           </div>
-          </div>
         </div>
-
-        {/* Navigation Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex justify-between items-center z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-shrink-0">
-          <button
-            onClick={handleBack}
-            className="flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
-          >
-            <ChevronLeft className="w-5 h-5 mr-2" /> {isFirstQuestion ? 'Back' : 'Previous'}
-          </button>
-
-          <div className="flex items-center gap-4">
-            <button
-              onClick={saveAnswers}
-              disabled={saving}
-              className="px-6 py-3 bg-indigo-50 border-2 border-indigo-100 text-indigo-600 font-semibold rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center"
-            >
-              {saving ? (
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              ) : (
-                <Save className="w-5 h-5 mr-2" />
-              )}
-              {saving ? 'Saving...' : 'Save Draft'}
-            </button>
-
-            <button
-              onClick={handleNext}
-              disabled={saving}
-              className="flex items-center px-8 py-3 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5 bg-blue-600 hover:bg-blue-700"
-            >
-              {isLastQuestion ? 'Complete' : 'Next Question'}{' '}
-              <ChevronRight className="w-5 h-5 ml-2" />
-            </button>
-          </div>
-        </div>
-      </div>
       </div>
     </div>
   );

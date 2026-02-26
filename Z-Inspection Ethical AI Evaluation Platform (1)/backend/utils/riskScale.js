@@ -46,23 +46,7 @@ function classifyRisk(score) {
   return `${result.level}_RISK`;
 }
 
-/**
- * Get Turkish risk label
- * @param {number|null|undefined} score - Risk score
- * @returns {string} Turkish label
- */
-function riskLabelTR(score) {
-  const classification = classifyRisk(score);
-  const labels = {
-    "MINIMAL_RISK": "Minimal Risk",
-    "LOW_RISK": "Düşük Risk",
-    "MEDIUM_RISK": "Orta Risk",
-    "HIGH_RISK": "Yüksek Risk",
-    "CRITICAL_RISK": "Kritik Risk",
-    "N/A": "Değerlendirilmedi"
-  };
-  return labels[classification] || "Bilinmeyen";
-}
+
 
 /**
  * Get English risk label
@@ -86,10 +70,9 @@ function riskLabelEN(score) {
  * Get risk label in specified format (unified function for consistency)
  * @param {number|null|undefined} score - Risk score (0-4)
  * @param {string} format - Format: 'label' (default), 'short', 'classification'
- * @param {string} language - Language: 'en' (default) or 'tr'
  * @returns {string} Risk label
  */
-function getRiskLabel(score, format = 'label', language = 'en') {
+function getRiskLabel(score, format = 'label') {
   const classification = classifyRisk(score);
 
   // Short format (e.g., "MINIMAL", "LOW", "MEDIUM", "HIGH", "CRITICAL")
@@ -111,9 +94,6 @@ function getRiskLabel(score, format = 'label', language = 'en') {
   }
 
   // Label format (default) - full descriptive label
-  if (language === 'tr') {
-    return riskLabelTR(score);
-  }
   return riskLabelEN(score);
 }
 
@@ -252,7 +232,6 @@ function colorForCumulativeRisk(cumulativeScore, questionCount) {
 module.exports = {
   clampScore,
   classifyRisk,
-  riskLabelTR,
   riskLabelEN,
   getRiskLabel,
   validateRiskScaleNotInverted,

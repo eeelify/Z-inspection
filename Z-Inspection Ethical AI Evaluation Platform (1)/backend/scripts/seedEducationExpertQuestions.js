@@ -21,12 +21,11 @@ const educationExpertQuestions = [
   {
     code: 'E1',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are the students\' digital literacy levels sufficient for safe and effective use of the system?',
-      tr: 'Öğrencilerin dijital okuryazarlık seviyesi sistemi güvenli ve etkili kullanmak için yeterli mi?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -35,10 +34,10 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, answerScore: 0.5 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 },
-      { key: 'not_sure', label: { en: 'Not sure', tr: 'Emin değilim' }, answerScore: 0.5 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'partially', label: { en: 'Partially', }, answerScore: 0.5 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 },
+      { key: 'not_sure', label: { en: 'Not sure', }, answerScore: 0.5 }
     ],
     required: true,
     order: 100
@@ -47,12 +46,11 @@ const educationExpertQuestions = [
   {
     code: 'E2',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are the training materials and onboarding guides clear, sufficient, and pedagogically appropriate?',
-      tr: 'Sağlanan eğitim materyalleri ve onboarding rehberleri yeterli, anlaşılır ve pedagojik olarak uygun mu?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -61,10 +59,10 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, answerScore: 0.5 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 },
-      { key: 'insufficient', label: { en: 'Insufficient', tr: 'Yetersiz' }, answerScore: 0.0 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'partially', label: { en: 'Partially', }, answerScore: 0.5 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 },
+      { key: 'insufficient', label: { en: 'Insufficient', }, answerScore: 0.0 }
     ],
     required: true,
     order: 101
@@ -73,12 +71,11 @@ const educationExpertQuestions = [
   {
     code: 'E3',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Is there a risk that the system\'s outputs may contradict teacher instructions or deviate from the national curriculum?',
-      tr: 'Sistemin çıktılarının öğretmen talimatlarıyla çelişme veya ulusal müfredattan sapma riski var mı?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -87,11 +84,11 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'risk_1', label: { en: '1 - Low risk', tr: '1 - Düşük risk' }, answerScore: 1.0 },
-      { key: 'risk_2', label: { en: '2', tr: '2' }, answerScore: 0.75 },
-      { key: 'risk_3', label: { en: '3', tr: '3' }, answerScore: 0.5 },
-      { key: 'risk_4', label: { en: '4', tr: '4' }, answerScore: 0.0 }, // Assuming 4 is high risk/problematic here based on original score 1
-      { key: 'risk_5', label: { en: '5 - High risk', tr: '5 - Yüksek risk' }, answerScore: 0.0 }
+      { key: 'risk_1', label: { en: '1 - Low risk', }, answerScore: 1.0 },
+      { key: 'risk_2', label: { en: '2', }, answerScore: 0.75 },
+      { key: 'risk_3', label: { en: '3', }, answerScore: 0.5 },
+      { key: 'risk_4', label: { en: '4', }, answerScore: 0.0 }, // Assuming 4 is high risk/problematic here based on original score 1
+      { key: 'risk_5', label: { en: '5 - High risk', }, answerScore: 0.0 }
     ],
     required: true,
     order: 102
@@ -100,12 +97,11 @@ const educationExpertQuestions = [
   {
     code: 'E4',
     principleKey: 'societal_wellbeing',
-    principleLabel: { en: 'Societal & Interpersonal Well-being', tr: 'Toplumsal ve Kişilerarası Refah' },
+    principleLabel: { en: 'Societal & Interpersonal Well-being', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the system oversimplify complex topics in ways that may hinder deep learning?',
-      tr: 'Sistem, karmaşık konuları aşırı basitleştirerek derin öğrenmeyi olumsuz etkileyebilir mi?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -120,12 +116,11 @@ const educationExpertQuestions = [
   {
     code: 'E5',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the system encourage interactive (Socratic) learning, or does it push students toward passive consumption?',
-      tr: 'Sistem etkileşimli (Sokratik) öğrenmeyi mi destekliyor, yoksa öğrencileri pasif kullanıcı hâline mi getiriyor?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -134,9 +129,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'active_learning', label: { en: 'Active learning', tr: 'Aktif öğrenme' }, answerScore: 1.0 },
-      { key: 'neutral', label: { en: 'Neutral', tr: 'Nötr' }, answerScore: 0.5 },
-      { key: 'passive_use', label: { en: 'Passive use', tr: 'Pasif kullanım' }, answerScore: 0.0 }
+      { key: 'active_learning', label: { en: 'Active learning', }, answerScore: 1.0 },
+      { key: 'neutral', label: { en: 'Neutral', }, answerScore: 0.5 },
+      { key: 'passive_use', label: { en: 'Passive use', }, answerScore: 0.0 }
     ],
     required: true,
     order: 104
@@ -145,12 +140,11 @@ const educationExpertQuestions = [
   {
     code: 'E6',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Do you see a need for additional training or onboarding for users?',
-      tr: 'Kullanıcılar için ek eğitim veya uyum süreci ihtiyacı görüyor musunuz?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -165,12 +159,11 @@ const educationExpertQuestions = [
   {
     code: 'E7',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are students capable of recognizing incorrect or low-quality AI responses and is there a risk of "automation bias" (over-trusting the AI)?',
-      tr: 'Öğrenciler yanlış veya düşük kaliteli AI çıktısını fark edebilecek yeterlilikteler mi ve AI\'ya aşırı güvenme (automation bias) riski var mı?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -179,10 +172,10 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, answerScore: 0.5 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 },
-      { key: 'not_sure', label: { en: 'Not sure', tr: 'Emin değilim' }, answerScore: 0.5 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'partially', label: { en: 'Partially', }, answerScore: 0.5 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 },
+      { key: 'not_sure', label: { en: 'Not sure', }, answerScore: 0.5 }
     ],
     required: true,
     order: 106
@@ -191,12 +184,11 @@ const educationExpertQuestions = [
   {
     code: 'E8',
     principleKey: 'societal_wellbeing',
-    principleLabel: { en: 'Societal & Interpersonal Well-being', tr: 'Toplumsal ve Kişilerarası Refah' },
+    principleLabel: { en: 'Societal & Interpersonal Well-being', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Could long-term use of the system cause digital fatigue, attention loss, or cognitive overload in students?',
-      tr: 'Sistemin uzun süreli kullanımı öğrencilerde dijital yorgunluk, dikkat dağınıklığı veya bilişsel yük oluşturabilir mi?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -211,12 +203,11 @@ const educationExpertQuestions = [
   {
     code: 'E9',
     principleKey: 'diversity_fairness',
-    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', tr: 'Çeşitlilik, Ayrımcılık Yasağı ve Adalet' },
+    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Could students with lower digital skills have more difficulty understanding system outputs?',
-      tr: 'Dijital becerisi düşük öğrenciler sistem çıktılarıyla ilgili daha fazla zorluk yaşayabilir mi?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -225,10 +216,10 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 0.0 },
-      { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, answerScore: 0.5 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 1.0 },
-      { key: 'depends', label: { en: 'Depends', tr: 'Duruma bağlı' }, answerScore: 0.5 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 0.0 },
+      { key: 'partially', label: { en: 'Partially', }, answerScore: 0.5 },
+      { key: 'no', label: { en: 'No', }, answerScore: 1.0 },
+      { key: 'depends', label: { en: 'Depends', }, answerScore: 0.5 }
     ],
     required: true,
     order: 108
@@ -237,12 +228,11 @@ const educationExpertQuestions = [
   {
     code: 'E10',
     principleKey: 'diversity_fairness',
-    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', tr: 'Çeşitlilik, Ayrımcılık Yasağı ve Adalet' },
+    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the system provide accessible and inclusive features for disadvantaged or special-needs students?',
-      tr: 'Sistem dezavantajlı veya özel gereksinimli öğrenciler için yeterince kapsayıcı ve erişilebilir mi?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -251,9 +241,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, answerScore: 0.5 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'partially', label: { en: 'Partially', }, answerScore: 0.5 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 }
     ],
     required: true,
     order: 109
@@ -262,12 +252,11 @@ const educationExpertQuestions = [
   {
     code: 'E11',
     principleKey: 'privacy_data_governance',
-    principleLabel: { en: 'Privacy & Data Governance', tr: 'Gizlilik ve Veri Yönetişimi' },
+    principleLabel: { en: 'Privacy & Data Governance', },
     appliesToRoles: ['education-expert'],
     text: {
-      en: 'Does the system process and store student data in compliance with GDPR/KVKK and AI Act data governance requirements?',
-      tr: 'Sistem öğrenci verilerini KVKK/GDPR ve AI Act veri yönetişimi gerekliliklerine uygun şekilde işliyor mu?'
-    },
+      en: 'Does the system process and store student data in compliance with GDPR',
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -276,9 +265,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 },
-      { key: 'uncertain', label: { en: 'Uncertain', tr: 'Belirsiz' }, answerScore: 0.5 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 },
+      { key: 'uncertain', label: { en: 'Uncertain', }, answerScore: 0.5 }
     ],
     required: true,
     order: 110
@@ -287,12 +276,11 @@ const educationExpertQuestions = [
   {
     code: 'E12',
     principleKey: 'accountability_responsibility',
-    principleLabel: { en: 'Accountability & Responsibility', tr: 'Hesap Verebilirlik ve Sorumluluk' },
+    principleLabel: { en: 'Accountability & Responsibility', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Has the teacher completed the Ethical Declaration Form and obtained the required administrative permissions?',
-      tr: 'Öğretmen Etik Beyan Formu\'nu doldurmuş ve gerekli idari izinleri almış mı?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -301,8 +289,8 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 }
     ],
     required: true,
     order: 111
@@ -311,12 +299,11 @@ const educationExpertQuestions = [
   {
     code: 'E13',
     principleKey: 'accountability_responsibility',
-    principleLabel: { en: 'Accountability & Responsibility', tr: 'Hesap Verebilirlik ve Sorumluluk' },
+    principleLabel: { en: 'Accountability & Responsibility', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Is there an AI Ethics Committee or an official mechanism for appeals, complaints, or oversight?',
-      tr: 'Bir Yapay Zekâ Etiği Ekibi veya resmi itiraz/gözetim mekanizması var mı?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -325,8 +312,8 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 }
     ],
     required: true,
     order: 112
@@ -335,12 +322,11 @@ const educationExpertQuestions = [
   {
     code: 'E14',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'What is the risk of the system generating inaccurate, fabricated (hallucinated), or pedagogically harmful information?',
-      tr: 'Sistem yanlış, uydurma (halüsinasyon) veya pedagojik açıdan zararlı bilgi üretme riski taşıyor mu?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -349,11 +335,11 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'risk_1', label: { en: '1 - Low risk', tr: '1 - Düşük risk' }, answerScore: 1.0 },
-      { key: 'risk_2', label: { en: '2', tr: '2' }, answerScore: 0.75 },
-      { key: 'risk_3', label: { en: '3', tr: '3' }, answerScore: 0.5 },
-      { key: 'risk_4', label: { en: '4', tr: '4' }, answerScore: 0.0 },
-      { key: 'risk_5', label: { en: '5 - High risk', tr: '5 - Yüksek risk' }, answerScore: 0.0 }
+      { key: 'risk_1', label: { en: '1 - Low risk', }, answerScore: 1.0 },
+      { key: 'risk_2', label: { en: '2', }, answerScore: 0.75 },
+      { key: 'risk_3', label: { en: '3', }, answerScore: 0.5 },
+      { key: 'risk_4', label: { en: '4', }, answerScore: 0.0 },
+      { key: 'risk_5', label: { en: '5 - High risk', }, answerScore: 0.0 }
     ],
     required: true,
     order: 113
@@ -362,12 +348,11 @@ const educationExpertQuestions = [
   {
     code: 'E15',
     principleKey: 'societal_wellbeing',
-    principleLabel: { en: 'Societal & Interpersonal Well-being', tr: 'Toplumsal ve Kişilerarası Refah' },
+    principleLabel: { en: 'Societal & Interpersonal Well-being', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the system make it easier for students to cheat, plagiarize, or bypass learning tasks?',
-      tr: 'Sistem öğrencilerin kopya çekmesini, intihal yapmasını veya öğrenmeyi atlamasını kolaylaştırıyor mu?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -382,12 +367,11 @@ const educationExpertQuestions = [
   {
     code: 'E16',
     principleKey: 'transparency_explainability',
-    principleLabel: { en: 'Transparency & Explainability', tr: 'Şeffaflık ve Açıklanabilirlik' },
+    principleLabel: { en: 'Transparency & Explainability', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are the information sources used by the system reliable, updated, and academically valid?',
-      tr: 'Sistemin kullandığı bilgi kaynakları güvenilir, güncel ve akademik olarak geçerli mi?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -402,12 +386,11 @@ const educationExpertQuestions = [
   {
     code: 'E17',
     principleKey: 'transparency_explainability',
-    principleLabel: { en: 'Transparency & Explainability', tr: 'Şeffaflık ve Açıklanabilirlik' },
+    principleLabel: { en: 'Transparency & Explainability', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the system provide sufficient explainability and transparency for students to verify or understand its outputs?',
-      tr: 'Sistem çıktılarının doğrulanması veya anlaşılması için yeterli açıklanabilirlik ve şeffaflık sunuyor mu?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -422,12 +405,11 @@ const educationExpertQuestions = [
   {
     code: 'E18',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Could students trust the AI too much and accept information without verifying it?',
-      tr: 'Öğrenciler AI\'a aşırı güvenip bilgiyi doğrulamadan kabul etme eğiliminde olabilir mi?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -442,12 +424,11 @@ const educationExpertQuestions = [
   {
     code: 'E19',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Can the system produce ambiguous or misleading outputs that may confuse students?',
-      tr: 'Sistem öğrencileri yanlış yönlendirebilecek belirsiz veya yanıltıcı çıktılar üretebilir mi?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -462,12 +443,11 @@ const educationExpertQuestions = [
   {
     code: 'E20',
     principleKey: 'accountability_responsibility',
-    principleLabel: { en: 'Accountability & Responsibility', tr: 'Hesap Verebilirlik ve Sorumluluk' },
+    principleLabel: { en: 'Accountability & Responsibility', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Is there a risk of students misusing the system in harmful, unethical, or unintended ways?',
-      tr: 'Öğrencilerin sistemi zararlı, etik dışı veya amacı dışında kullanma ihtimali var mı?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -482,12 +462,11 @@ const educationExpertQuestions = [
   {
     code: 'E21',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are teacher supervision and human-in-the-loop mechanisms adequate during system use?',
-      tr: 'Sistem kullanımında öğretmen gözetimi (human-in-the-loop) mekanizmaları yeterli mi?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -502,12 +481,11 @@ const educationExpertQuestions = [
   {
     code: 'E22',
     principleKey: 'accountability_responsibility',
-    principleLabel: { en: 'Accountability & Responsibility', tr: 'Hesap Verebilirlik ve Sorumluluk' },
+    principleLabel: { en: 'Accountability & Responsibility', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'What additional precautions, classroom rules, or usage boundaries would you recommend?',
-      tr: 'Hangi ek önlemleri, sınıf içi kuralları veya kullanım sınırlarını önerirsiniz?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -522,12 +500,11 @@ const educationExpertQuestions = [
   {
     code: 'E23',
     principleKey: 'societal_wellbeing',
-    principleLabel: { en: 'Societal & Interpersonal Well-being', tr: 'Toplumsal ve Kişilerarası Refah' },
+    principleLabel: { en: 'Societal & Interpersonal Well-being', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'What improvements would you suggest to make the system more supportive for student learning?',
-      tr: 'Sistem öğrenci öğrenmesini daha iyi desteklemesi için hangi iyileştirmeleri önerirsiniz?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -542,12 +519,11 @@ const educationExpertQuestions = [
   {
     code: 'E24',
     principleKey: 'accountability_responsibility',
-    principleLabel: { en: 'Accountability & Responsibility', tr: 'Hesap Verebilirlik ve Sorumluluk' },
+    principleLabel: { en: 'Accountability & Responsibility', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the AI system qualify as a "high-risk educational AI system" under the EU AI Act (e.g., systems used for assessing students, determining access, or evaluating performance)?',
-      tr: 'Sistem, AB AI Act\'e göre "eğitim için yüksek riskli sistem" kategorisine giriyor mu (örn. değerlendirme, performans ölçme vb.)?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -556,9 +532,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 0.0 }, // High risk -> low score
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 1.0 }, // No risk -> high score
-      { key: 'under_evaluation', label: { en: 'Under Evaluation', tr: 'Değerlendirme altında' }, answerScore: 0.5 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 0.0 }, // High risk -> low score
+      { key: 'no', label: { en: 'No', }, answerScore: 1.0 }, // No risk -> high score
+      { key: 'under_evaluation', label: { en: 'Under Evaluation', }, answerScore: 0.5 }
     ],
     required: true,
     order: 123
@@ -567,12 +543,11 @@ const educationExpertQuestions = [
   {
     code: 'E25',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are human oversight measures (intervention ability, stopping the system, reviewing outputs) clearly defined as required by the AI Act?',
-      tr: 'AI Act\'in zorunlu kıldığı insan gözetimi (müdahale, durdurma, çıktıları kontrol etme) mekanizmaları açıkça tanımlanmış mı?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -581,9 +556,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, answerScore: 0.5 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'partially', label: { en: 'Partially', }, answerScore: 0.5 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 }
     ],
     required: true,
     order: 124
@@ -592,12 +567,11 @@ const educationExpertQuestions = [
   {
     code: 'E26',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Are you confident that the system does not employ any prohibited AI practices defined in the AI Act (e.g., manipulative nudging, exploitation of minors)?',
-      tr: 'Sistem, AI Act\'te yasaklanan uygulamalardan (manipülatif yönlendirme, çocukları istismar eden hedefleme) hiçbirini içeriyor mu?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -606,9 +580,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 }, // Yes, I am confident it does NOT employ = good
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 }, // No, I am not confident = risk
-      { key: 'need_investigation', label: { en: 'Need Investigation', tr: 'İnceleme gerekli' }, answerScore: 0.0 } // 1 mapped to 0.0
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 }, // Yes, I am confident it does NOT employ = good
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 }, // No, I am not confident = risk
+      { key: 'need_investigation', label: { en: 'Need Investigation', }, answerScore: 0.0 } // 1 mapped to 0.0
     ],
     required: true,
     order: 125
@@ -617,12 +591,11 @@ const educationExpertQuestions = [
   {
     code: 'E27',
     principleKey: 'transparency_explainability',
-    principleLabel: { en: 'Transparency & Explainability', tr: 'Şeffaflık ve Açıklanabilirlik' },
+    principleLabel: { en: 'Transparency & Explainability', },
     appliesToRoles: ['education-expert'],
     text: {
       en: 'Does the system automatically log its activities to ensure traceability and auditability of educational decisions?',
-      tr: 'Eğitimsel kararların izlenebilirliğini ve denetlenebilirliğini sağlamak için sistem otomatik olarak log kaydı tutuyor mu?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -631,9 +604,9 @@ const educationExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, answerScore: 1.0 },
-      { key: 'no', label: { en: 'No', tr: 'Hayır' }, answerScore: 0.0 },
-      { key: 'not_sure', label: { en: 'Not sure', tr: 'Emin değilim' }, answerScore: 0.5 }
+      { key: 'yes', label: { en: 'Yes', }, answerScore: 1.0 },
+      { key: 'no', label: { en: 'No', }, answerScore: 0.0 },
+      { key: 'not_sure', label: { en: 'Not sure', }, answerScore: 0.5 }
     ],
     required: true,
     order: 126

@@ -28,7 +28,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isLinkedToProject, setIsLinkedToProject] = useState(false);
   const [calculatedProgress, setCalculatedProgress] = useState<number>(useCase.progress || 0);
-  
+
   useEffect(() => {
     setUc(useCase);
     setCalculatedProgress(useCase.progress || 0);
@@ -105,7 +105,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(uc as any)?.id, (uc as any)?._id]);
-  
+
   // Display rule: once a use case is linked to a project, "assigned" should appear as "in-review".
   const displayStatus =
     uc.status === 'assigned' && isLinkedToProject ? 'in-review' : uc.status;
@@ -129,7 +129,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
           setCalculatedProgress(uc.progress || 0);
           return;
         }
-        
+
         const allProjectsRaw = await res.json();
         // Normalize assignedUsers in all projects
         const allProjects = Array.isArray(allProjectsRaw) ? allProjectsRaw.map((p: any) => {
@@ -140,11 +140,11 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
           });
           return { ...p, assignedUsers: normalizedAssignedUsers };
         }) : [];
-        const linkedProject = Array.isArray(allProjects) 
+        const linkedProject = Array.isArray(allProjects)
           ? allProjects.find((p: any) => {
-              const pid = getProjectUseCaseId(p);
-              return pid && pid.toString() === useCaseId;
-            })
+            const pid = getProjectUseCaseId(p);
+            return pid && pid.toString() === useCaseId;
+          })
           : null;
 
         if (!linkedProject || !linkedProject.assignedUsers || linkedProject.assignedUsers.length === 0) {
@@ -157,7 +157,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
         const progressPromises = linkedProject.assignedUsers.map(async (userId: string) => {
           const user = users.find((u: any) => (u.id || (u as any)._id) === userId);
           if (!user) return 0;
-          
+
           try {
             const progress = await fetchUserProgress(linkedProject, user);
             return progress;
@@ -169,7 +169,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
 
         const progressesList = await Promise.all(progressPromises);
         const validProgresses = progressesList.filter(p => p > 0);
-        
+
         if (validProgresses.length > 0) {
           const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
           setCalculatedProgress(Math.round(average));
@@ -202,9 +202,9 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
           // Merge questions with answers
           // Support both questionId matching by id and key for backward compatibility
           const questionsWithAnswers = allQuestions.map((q: any) => {
-            const answer = uc.answers?.find((a: any) => 
-              a.questionId === q.id || 
-              a.questionId === q._id?.toString() || 
+            const answer = uc.answers?.find((a: any) =>
+              a.questionId === q.id ||
+              a.questionId === q._id?.toString() ||
               (a.questionKey && a.questionKey === q.key) ||
               (q.key && a.questionId === q.key)
             );
@@ -257,7 +257,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
     // Optimistic-only file (local object URL) -> remove locally
     if (file?._optimistic) {
       if (file?.url) {
-        try { URL.revokeObjectURL(file.url); } catch {}
+        try { URL.revokeObjectURL(file.url); } catch { }
       }
       setUc((prev) => ({
         ...prev,
@@ -350,7 +350,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
         alert('Files uploaded successfully.');
         // Revoke any temporary object URLs
         optimisticUrls.forEach((u) => {
-          try { URL.revokeObjectURL(u); } catch {}
+          try { URL.revokeObjectURL(u); } catch { }
         });
       } else {
         const err = await res.json();
@@ -362,7 +362,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
           supportingFiles: ((prev.supportingFiles as any[]) || []).filter((f: any) => !f?._optimistic),
         }) as UseCase);
         optimisticUrls.forEach((u) => {
-          try { URL.revokeObjectURL(u); } catch {}
+          try { URL.revokeObjectURL(u); } catch { }
         });
       }
     } catch (err) {
@@ -374,7 +374,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
         supportingFiles: ((prev.supportingFiles as any[]) || []).filter((f: any) => !f?._optimistic),
       }) as UseCase);
       optimisticUrls.forEach((u) => {
-        try { URL.revokeObjectURL(u); } catch {}
+        try { URL.revokeObjectURL(u); } catch { }
       });
     } finally {
       setUploading(false);
@@ -395,7 +395,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Dashboard
           </button>
-          
+
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h1 className="text-2xl text-gray-900 mb-2">{uc.title}</h1>
@@ -449,7 +449,7 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg text-gray-900 mb-4">Description</h3>
               <p className="text-gray-700 leading-relaxed">{uc.description}</p>
-              
+
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -479,16 +479,11 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
                           </span>
                         </div>
                       )}
-                      {/* Question text - English (bold) on top, Turkish (muted) below */}
+                      {/* Question text */}
                       <div className="mb-2">
                         <div className="text-sm font-bold text-gray-900">
                           {q.questionEn}
                         </div>
-                        {q.questionTr && (
-                          <div className="text-sm text-gray-500 mt-1">
-                            {q.questionTr}
-                          </div>
-                        )}
                       </div>
                       {/* Answer */}
                       <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mt-2">
@@ -559,11 +554,10 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
                   />
                   <label
                     htmlFor="usecase-supporting-files-input"
-                    className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                      uploading
+                    className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${uploading
                         ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 cursor-pointer'
-                    }`}
+                      }`}
                     aria-disabled={uploading}
                   >
                     <Upload className="w-4 h-4" />
@@ -651,21 +645,20 @@ export function UseCaseDetail({ useCase, currentUser, users, onBack }: UseCaseDe
               <h3 className="text-lg text-gray-900 mb-4">Status Information</h3>
               <div className="space-y-3">
                 <div className="flex items-start">
-                  <div className={`w-2 h-2 rounded-full mt-1.5 mr-3 ${
-                    displayStatus === 'completed' ? 'bg-green-500' :
-                    displayStatus === 'in-review' ? 'bg-yellow-500' :
-                    'bg-blue-500'
-                  }`} />
+                  <div className={`w-2 h-2 rounded-full mt-1.5 mr-3 ${displayStatus === 'completed' ? 'bg-green-500' :
+                      displayStatus === 'in-review' ? 'bg-yellow-500' :
+                        'bg-blue-500'
+                    }`} />
                   <div>
                     <div className="text-sm text-gray-900">
                       {displayStatus === 'completed' ? 'Evaluation Complete' :
-                       displayStatus === 'in-review' ? 'Under Expert Review' :
-                       'Awaiting Assignment'}
+                        displayStatus === 'in-review' ? 'Under Expert Review' :
+                          'Awaiting Assignment'}
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       {displayStatus === 'completed' ? 'Your use case has been approved' :
-                       displayStatus === 'in-review' ? 'Experts are currently reviewing your submission' :
-                       'Your use case will be assigned to experts soon'}
+                        displayStatus === 'in-review' ? 'Experts are currently reviewing your submission' :
+                          'Your use case will be assigned to experts soon'}
                     </div>
                   </div>
                 </div>

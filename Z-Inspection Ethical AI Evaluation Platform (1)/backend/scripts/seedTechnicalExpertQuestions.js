@@ -26,12 +26,11 @@ const technicalExpertQuestions = [
   {
     code: 'T1',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Is the model\'s performance sufficient for its intended purpose and operational environment?',
-      tr: 'Modelin performansı kullanım amacı ve operasyonel ortam için yeterli mi?'
-    },
+      },
     answerType: 'single_choice',
     scoring: {
       answerScoreRange: '0-1',
@@ -39,9 +38,9 @@ const technicalExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'yes_fully_sufficient', label: { en: 'Yes, fully sufficient / Evet, tamamen yeterli', tr: 'Evet, tamamen yeterli' }, answerScore: 1.0 },
-      { key: 'partially_sufficient', label: { en: 'Partially sufficient / Kısmen yeterli', tr: 'Kısmen yeterli' }, answerScore: 0.5 },
-      { key: 'insufficient', label: { en: 'Insufficient / Yetersiz', tr: 'Yetersiz' }, answerScore: 0.0 }
+      { key: 'yes_fully_sufficient', label: { en: 'Yes, fully sufficient', }, answerScore: 1.0 },
+      { key: 'partially_sufficient', label: { en: 'Partially sufficient', }, answerScore: 0.5 },
+      { key: 'insufficient', label: { en: 'Insufficient', }, answerScore: 0.0 }
     ],
     required: true,
     order: 71
@@ -49,12 +48,11 @@ const technicalExpertQuestions = [
   {
     code: 'T2',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Under what conditions is the system most likely to fail, degrade, or generate incorrect outputs?',
-      tr: 'Sistem hangi koşullarda en çok hata verme, performans düşürme veya yanlış çıktı üretme eğilimindedir?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -67,12 +65,11 @@ const technicalExpertQuestions = [
   {
     code: 'T3',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Do you observe any technical risks in the data processing pipeline (collection, cleaning, transformation, aggregation, labeling)?',
-      tr: 'Veri işleme sürecinde (toplama, temizleme, dönüştürme, birleştirme, etiketleme) teknik riskler görüyor musunuz?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -85,12 +82,11 @@ const technicalExpertQuestions = [
   {
     code: 'T4',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Is the dataset sufficiently representative to avoid bias, edge-case failures, or distribution issues?',
-      tr: 'Veri seti bias, uç durum hataları veya dağılım bozukluklarını önleyecek kadar temsil gücüne sahip mi?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -103,12 +99,11 @@ const technicalExpertQuestions = [
   {
     code: 'T5',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Is the model regularly monitored for model drift, data drift, performance degradation, or distribution changes? Which tools or metrics are used?',
-      tr: 'Model drift, veri drift, performans düşüşü veya dağılım değişimleri düzenli olarak izleniyor mu? Hangi araçlar veya metrikler kullanılıyor?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -121,12 +116,11 @@ const technicalExpertQuestions = [
   {
     code: 'T6',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Does the system behave consistently under missing data, corrupted inputs, network instability, or sensor noise?',
-      tr: 'Sistem eksik veri, bozuk girdi, ağ kararsızlığı veya sensör gürültüsü altında tutarlı mı davranıyor?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -140,12 +134,11 @@ const technicalExpertQuestions = [
   {
     code: 'T7',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Is the system resilient to adversarial attacks, data poisoning attempts, input manipulation, or model exploitation?',
-      tr: 'Sistem adversarial saldırılara, veri zehirleme girişimlerine, girdi manipülasyonuna veya model istismarına karşı dayanıklı mı?'
-    },
+      },
     answerType: 'single_choice',
     scoring: {
       answerScoreRange: '0-1',
@@ -153,11 +146,11 @@ const technicalExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'strong_resilience', label: { en: 'Strong resilience / Güçlü dayanıklılık', tr: 'Güçlü dayanıklılık' }, answerScore: 1.0 },
-      { key: 'moderate_resilience', label: { en: 'Moderate resilience / Orta düzey dayanıklılık', tr: 'Orta düzey dayanıklılık' }, answerScore: 0.75 },
-      { key: 'weak_resilience', label: { en: 'Weak resilience / Zayıf dayanıklılık', tr: 'Zayıf dayanıklılık' }, answerScore: 0.5 },
-      { key: 'no_resilience', label: { en: 'No resilience / Dayanıklılık yok', tr: 'Dayanıklılık yok' }, answerScore: 0.0 },
-      { key: 'unknown', label: { en: 'Unknown / Bilinmiyor', tr: 'Bilinmiyor' }, answerScore: 0.5 }
+      { key: 'strong_resilience', label: { en: 'Strong resilience', }, answerScore: 1.0 },
+      { key: 'moderate_resilience', label: { en: 'Moderate resilience', }, answerScore: 0.75 },
+      { key: 'weak_resilience', label: { en: 'Weak resilience', }, answerScore: 0.5 },
+      { key: 'no_resilience', label: { en: 'No resilience', }, answerScore: 0.0 },
+      { key: 'unknown', label: { en: 'Unknown', }, answerScore: 0.5 }
     ],
     required: true,
     order: 77
@@ -165,12 +158,11 @@ const technicalExpertQuestions = [
   {
     code: 'T8',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'How exposed is the AI system to cybersecurity threats such as unauthorized access, API exploitation, brute-force attacks, data leaks, or endpoint vulnerabilities?',
-      tr: 'AI sistemi yetkisiz erişim, API istismarı, brute-force saldırıları, veri sızıntıları veya endpoint açıklıkları gibi siber tehditlere ne derece maruzdur?'
-    },
+      },
     answerType: 'single_choice',
     scoring: {
       answerScoreRange: '0-1',
@@ -178,11 +170,11 @@ const technicalExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'highly_exposed', label: { en: 'Highly exposed / Yüksek derecede maruz', tr: 'Yüksek derecede maruz' }, answerScore: 0.0 },
-      { key: 'moderately_exposed', label: { en: 'Moderately exposed / Orta derecede maruz', tr: 'Orta derecede maruz' }, answerScore: 0.5 },
-      { key: 'slightly_exposed', label: { en: 'Slightly exposed / Düşük derecede maruz', tr: 'Düşük derecede maruz' }, answerScore: 0.75 },
-      { key: 'not_exposed', label: { en: 'Not exposed / Maruz değil', tr: 'Maruz değil' }, answerScore: 1.0 },
-      { key: 'not_enough_info', label: { en: 'Not enough information / Yeterli bilgi yok', tr: 'Yeterli bilgi yok' }, answerScore: 0.5 }
+      { key: 'highly_exposed', label: { en: 'Highly exposed', }, answerScore: 0.0 },
+      { key: 'moderately_exposed', label: { en: 'Moderately exposed', }, answerScore: 0.5 },
+      { key: 'slightly_exposed', label: { en: 'Slightly exposed', }, answerScore: 0.75 },
+      { key: 'not_exposed', label: { en: 'Not exposed', }, answerScore: 1.0 },
+      { key: 'not_enough_info', label: { en: 'Not enough information', }, answerScore: 0.5 }
     ],
     required: true,
     order: 78
@@ -190,12 +182,11 @@ const technicalExpertQuestions = [
   {
     code: 'T9',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Dayanıklılık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['technical-expert'],
     text: {
-      en: 'Are API/backend components protected against unauthorized access, scraping, brute-force attacks, or injection attempts?',
-      tr: 'API ve backend bileşenleri yetkisiz erişim, scraping, brute-force saldırıları veya enjeksiyon girişimlerine karşı korunuyor mu?'
-    },
+      en: 'Are API',
+      },
     answerType: 'single_choice',
     scoring: {
       answerScoreRange: '0-1',
@@ -203,11 +194,11 @@ const technicalExpertQuestions = [
       method: 'mapped'
     },
     options: [
-      { key: 'strong_security', label: { en: 'Strong security / Güçlü güvenlik', tr: 'Güçlü güvenlik' }, answerScore: 1.0 },
-      { key: 'moderate_security', label: { en: 'Moderate security / Orta düzey güvenlik', tr: 'Orta düzey güvenlik' }, answerScore: 0.75 },
-      { key: 'weak_security', label: { en: 'Weak security / Zayıf güvenlik', tr: 'Zayıf güvenlik' }, answerScore: 0.5 },
-      { key: 'no_security', label: { en: 'No security / Güvenlik yok', tr: 'Güvenlik yok' }, answerScore: 0.0 },
-      { key: 'unknown', label: { en: 'Unknown / Bilinmiyor', tr: 'Bilinmiyor' }, answerScore: 0.5 }
+      { key: 'strong_security', label: { en: 'Strong security', }, answerScore: 1.0 },
+      { key: 'moderate_security', label: { en: 'Moderate security', }, answerScore: 0.75 },
+      { key: 'weak_security', label: { en: 'Weak security', }, answerScore: 0.5 },
+      { key: 'no_security', label: { en: 'No security', }, answerScore: 0.0 },
+      { key: 'unknown', label: { en: 'Unknown', }, answerScore: 0.5 }
     ],
     required: true,
     order: 79
@@ -216,12 +207,11 @@ const technicalExpertQuestions = [
   {
     code: 'T10',
     principleKey: 'transparency_explainability',
-    principleLabel: { en: 'Transparency & Explainability', tr: 'Şeffaflık ve Açıklanabilirlik' },
+    principleLabel: { en: 'Transparency & Explainability', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Is the system\'s explainability level sufficient for debugging, auditing, and stakeholder understanding? (SHAP, LIME, saliency maps, etc.)',
-      tr: 'Sistemin açıklanabilirlik seviyesi hata ayıklama, denetim ve paydaşların anlaması için yeterli mi? (SHAP, LIME, saliency maps vb.)'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -235,12 +225,11 @@ const technicalExpertQuestions = [
   {
     code: 'T11',
     principleKey: 'privacy_data_governance',
-    principleLabel: { en: 'Privacy & Data Governance', tr: 'Gizlilik ve Veri Yönetişimi' },
+    principleLabel: { en: 'Privacy & Data Governance', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'Are personal data protected through encryption, anonymization, or pseudonymization across all processing stages?',
-      tr: 'Kişisel veriler tüm işleme aşamalarında şifreleme, anonimleştirme veya takma adlandırma yöntemleriyle korunuyor mu?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',
@@ -254,12 +243,11 @@ const technicalExpertQuestions = [
   {
     code: 'T12',
     principleKey: 'accountability_responsibility',
-    principleLabel: { en: 'Accountability & Responsibility', tr: 'Hesap Verebilirlik ve Sorumluluk' },
+    principleLabel: { en: 'Accountability & Responsibility', },
     appliesToRoles: ['technical-expert'],
     text: {
       en: 'What technical improvements would you recommend to enhance the security, robustness, reliability, or compliance of the system?',
-      tr: 'Sistemin güvenliğini, dayanıklılığını, güvenilirliğini veya uyumluluğunu artırmak için hangi teknik iyileştirmeleri önerirsiniz?'
-    },
+      },
     answerType: 'open_text',
     scoring: {
       method: 'manual_risk_input',

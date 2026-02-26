@@ -23,15 +23,13 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Does the AI system carry a risk of influencing users' autonomy or decision-making processes (e.g., cognitive/behavioral manipulation) in ethically unacceptable ways? What is the potential for this risk to overlap with practices prohibited under EU AI Act Article 5?",
-        "tr": "AI sistemi, kullanıcıların özerkliğini veya karar verme süreçlerini (örn. bilişsel/davranışsal manipülasyon) etik olarak kabul edilemez şekillerde etkileme riski taşıyor mu? Bu riskin AB AI Yasası Madde 5 kapsamında yasaklanan uygulamalarla örtüşme potansiyeli nedir?"
+        "en": "Does the AI system carry a risk of influencing users' autonomy or decision-making processes (e.g., cognitive/behavioral manipulation) in ethically unacceptable ways? What is the potential for this risk to overlap with practices prohibited under EU AI Act Article 5?"
       },
       "answerType": "single_choice",
       "options": [
         {
           "label": {
-            "en": "High risk / Yüksek risk",
-            "tr": "Yüksek risk"
+            "en": "High risk"
           },
           "key": "high_risk",
           "score": 1,
@@ -40,8 +38,7 @@
         },
         {
           "label": {
-            "en": "Moderate risk / Orta risk",
-            "tr": "Orta risk"
+            "en": "Moderate risk"
           },
           "key": "moderate_risk",
           "score": 2,
@@ -50,8 +47,7 @@
         },
         {
           "label": {
-            "en": "Low risk / Düşük risk",
-            "tr": "Düşük risk"
+            "en": "Low risk"
           },
           "key": "low_risk",
           "score": 3,
@@ -60,8 +56,7 @@
         },
         {
           "label": {
-            "en": "No risk / Risk yok",
-            "tr": "Risk yok"
+            "en": "No risk"
           },
           "key": "no_risk",
           "score": 4,
@@ -70,8 +65,7 @@
         },
         {
           "label": {
-            "en": "Not sure / Emin değilim",
-            "tr": "Emin değilim"
+            "en": "Not sure"
           },
           "key": "not_sure",
           "score": 2,
@@ -107,8 +101,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "If it is a High-Risk system, do the human oversight procedures required by the AI Act adequately define the ethical ability and responsibility to override the AI's risky decisions?",
-        "tr": "Yüksek riskli bir sistem ise, AI Yasası tarafından gerekli kılınan insan gözetim prosedürleri, AI'ın riskli kararlarını geçersiz kılma konusundaki etik yetenek ve sorumluluğu yeterince tanımlıyor mu?"
+        "en": "If it is a High-Risk system, do the human oversight procedures required by the AI Act adequately define the ethical ability and responsibility to override the AI's risky decisions?"
       },
       "answerType": "open_text",
       "options": [],
@@ -132,8 +125,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "How do you assess the potential harm the AI system may cause and its potential to affect fundamental rights? Has a Fundamental Rights Impact Assessment (FRIA) been conducted?",
-        "tr": "AI sisteminin neden olabileceği potansiyel zararı ve temel hakları etkileme potansiyelini nasıl değerlendiriyorsunuz? Temel Haklar Etki Değerlendirmesi (FRIA) yapıldı mı?"
+        "en": "How do you assess the potential harm the AI system may cause and its potential to affect fundamental rights? Has a Fundamental Rights Impact Assessment (FRIA) been conducted?"
       },
       "answerType": "open_text",
       "options": [],
@@ -157,8 +149,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Does the use of Sensitive Data (e.g., health, race, biometric data) ethically raise the risk of bias, societal unfairness, or stigmatization potential to an unacceptable level? What is the ethical justification for using this data?",
-        "tr": "Hassas Verilerin (örn. sağlık, ırk, biyometrik veri) kullanımı, etik olarak önyargı, toplumsal adaletsizlik veya damgalanma potansiyeli riskini kabul edilemez bir seviyeye yükseltiyor mu? Bu verilerin kullanımının etik gerekçesi nedir?"
+        "en": "Does the use of Sensitive Data (e.g., health, race, biometric data) ethically raise the risk of bias, societal unfairness, or stigmatization potential to an unacceptable level? What is the ethical justification for using this data?"
       },
       "answerType": "open_text",
       "options": [],
@@ -182,8 +173,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "If the system is a 'limited-risk' system, is the user's ethical right to know that the output is AI-generated provided clearly and comprehensibly?",
-        "tr": "Sistem 'sınırlı riskli' bir sistem ise, kullanıcının çıktının AI tarafından üretildiğini bilme etik hakkı açık ve anlaşılır bir şekilde sağlanıyor mu?"
+        "en": "If the system is a 'limited-risk' system, is the user's ethical right to know that the output is AI-generated provided clearly and comprehensibly?"
       },
       "answerType": "open_text",
       "options": [],
@@ -207,15 +197,13 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Could the system produce systematic unfairness or disproportionate impacts on certain groups?",
-        "tr": "Sistem belirli gruplar üzerinde sistematik adaletsizlik veya orantısız etkiler üretebilir mi?"
+        "en": "Could the system produce systematic unfairness or disproportionate impacts on certain groups?"
       },
       "answerType": "single_choice",
       "options": [
         {
           "label": {
-            "en": "High risk / Yüksek risk",
-            "tr": "Yüksek risk"
+            "en": "High risk"
           },
           "key": "high_risk",
           "score": 1,
@@ -224,8 +212,7 @@
         },
         {
           "label": {
-            "en": "Moderate risk / Orta risk",
-            "tr": "Orta risk"
+            "en": "Moderate risk"
           },
           "key": "moderate_risk",
           "score": 2,
@@ -234,8 +221,7 @@
         },
         {
           "label": {
-            "en": "Low risk / Düşük risk",
-            "tr": "Düşük risk"
+            "en": "Low risk"
           },
           "key": "low_risk",
           "score": 3,
@@ -244,8 +230,7 @@
         },
         {
           "label": {
-            "en": "Not sure / Emin değilim",
-            "tr": "Emin değilim"
+            "en": "Not sure"
           },
           "key": "not_sure",
           "score": 2,
@@ -280,8 +265,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Are there identifiable sources of bias in the data, model, or system design? If so, what ethical and technical mitigation strategies have been implemented to address these biases?",
-        "tr": "Veri, model veya sistem tasarımında tanımlanabilir önyargı kaynakları var mı? Varsa, bu önyargıları ele almak için hangi etik ve teknik azaltma stratejileri uygulanmıştır?"
+        "en": "Are there identifiable sources of bias in the data, model, or system design? If so, what ethical and technical mitigation strategies have been implemented to address these biases?"
       },
       "answerType": "open_text",
       "options": [],
@@ -305,15 +289,13 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Does the AI system respect freedom of expression and access to information? How are potential risks of unintentional restriction or censorship managed?",
-        "tr": "AI sistemi ifade özgürlüğüne ve bilgiye erişime saygı gösteriyor mu? İstemeden kısıtlama veya sansür riskleri nasıl yönetiliyor?"
+        "en": "Does the AI system respect freedom of expression and access to information? How are potential risks of unintentional restriction or censorship managed?"
       },
       "answerType": "single_choice",
       "options": [
         {
           "label": {
-            "en": "Fully respects / Tamamen saygı gösteriyor",
-            "tr": "Tamamen saygı gösteriyor"
+            "en": "Fully respects"
           },
           "key": "fully_respects",
           "score": 4,
@@ -322,8 +304,7 @@
         },
         {
           "label": {
-            "en": "Partially respects / Kısmen saygı gösteriyor",
-            "tr": "Kısmen saygı gösteriyor"
+            "en": "Partially respects"
           },
           "key": "partially_respects",
           "score": 3,
@@ -332,8 +313,7 @@
         },
         {
           "label": {
-            "en": "May unintentionally restrict / İstemeden kısıtlama yaratabilir",
-            "tr": "İstemeden kısıtlama yaratabilir"
+            "en": "May unintentionally restrict"
           },
           "key": "may_unintentionally_restrict",
           "score": 2,
@@ -342,8 +322,7 @@
         },
         {
           "label": {
-            "en": "Significantly restricts / Önemli ölçüde kısıtlayabilir",
-            "tr": "Önemli ölçüde kısıtlayabilir"
+            "en": "Significantly restricts"
           },
           "key": "significantly_restricts",
           "score": 1,
@@ -352,8 +331,7 @@
         },
         {
           "label": {
-            "en": "Not applicable / Uygulanabilir değil",
-            "tr": "Uygulanabilir değil"
+            "en": "Not applicable"
           },
           "key": "not_applicable",
           "score": 3,
@@ -389,8 +367,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Do you consider the system's outcomes and decisions ethically defensible in light of ethical principles?",
-        "tr": "Sistemin sonuçlarını ve kararlarını etik ilkeler ışığında etik olarak savunulabilir buluyor musunuz?"
+        "en": "Do you consider the system's outcomes and decisions ethically defensible in light of ethical principles?"
       },
       "answerType": "open_text",
       "options": [],
@@ -414,8 +391,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "How are ethical accountability mechanisms established among the system's developers, users, and affected third parties? Are the complaint and appeal processes regarding AI decisions ethically fair?",
-        "tr": "Sistemin geliştiricileri, kullanıcıları ve etkilenen üçüncü taraflar arasında etik hesap verebilirlik mekanizmaları nasıl kurulmuştur? AI kararlarına ilişkin şikayet ve itiraz süreçleri etik olarak adil midir?"
+        "en": "How are ethical accountability mechanisms established among the system's developers, users, and affected third parties? Are the complaint and appeal processes regarding AI decisions ethically fair?"
       },
       "answerType": "open_text",
       "options": [],
@@ -439,8 +415,7 @@
         "ethical-expert"
       ],
       "text": {
-        "en": "Which ethical aspects of the system need improvement?",
-        "tr": "Sistemin hangi etik yönleri iyileştirilmesi gerekiyor?"
+        "en": "Which ethical aspects of the system need improvement?"
       },
       "answerType": "open_text",
       "options": [],

@@ -27,12 +27,11 @@ const ethicalExpertQuestions = [
   {
     code: 'H6',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'What level of risk does the AI system pose in terms of manipulating user behavior or limiting autonomy?',
-      tr: 'Yapay zeka sistemi kullanıcı davranışlarını manipüle etme veya özerkliği sınırlama açısından ne düzeyde risk oluşturmaktadır?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -43,27 +42,27 @@ const ethicalExpertQuestions = [
     options: [
       {
         key: 'high_risk',
-        label: { en: 'High risk', tr: 'Yüksek risk' },
+        label: { en: 'High risk', },
         answerScore: 0.0
       },
       {
         key: 'moderate_risk',
-        label: { en: 'Moderate risk', tr: 'Orta risk' },
+        label: { en: 'Moderate risk', },
         answerScore: 0.33
       },
       {
         key: 'low_risk',
-        label: { en: 'Low risk', tr: 'Düşük risk' },
+        label: { en: 'Low risk', },
         answerScore: 0.75
       },
       {
         key: 'no_risk',
-        label: { en: 'No risk', tr: 'Risk yok' },
+        label: { en: 'No risk', },
         answerScore: 1.0
       },
       {
         key: 'not_sure',
-        label: { en: 'Not sure', tr: 'Emin değilim' },
+        label: { en: 'Not sure', },
         answerScore: 0.5
       }
     ],
@@ -73,12 +72,11 @@ const ethicalExpertQuestions = [
   {
     code: 'H10',
     principleKey: 'human_agency_oversight',
-    principleLabel: { en: 'Human Agency & Oversight', tr: 'İnsan Özerkliği ve Gözetimi' },
+    principleLabel: { en: 'Human Agency & Oversight', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'Describe any safeguards or mechanisms in place to ensure users can override or challenge AI-driven decisions.',
-      tr: 'Kullanıcıların yapay zeka destekli kararları geçersiz kılabilmesi veya sorgulayabilmesi için hangi önlemler veya mekanizmalar bulunmaktadır?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -95,12 +93,11 @@ const ethicalExpertQuestions = [
   {
     code: 'S2',
     principleKey: 'technical_robustness_safety',
-    principleLabel: { en: 'Technical Robustness & Safety', tr: 'Teknik Sağlamlık ve Güvenlik' },
+    principleLabel: { en: 'Technical Robustness & Safety', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'How do you assess the potential harm the AI system may cause and its potential to affect fundamental rights? Has a Fundamental Rights Impact Assessment (FRIA) been conducted?',
-      tr: 'AI sisteminin neden olabileceği potansiyel zararı ve temel hakları etkileme potansiyelini nasıl değerlendiriyorsunuz? Temel Haklar Etki Değerlendirmesi (FRIA) yapıldı mı?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -116,12 +113,11 @@ const ethicalExpertQuestions = [
   {
     code: 'P4',
     principleKey: 'privacy_data_governance',
-    principleLabel: { en: 'Privacy & Data Governance', tr: 'Gizlilik ve Veri Yönetişimi' },
+    principleLabel: { en: 'Privacy & Data Governance', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'Does the use of Sensitive Data (e.g., health, race, biometric data) ethically raise the risk of bias, societal unfairness, or stigmatization potential to an unacceptable level? What is the ethical justification for using this data?',
-      tr: 'Hassas Verilerin (örn. sağlık, ırk, biyometrik veri) kullanımı, etik olarak önyargı, toplumsal adaletsizlik veya damgalanma potansiyeli riskini kabul edilemez bir seviyeye yükseltiyor mu? Bu verilerin kullanımının etik gerekçesi nedir?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -137,12 +133,11 @@ const ethicalExpertQuestions = [
   {
     code: 'T9',
     principleKey: 'transparency',
-    principleLabel: { en: 'Transparency', tr: 'Şeffaflık' },
+    principleLabel: { en: 'Transparency', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'If the system is a \'limited-risk\' system, is the user\'s ethical right to know that the output is AI-generated provided clearly and comprehensibly?',
-      tr: 'Sistem \'sınırlı riskli\' bir sistem ise, kullanıcının çıktının AI tarafından üretildiğini bilme etik hakkı açık ve anlaşılır bir şekilde sağlanıyor mu?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -158,12 +153,11 @@ const ethicalExpertQuestions = [
   {
     code: 'F2',
     principleKey: 'diversity_non_discrimination_fairness',
-    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', tr: 'Çeşitlilik, Ayrımcılık Yasağı ve Hakkaniyet' },
+    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'What level of risk does the system pose in terms of bias, discrimination, or unfair treatment of individuals or groups?',
-      tr: 'Sistem bireyler veya gruplar açısından önyargı, ayrımcılık veya adaletsiz muamele bakımından ne düzeyde risk oluşturmaktadır?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -174,22 +168,22 @@ const ethicalExpertQuestions = [
     options: [
       {
         key: 'high_risk',
-        label: { en: 'High risk', tr: 'Yüksek risk' },
+        label: { en: 'High risk', },
         answerScore: 0.0
       },
       {
         key: 'moderate_risk',
-        label: { en: 'Moderate risk', tr: 'Orta risk' },
+        label: { en: 'Moderate risk', },
         answerScore: 0.33
       },
       {
         key: 'low_risk',
-        label: { en: 'Low risk', tr: 'Düşük risk' },
+        label: { en: 'Low risk', },
         answerScore: 0.75
       },
       {
         key: 'not_sure',
-        label: { en: 'Not sure', tr: 'Emin değilim' },
+        label: { en: 'Not sure', },
         answerScore: 0.5
       }
     ],
@@ -199,12 +193,11 @@ const ethicalExpertQuestions = [
   {
     code: 'F3',
     principleKey: 'diversity_non_discrimination_fairness',
-    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', tr: 'Çeşitlilik, Ayrımcılık Yasağı ve Hakkaniyet' },
+    principleLabel: { en: 'Diversity, Non-Discrimination & Fairness', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'Please describe any measures taken to detect, prevent, or mitigate bias or discrimination within the AI system.',
-      tr: 'Yapay zeka sistemi içindeki önyargı veya ayrımcılığı tespit etmek, önlemek veya azaltmak için alınan önlemleri açıklayınız.'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -220,12 +213,11 @@ const ethicalExpertQuestions = [
   {
     code: 'W7',
     principleKey: 'societal_interpersonal_well_being',
-    principleLabel: { en: 'Societal & Interpersonal Well-Being', tr: 'Toplumsal ve Kişilerarası İyi Oluş' },
+    principleLabel: { en: 'Societal & Interpersonal Well-Being', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'How does the AI system impact freedom of expression or access to information?',
-      tr: 'Yapay zeka sistemi ifade özgürlüğünü veya bilgiye erişimi nasıl etkilemektedir?'
-    },
+      },
     answerType: 'single_choice',
     riskScore: 4,
     scoring: {
@@ -236,27 +228,27 @@ const ethicalExpertQuestions = [
     options: [
       {
         key: 'fully_respects',
-        label: { en: 'Fully respects', tr: 'Tamamen saygı gösteriyor' },
+        label: { en: 'Fully respects', },
         answerScore: 1.0
       },
       {
         key: 'partially_respects',
-        label: { en: 'Partially respects', tr: 'Kısmen saygı gösteriyor' },
+        label: { en: 'Partially respects', },
         answerScore: 0.75
       },
       {
         key: 'may_unintentionally_restrict',
-        label: { en: 'May unintentionally restrict', tr: 'İstemeden kısıtlayabilir' },
+        label: { en: 'May unintentionally restrict', },
         answerScore: 0.5
       },
       {
         key: 'significantly_restricts',
-        label: { en: 'Significantly restricts', tr: 'Önemli ölçüde kısıtlayabilir' },
+        label: { en: 'Significantly restricts', },
         answerScore: 0.0
       },
       {
         key: 'not_applicable',
-        label: { en: 'Not applicable', tr: 'Uygulanabilir değil' },
+        label: { en: 'Not applicable', },
         answerScore: 0.5
       }
     ],
@@ -266,12 +258,11 @@ const ethicalExpertQuestions = [
   {
     code: 'W8',
     principleKey: 'societal_interpersonal_well_being',
-    principleLabel: { en: 'Societal & Interpersonal Well-Being', tr: 'Toplumsal ve Kişilerarası İyi Oluş' },
+    principleLabel: { en: 'Societal & Interpersonal Well-Being', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'Describe any potential social or interpersonal harms that may arise from the deployment of this AI system.',
-      tr: 'Bu yapay zeka sisteminin kullanımından kaynaklanabilecek olası sosyal veya kişilerarası zararları açıklayınız.'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -287,12 +278,11 @@ const ethicalExpertQuestions = [
   {
     code: 'A5',
     principleKey: 'accountability',
-    principleLabel: { en: 'Accountability', tr: 'Hesap Verebilirlik' },
+    principleLabel: { en: 'Accountability', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'How are accountability and responsibility for the AI system defined and enforced?',
-      tr: 'Yapay zeka sistemi için hesap verebilirlik ve sorumluluk nasıl tanımlanmakta ve uygulanmaktadır?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -306,12 +296,11 @@ const ethicalExpertQuestions = [
   {
     code: 'A11',
     principleKey: 'accountability',
-    principleLabel: { en: 'Accountability', tr: 'Hesap Verebilirlik' },
+    principleLabel: { en: 'Accountability', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'Are there clear processes in place for addressing ethical complaints or incidents related to the AI system?',
-      tr: 'Yapay zeka sistemiyle ilgili etik şikayetlerin veya olayların ele alınması için net süreçler mevcut mu?'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {
@@ -325,12 +314,11 @@ const ethicalExpertQuestions = [
   {
     code: 'A12',
     principleKey: 'accountability',
-    principleLabel: { en: 'Accountability', tr: 'Hesap Verebilirlik' },
+    principleLabel: { en: 'Accountability', },
     appliesToRoles: ['ethical-expert'],
     text: {
       en: 'Please provide any additional information relevant to accountability and governance of the AI system.',
-      tr: 'Yapay zeka sisteminin hesap verebilirliği ve yönetişimiyle ilgili ek bilgileri paylaşınız.'
-    },
+      },
     answerType: 'open_text',
     riskScore: 4,
     scoring: {

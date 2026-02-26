@@ -20,13 +20,13 @@ interface EvaluationFormProps {
 type RiskLevel = 'low' | 'medium' | 'high';
 
 const QUESTION_PRINCIPLES: Array<{ value: string; label: string }> = [
-  { value: 'TRANSPARENCY', label: 'Transparency (Şeffaflık)' },
-  { value: 'HUMAN AGENCY & OVERSIGHT', label: 'Human Agency & Oversight (İnsan Özerkliği ve Gözetimi)' },
-  { value: 'TECHNICAL ROBUSTNESS & SAFETY', label: 'Technical Robustness & Safety (Teknik Sağlamlık ve Güvenlik)' },
-  { value: 'PRIVACY & DATA GOVERNANCE', label: 'Privacy & Data Governance (Gizlilik ve Veri Yönetişimi)' },
-  { value: 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS', label: 'Diversity, Non-Discrimination & Fairness (Adalet)' },
-  { value: 'SOCIETAL & INTERPERSONAL WELL-BEING', label: 'Societal & Interpersonal Well-Being (Toplumsal İyi Oluş)' },
-  { value: 'ACCOUNTABILITY', label: 'Accountability (Hesap Verebilirlik)' },
+  { value: 'TRANSPARENCY', label: 'Transparency' },
+  { value: 'HUMAN AGENCY & OVERSIGHT', label: 'Human Agency & Oversight' },
+  { value: 'TECHNICAL ROBUSTNESS & SAFETY', label: 'Technical Robustness & Safety' },
+  { value: 'PRIVACY & DATA GOVERNANCE', label: 'Privacy & Data Governance' },
+  { value: 'DIVERSITY, NON-DISCRIMINATION & FAIRNESS', label: 'Diversity, Non-Discrimination & Fairness' },
+  { value: 'SOCIETAL & INTERPERSONAL WELL-BEING', label: 'Societal & Interpersonal Well-Being' },
+  { value: 'ACCOUNTABILITY', label: 'Accountability' },
 ];
 
 const roleColors: Record<string, string> = {
@@ -398,7 +398,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   id: q._id ? String(q._id) : q.code,
                   _id: q._id,
                   code: q.code,
-                  text: typeof q.text === 'object' ? (q.text.en || q.text.tr || '') : q.text || '',
+                  text: typeof q.text === 'object' ? (q.text.en || '') : q.text || '',
                   stage: stage,
                   type: q.answerType === 'single_choice' ? 'radio' :
                     q.answerType === 'multi_choice' ? 'checkbox' :
@@ -407,9 +407,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   required: q.required !== false,
                   options: q.options ? q.options.map((opt: any) => ({
                     value: opt.key,
-                    label: typeof opt.label === 'object' ? (opt.label.en || opt.label.tr || '') : opt.label || ''
+                    label: typeof opt.label === 'object' ? (opt.label.en || '') : opt.label || ''
                   })) : undefined,
-                  description: q.description ? (typeof q.description === 'object' ? (q.description.en || q.description.tr || '') : q.description) : undefined
+                  description: q.description ? (typeof q.description === 'object' ? (q.description.en || '') : q.description) : undefined
                 };
                 allLoadedQuestions.push(frontendQuestion);
               });
@@ -617,7 +617,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         });
 
         console.log(`📊 Loaded ${Object.keys(loadedAnswers).length} answers, ${Object.keys(loadedRiskScores).length} risk scores`);
-        
+
         // DEBUG: Show sample of loaded answers
         if (Object.keys(loadedAnswers).length > 0) {
           const sampleKeys = Object.keys(loadedAnswers).slice(0, 5);
@@ -1096,7 +1096,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
       // Group answers by questionnaire using loadedQuestions
       const answersByQuestionnaire: Record<string, any[]> = {};
-      
+
       loadedQuestions.forEach(question => {
         // Determine questionnaireKey from the question's stage
         let questionnaireKey: string;
@@ -1106,23 +1106,23 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
           // Role-specific questionnaire
           questionnaireKey = getQuestionnaireKeyForRole(currentUser.role);
         }
-        
+
         if (!answersByQuestionnaire[questionnaireKey]) {
           answersByQuestionnaire[questionnaireKey] = [];
         }
-        
+
         // Check for answer using multiple keys
         const answerValue = getAnswerValue(question);
-        const riskScore = riskScores[question.id] !== undefined ? riskScores[question.id] : 
-                         (riskScores[question.code || ''] !== undefined ? riskScores[question.code || ''] : undefined);
-        
+        const riskScore = riskScores[question.id] !== undefined ? riskScores[question.id] :
+          (riskScores[question.code || ''] !== undefined ? riskScores[question.code || ''] : undefined);
+
         // Build answer object in backend format
         const answerObj: any = {
           questionCode: question.code,
           questionId: question._id || question.id,
           answer: {}
         };
-        
+
         // Map answer based on question type
         if (question.type === 'radio' || question.type === 'select' || question.type === 'multiple-choice') {
           if (answerValue) {
@@ -1137,12 +1137,12 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
             answerObj.answer.text = answerValue;
           }
         }
-        
+
         // Add risk score if exists
         if (riskScore !== undefined) {
           answerObj.score = riskScore;
         }
-        
+
         // Only add if there's an actual answer
         if (Object.keys(answerObj.answer).length > 0) {
           answersByQuestionnaire[questionnaireKey].push(answerObj);
@@ -1178,7 +1178,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
 
       const results = await Promise.all(savePromises);
       const failures = results.filter(r => !r.success);
-      
+
       if (failures.length > 0) {
         throw new Error(`Failed to save: ${failures.map(f => f.questionnaireKey).join(', ')}`);
       }
@@ -1308,7 +1308,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
     // Find the current question to get all possible keys
     const currentQuestion = currentQuestions[currentQuestionIndex];
     const updatedAnswers: Record<string, any> = { [questionId]: answer };
-    
+
     // If we have the question object, also store under code and _id
     if (currentQuestion) {
       if (currentQuestion.code) {
@@ -1318,7 +1318,7 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
         updatedAnswers[String(currentQuestion._id)] = answer;
       }
     }
-    
+
     setAnswers((prev) => ({ ...prev, ...updatedAnswers }));
     setIsDraft(true);
   };
@@ -1747,8 +1747,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                   <span>Project: {project.title}</span>
                   <span className="text-gray-300">|</span>
                   <span className={`px-2 py-0.5 rounded ${project.stage === 'set-up' ? 'bg-blue-100 text-blue-700' :
-                      project.stage === 'assess' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-green-100 text-green-700'
+                    project.stage === 'assess' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-green-100 text-green-700'
                     }`}>
                     Global Stage: {project.stage}
                   </span>
@@ -1775,8 +1775,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 key={stage.key}
                 onClick={() => setCurrentStage(stage.key)}
                 className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center ${currentStage === stage.key
-                    ? 'bg-white text-gray-900 shadow-md ring-1 ring-black/5 transform scale-100'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                  ? 'bg-white text-gray-900 shadow-md ring-1 ring-black/5 transform scale-100'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                   }`}
               >
                 <span className="mr-2 text-lg">{stage.icon}</span> {stage.label}
@@ -1816,8 +1816,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                           {questionPriorities[question.id] && (
                             <div className="mt-2">
                               <span className={`text-xs px-2 py-1 rounded-full ${questionPriorities[question.id] === 'low' ? 'bg-green-100 text-green-700' :
-                                  questionPriorities[question.id] === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                    'bg-red-100 text-red-700'
+                                questionPriorities[question.id] === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
                                 }`}>
                                 Priority: {questionPriorities[question.id]}
                               </span>
@@ -1874,9 +1874,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                         Risk {index + 1}: {risk.title || 'Untitled risk'}
                                       </div>
                                       <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${severity === 'critical' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                          severity === 'high' ? 'bg-red-50 text-red-700 border-red-200' :
-                                            severity === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                              'bg-green-50 text-green-700 border-green-200'
+                                        severity === 'high' ? 'bg-red-50 text-red-700 border-red-200' :
+                                          severity === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                            'bg-green-50 text-green-700 border-green-200'
                                         }`}>
                                         {severity}
                                       </span>
@@ -2215,8 +2215,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                                 setShowQuestionNav(false);
                               }}
                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${active
-                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                  : 'text-gray-700 hover:bg-gray-50'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                             >
                               <span className="font-medium">Q{idx + 1}</span>
@@ -2246,8 +2246,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                           type="button"
                           onClick={() => setCurrentQuestionIndex(idx)}
                           className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${active
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : 'text-gray-700 hover:bg-gray-50'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
                           <span className="font-medium">Q{idx + 1}</span>
@@ -2306,8 +2306,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         const isSelected = currentAnswer === optionValue;
                         return (
                           <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${isSelected
-                              ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                            ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
                             }`}>
                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-colors ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
                               }`}>
@@ -2359,8 +2359,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                               type="button"
                               onClick={() => handleAnswerChange(activeQuestion.id, optionValue)}
                               className={`aspect-square rounded-2xl text-xl font-bold transition-all duration-200 flex items-center justify-center ${isSelected
-                                  ? 'bg-blue-600 text-white shadow-md scale-105 ring-2 ring-blue-200'
-                                  : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
+                                ? 'bg-blue-600 text-white shadow-md scale-105 ring-2 ring-blue-200'
+                                : 'bg-white border-2 border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
                                 }`}
                             >
                               {optionLabel}
@@ -2380,8 +2380,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                         const isChecked = currentAnswers.includes(optionValue);
                         return (
                           <label key={optionValue} className={`group flex items-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${isChecked
-                              ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-white'
+                            ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-white'
                             }`}>
                             <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center mr-4 transition-colors ${isChecked ? 'border-blue-600 bg-blue-600' : 'border-gray-300 group-hover:border-blue-400'
                               }`}>
@@ -2424,12 +2424,12 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                           <label
                             key={level}
                             className={`relative flex flex-col items-center p-6 rounded-xl border-2 cursor-pointer transition-all duration-200 ${isSelected
-                                ? level === 'low'
-                                  ? 'border-green-500 bg-green-50 shadow-md'
-                                  : level === 'medium'
-                                    ? 'border-yellow-500 bg-yellow-50 shadow-md'
-                                    : 'border-red-500 bg-red-50 shadow-md'
-                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              ? level === 'low'
+                                ? 'border-green-500 bg-green-50 shadow-md'
+                                : level === 'medium'
+                                  ? 'border-yellow-500 bg-yellow-50 shadow-md'
+                                  : 'border-red-500 bg-red-50 shadow-md'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                               }`}
                           >
                             <input
@@ -2442,12 +2442,12 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                             />
                             <div
                               className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${isSelected
-                                  ? level === 'low'
-                                    ? 'bg-green-100 text-green-600'
-                                    : level === 'medium'
-                                      ? 'bg-yellow-100 text-yellow-600'
-                                      : 'bg-red-100 text-red-600'
-                                  : 'bg-gray-100 text-gray-400'
+                                ? level === 'low'
+                                  ? 'bg-green-100 text-green-600'
+                                  : level === 'medium'
+                                    ? 'bg-yellow-100 text-yellow-600'
+                                    : 'bg-red-100 text-red-600'
+                                : 'bg-gray-100 text-gray-400'
                                 }`}
                             >
                               {level === 'low' && <CheckCircle className="w-6 h-6" />}
@@ -2476,12 +2476,12 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                     </div>
                     <div className="grid grid-cols-5 gap-3 max-w-4xl">
                       {([
-                        { value: 4, label: 'Very Important', labelTr: 'Çok Önemli', desc: 'Critical question / This ethical principle should be dominant.', descTr: 'Kritik soru / Bu etik ilke baskın olmalı.', color: 'red' },
-                        { value: 3, label: 'Important', labelTr: 'Önemli', desc: 'Important question / This topic requires attention.', descTr: 'Önemli soru / Bu konuya dikkat edilmeli.', color: 'orange' },
-                        { value: 2, label: 'Moderately Important', labelTr: 'Orta Derecede Önemli', desc: 'Moderately important / Should be considered.', descTr: 'Orta derecede önemli / Dikkate alınmalı.', color: 'yellow' },
-                        { value: 1, label: 'Less Important', labelTr: 'Az Önemli', desc: 'Less important / Minor consideration.', descTr: 'Az önemli / Küçük bir husus.', color: 'blue' },
-                        { value: 0, label: 'Not Important', labelTr: 'Önemsiz', desc: 'Not important / Negligible for this evaluation.', descTr: 'Önemsiz / Bu değerlendirme için ihmal edilebilir.', color: 'green' }
-                      ] as const).map(({ value, label, labelTr, desc, descTr, color }) => {
+                        { value: 4, label: 'Very Important', desc: 'Critical question / This ethical principle should be dominant.', color: 'red' },
+                        { value: 3, label: 'Important', desc: 'Important question / This topic requires attention.', color: 'orange' },
+                        { value: 2, label: 'Moderately Important', desc: 'Moderately important / Should be considered.', color: 'yellow' },
+                        { value: 1, label: 'Less Important', desc: 'Less important / Minor consideration.', color: 'blue' },
+                        { value: 0, label: 'Not Important', desc: 'Not important / Negligible for this evaluation.', color: 'green' }
+                      ] as const).map(({ value, label, desc, color }) => {
                         // Get question key (prefer code over id, same as GeneralQuestions)
                         const questionKey = activeQuestion.code || activeQuestion.id;
 
@@ -2593,12 +2593,9 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors ${bgColorClasses[color]}`}>
                               <span className="text-lg font-bold">{value}</span>
                             </div>
-                            <span className={`text-xs font-bold text-center ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
-                              {label}
-                            </span>
-                            <span className={`text-xs text-center mt-1 ${isSelected ? 'text-gray-700' : 'text-gray-500'}`}>{labelTr}</span>
+                            <span className={`text-sm font-semibold mt-2 ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>{label}</span>
                             <span className={`text-xs text-center mt-1 leading-tight ${isSelected ? 'text-gray-600' : 'text-gray-400'}`}>
-                              {descTr || desc}
+                              {desc}
                             </span>
                           </label>
                         );
@@ -2666,8 +2663,8 @@ export function EvaluationForm({ project, currentUser, onBack, onSubmit }: Evalu
                 onClick={handleBack}
                 disabled={currentStage === 'set-up'}
                 className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all border-2 ${currentStage === 'set-up'
-                    ? 'text-gray-300 border-gray-100 cursor-not-allowed bg-gray-50'
-                    : 'text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm'
+                  ? 'text-gray-300 border-gray-100 cursor-not-allowed bg-gray-50'
+                  : 'text-gray-700 bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm'
                   }`}
               >
                 <ChevronLeft className="w-5 h-5 mr-2" /> Previous

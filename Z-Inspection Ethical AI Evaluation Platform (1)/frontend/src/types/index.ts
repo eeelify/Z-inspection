@@ -43,15 +43,15 @@ export interface Project {
   progress: number;
 
   inspectionContext?: { // Yeni alan
-        requester: string;
-        inspectionReason: string;
-        relevantFor: string;
-        isMandatory: string;
-        conditionsToAnalyze: string;
-        resultsUsage: string;
-        resultsSharing: string;
-    }
-  
+    requester: string;
+    inspectionReason: string;
+    relevantFor: string;
+    isMandatory: string;
+    conditionsToAnalyze: string;
+    resultsUsage: string;
+    resultsSharing: string;
+  }
+
   // Backend-enriched fields (from /api/projects)
   derivedStatus?: 'setup' | 'assess' | 'resolve';
   hasAnyAnswers?: boolean;
@@ -167,7 +167,6 @@ export interface UseCaseOwner {
 export interface UseCaseQuestion {
   id: string;
   questionEn: string;
-  questionTr: string;
   type: 'text' | 'multiple-choice';
   answer?: string;
   options?: string[]; // For multiple-choice questions

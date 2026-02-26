@@ -760,9 +760,6 @@ export function UserDashboard({
 
         questionsWithAnswers.forEach((q, idx) => {
           qaContent += `${idx + 1}. ${q.questionEn}\n`;
-          if (q.questionTr) {
-            qaContent += `   (${q.questionTr})\n`;
-          }
           qaContent += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
         });
 

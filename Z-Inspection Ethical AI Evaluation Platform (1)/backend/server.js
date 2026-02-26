@@ -5816,15 +5816,14 @@ mongoose.connection.once('open', async () => {
         principle: 'TRANSPARENCY',
         appliesToRoles: ['any'],
         text: {
-          en: 'Is it clear to you what the AI system can and cannot do?',
-          tr: 'AI sisteminin ne yapabildiği ve ne yapamadığı sizin için açık mı?'
+          en: 'Is it clear to you what the AI system can and cannot do?'
         },
         answerType: 'single_choice',
         options: [
-          { key: 'very_clear', label: { en: 'Very clear', tr: 'Çok net' }, score: 4 },
-          { key: 'mostly_clear', label: { en: 'Mostly clear', tr: 'Büyük ölçüde net' }, score: 3 },
-          { key: 'somewhat_unclear', label: { en: 'Somewhat unclear', tr: 'Kısmen belirsiz' }, score: 2 },
-          { key: 'completely_unclear', label: { en: 'Completely unclear', tr: 'Tamamen belirsiz' }, score: 0 }
+          { key: 'very_clear', label: { en: 'Very clear' }, score: 4 },
+          { key: 'mostly_clear', label: { en: 'Mostly clear' }, score: 3 },
+          { key: 'somewhat_unclear', label: { en: 'Somewhat unclear' }, score: 2 },
+          { key: 'completely_unclear', label: { en: 'Completely unclear' }, score: 0 }
         ],
         required: true,
         order: 1,
@@ -5842,14 +5841,13 @@ mongoose.connection.once('open', async () => {
         principle: 'TRANSPARENCY',
         appliesToRoles: ['any'],
         text: {
-          en: 'Do you understand that the system may sometimes be wrong or uncertain?',
-          tr: 'Sistemin bazen hatalı veya belirsiz olabileceğini anlıyor musunuz?'
+          en: 'Do you understand that the system may sometimes be wrong or uncertain?'
         },
         answerType: 'single_choice',
         options: [
-          { key: 'yes', label: { en: 'Yes', tr: 'Evet' }, score: 4 },
-          { key: 'partially', label: { en: 'Partially', tr: 'Kısmen' }, score: 2 },
-          { key: 'no', label: { en: 'No', tr: 'Hayır' }, score: 0 }
+          { key: 'yes', label: { en: 'Yes' }, score: 4 },
+          { key: 'partially', label: { en: 'Partially' }, score: 2 },
+          { key: 'no', label: { en: 'No' }, score: 0 }
         ],
         required: true,
         order: 2,

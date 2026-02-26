@@ -52,7 +52,7 @@ export function ProjectDetail({
 }: ProjectDetailProps) {
   const [activeTab, setActiveTab] = useState<'evaluation' | 'tensions' | 'usecase' | 'owners' | 'dashboard'>(initialTab as any);
   const [showAddTension, setShowAddTension] = useState(false);
-  const [tensions, setTensions] = useState<Tension[]>([]); 
+  const [tensions, setTensions] = useState<Tension[]>([]);
   // Yeni: Bağlı Use Case verisini tutacak state
   const [linkedUseCase, setLinkedUseCase] = useState<UseCase | null>(null);
   const [useCaseQuestions, setUseCaseQuestions] = useState<any[]>([]);
@@ -77,33 +77,33 @@ export function ProjectDetail({
   const getCommunicationProject = async (otherUser: User): Promise<Project> => {
     // Use projects list if available, otherwise use current project
     const allProjects = projects.length > 0 ? projects : [project];
-    
+
     // Try to find an existing project where both users are assigned
-    let commProject = allProjects.find(p => 
-      p.assignedUsers.includes(currentUser.id) && 
+    let commProject = allProjects.find(p =>
+      p.assignedUsers.includes(currentUser.id) &&
       p.assignedUsers.includes(otherUser.id)
     );
-    
+
     // If not found, try to find a project with similar name
     if (!commProject) {
       const projectName = `Communication: ${currentUser.name} & ${otherUser.name}`;
-      commProject = allProjects.find(p => 
-        p.title === projectName || 
+      commProject = allProjects.find(p =>
+        p.title === projectName ||
         p.title.includes('Communication') ||
         (p.assignedUsers.includes(currentUser.id) && p.assignedUsers.includes(otherUser.id))
       );
     }
-    
+
     // If still not found, use current project if both users are assigned
     if (!commProject && project.assignedUsers.includes(currentUser.id) && project.assignedUsers.includes(otherUser.id)) {
       commProject = project;
     }
-    
+
     // If still no project, use first available project as fallback
     if (!commProject && allProjects.length > 0) {
       commProject = allProjects[0];
     }
-    
+
     // If still no project, create one via API
     if (!commProject) {
       try {
@@ -139,13 +139,13 @@ export function ProjectDetail({
         console.error('Error creating communication project:', error);
       }
     }
-    
+
     // Final fallback - use current project (even if not ideal)
     if (!commProject) {
       commProject = project;
       console.log('Using current project for communication:', commProject);
     }
-    
+
     return commProject;
   };
 
@@ -203,7 +203,7 @@ export function ProjectDetail({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [chatPanelOpen, closeChat]);
 
-  const hasEditPermission = true; 
+  const hasEditPermission = true;
 
   // Tensionları Getir
   const fetchTensions = async () => {
@@ -212,12 +212,12 @@ export function ProjectDetail({
       if (response.ok) {
         const data = await response.json();
         const formattedData = data.map((t: any) => ({
-            ...t,
-            id: t._id || t.id,
-            claimStatement: t.claimStatement || t.description, 
-            description: t.description,
-            consensus: t.consensus || { agree: 0, disagree: 0 },
-            userVote: t.userVote || null // userVote'u da ekle
+          ...t,
+          id: t._id || t.id,
+          claimStatement: t.claimStatement || t.description,
+          description: t.description,
+          consensus: t.consensus || { agree: 0, disagree: 0 },
+          userVote: t.userVote || null // userVote'u da ekle
         }));
         setTensions(formattedData);
       }
@@ -230,36 +230,36 @@ export function ProjectDetail({
   const fetchUseCase = async () => {
     if (!project.useCase) return;
     try {
-        // Handle both string ID and object with url
-        const useCaseId = typeof project.useCase === 'string' 
-          ? project.useCase 
-          : (project.useCase as any).url || project.useCase;
-        
-        // Paralel olarak use case ve questions'ı çek
-        const [useCaseResponse, questionsResponse] = await Promise.all([
-          fetch(api(`/api/use-cases/${useCaseId}`)),
-          fetch(api('/api/use-case-questions'))
-        ]);
-        
-        if (useCaseResponse.ok) {
-            const data = await useCaseResponse.json();
-            setLinkedUseCase(data);
-            
-            // Fetch questions and merge with answers
-            if (data.answers && data.answers.length > 0 && questionsResponse.ok) {
-              const allQuestions = await questionsResponse.json();
-              const questionsWithAnswers = allQuestions.map((q: any) => {
-                const answer = data.answers.find((a: any) => a.questionId === q.id);
-                return {
-                  ...q,
-                  answer: answer?.answer || ''
-                };
-              });
-              setUseCaseQuestions(questionsWithAnswers);
-            }
+      // Handle both string ID and object with url
+      const useCaseId = typeof project.useCase === 'string'
+        ? project.useCase
+        : (project.useCase as any).url || project.useCase;
+
+      // Paralel olarak use case ve questions'ı çek
+      const [useCaseResponse, questionsResponse] = await Promise.all([
+        fetch(api(`/api/use-cases/${useCaseId}`)),
+        fetch(api('/api/use-case-questions'))
+      ]);
+
+      if (useCaseResponse.ok) {
+        const data = await useCaseResponse.json();
+        setLinkedUseCase(data);
+
+        // Fetch questions and merge with answers
+        if (data.answers && data.answers.length > 0 && questionsResponse.ok) {
+          const allQuestions = await questionsResponse.json();
+          const questionsWithAnswers = allQuestions.map((q: any) => {
+            const answer = data.answers.find((a: any) => a.questionId === q.id);
+            return {
+              ...q,
+              answer: answer?.answer || ''
+            };
+          });
+          setUseCaseQuestions(questionsWithAnswers);
         }
+      }
     } catch (error) {
-        console.error("Use Case load error:", error);
+      console.error("Use Case load error:", error);
     }
   };
 
@@ -289,7 +289,7 @@ export function ProjectDetail({
         setLatestReport(null); // Ensure it's null on error
       }
     };
-    
+
     if ((project.id || (project as any)._id) && currentUser) {
       fetchLatestReport();
     }
@@ -349,7 +349,7 @@ export function ProjectDetail({
       const computed = await fetchUserProgress(project, currentUser);
       setUserProgress(computed);
       previousProgressRef.current = computed;
-      
+
       // If progress just reached 100%, notification is already sent by backend notificationService
       // No need to send chat message - notifications go to bell icon only
       // Chat messages should only be for actual user-to-user communication
@@ -364,7 +364,7 @@ export function ProjectDetail({
   const handleSaveTension = async (data: any) => {
     try {
       const severityString = data.severity === 3 ? 'high' : data.severity === 2 ? 'medium' : 'low';
-      
+
       const payload = {
         projectId: project.id,
         principle1: data.principle1,
@@ -418,24 +418,24 @@ export function ProjectDetail({
 
   const handleVote = async (tensionId: string, voteType: 'agree' | 'disagree') => {
     // Optimistic update: Anında state'i güncelle
-    setTensions(prevTensions => 
+    setTensions(prevTensions =>
       prevTensions.map(t => {
         if ((t.id || (t as any)._id) === tensionId) {
           const currentAgree = t.consensus?.agree || 0;
           const currentDisagree = t.consensus?.disagree || 0;
           const oldVote = t.userVote;
-          
+
           // Eski oyu çıkar
           let newAgree = currentAgree;
           let newDisagree = currentDisagree;
           if (oldVote === 'agree') newAgree = Math.max(0, newAgree - 1);
           if (oldVote === 'disagree') newDisagree = Math.max(0, newDisagree - 1);
-          
+
           // Yeni oyu ekle (eğer aynı butona basıldıysa oyu kaldır)
           const newVote = oldVote === voteType ? null : voteType;
           if (newVote === 'agree') newAgree += 1;
           if (newVote === 'disagree') newDisagree += 1;
-          
+
           return {
             ...t,
             userVote: newVote,
@@ -448,7 +448,7 @@ export function ProjectDetail({
         return t;
       })
     );
-    
+
     try {
       const response = await fetch(api(`/api/tensions/${tensionId}/vote`), {
         method: 'POST',
@@ -473,7 +473,7 @@ export function ProjectDetail({
   const roleColor = roleColors[currentUser.role as keyof typeof roleColors] || '#1F2937';
   const isAssigned = project.assignedUsers.includes(currentUser.id);
   const progressDisplay = Math.max(0, Math.min(100, userProgress));
-  
+
   // Calculate team average progress for display (admin should see team average, not their own 0%)
   const isProgressContributor = (role?: string) => {
     const r = String(role || '').toLowerCase();
@@ -498,7 +498,7 @@ export function ProjectDetail({
   };
   const teamAverageProgress = calculateTeamAverageProgress();
   const displayProgress = currentUser.role === 'admin' ? teamAverageProgress : progressDisplay;
-  
+
   const canViewOwners = currentUser.role === 'admin';
   const isCommentedProjectForUser = currentUser.role !== 'admin' && Boolean(evolutionCompletedAt);
   // Admins cannot manage tensions (add, vote, comment, add evidence)
@@ -516,7 +516,7 @@ export function ProjectDetail({
           const contentType = file.contentType || 'application/octet-stream';
           dataUrl = `data:${contentType};base64,${file.data}`;
         }
-        
+
         const link = document.createElement('a');
         link.href = dataUrl;
         link.download = file.name;
@@ -606,15 +606,12 @@ export function ProjectDetail({
         qaContent += `Created: ${new Date(linkedUseCase.createdAt).toLocaleDateString()}\n\n`;
         qaContent += `DESCRIPTION:\n${linkedUseCase.description || 'N/A'}\n\n`;
         qaContent += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
-        
+
         useCaseQuestions.forEach((q, idx) => {
           qaContent += `${idx + 1}. ${q.questionEn}\n`;
-          if (q.questionTr) {
-            qaContent += `   (${q.questionTr})\n`;
-          }
           qaContent += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
         });
-        
+
         const qaBlob = new Blob([qaContent], { type: 'text/plain' });
         const qaUrl = URL.createObjectURL(qaBlob);
         const qaLink = document.createElement('a');
@@ -640,7 +637,7 @@ export function ProjectDetail({
                   const contentType = file.contentType || 'application/octet-stream';
                   dataUrl = `data:${contentType};base64,${file.data}`;
                 }
-                
+
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = file.name || `file-${idx}`;
@@ -696,11 +693,10 @@ export function ProjectDetail({
                 <button
                   onClick={handleGenerateReport}
                   disabled={!canGenerate}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    !canGenerate
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${!canGenerate
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-green-600 text-white hover:bg-green-700'
-                  }`}
+                    }`}
                   title={!isComplete ? 'Project must be 100% complete to generate report' : ''}
                 >
                   {generating ? 'Generating...' : 'Generate Report'}
@@ -713,12 +709,12 @@ export function ProjectDetail({
                   // If no report exists, button is disabled
                   return;
                 }
-                
+
                 try {
                   // Always fetch the latest report before opening to ensure we have the most recent one
                   const projectId = project.id || (project as any)._id;
                   const userId = currentUser?.id || (currentUser as any)?._id;
-                  
+
                   // Fetch latest report to ensure we have the most recent one
                   const response = await fetch(api(`/api/projects/${projectId}/reports/latest?userId=${userId}`));
                   if (response.ok) {
@@ -727,25 +723,25 @@ export function ProjectDetail({
                       // Use the latest report ID
                       const reportId = reportResponse.report._id || reportResponse.report.id;
                       let reportUrl = reportResponse.report.fileUrl || `/api/reports/${reportId}/file`;
-                      
+
                       // Ensure URL is absolute
                       if (!reportUrl.startsWith('http')) {
                         reportUrl = api(reportUrl);
                       }
-                      
+
                       // Add userId as query parameter if not already present
                       if (userId && !reportUrl.includes('userId=')) {
                         const separator = reportUrl.includes('?') ? '&' : '?';
                         reportUrl = `${reportUrl}${separator}userId=${userId}`;
                       }
-                      
+
                       // Update latestReport state
                       setLatestReport({
                         id: reportId,
                         fileUrl: reportUrl,
                         title: reportResponse.report.title || 'Analysis Report'
                       });
-                      
+
                       // Open report in new tab
                       window.open(reportUrl, '_blank', 'noopener,noreferrer');
                     } else {
@@ -754,16 +750,16 @@ export function ProjectDetail({
                   } else {
                     // Fallback to existing latestReport if fetch fails
                     if (latestReport) {
-                      let reportUrl = latestReport.fileUrl.startsWith('http') 
-                        ? latestReport.fileUrl 
+                      let reportUrl = latestReport.fileUrl.startsWith('http')
+                        ? latestReport.fileUrl
                         : api(latestReport.fileUrl);
-                      
+
                       const userId = currentUser?.id || (currentUser as any)?._id;
                       if (userId && !reportUrl.includes('userId=')) {
                         const separator = reportUrl.includes('?') ? '&' : '?';
                         reportUrl = `${reportUrl}${separator}userId=${userId}`;
                       }
-                      
+
                       window.open(reportUrl, '_blank', 'noopener,noreferrer');
                     }
                   }
@@ -771,26 +767,25 @@ export function ProjectDetail({
                   console.error('Error fetching latest report:', err);
                   // Fallback to existing latestReport
                   if (latestReport) {
-                    let reportUrl = latestReport.fileUrl.startsWith('http') 
-                      ? latestReport.fileUrl 
+                    let reportUrl = latestReport.fileUrl.startsWith('http')
+                      ? latestReport.fileUrl
                       : api(latestReport.fileUrl);
-                    
+
                     const userId = currentUser?.id || (currentUser as any)?._id;
                     if (userId && !reportUrl.includes('userId=')) {
                       const separator = reportUrl.includes('?') ? '&' : '?';
                       reportUrl = `${reportUrl}${separator}userId=${userId}`;
                     }
-                    
+
                     window.open(reportUrl, '_blank', 'noopener,noreferrer');
                   }
                 }
               }}
               disabled={!latestReport}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ml-2 ${
-                latestReport
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ml-2 ${latestReport
                   ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
+                }`}
               title={latestReport ? `View latest report: ${latestReport.title || 'Analysis Report'}` : 'No report available yet'}
             >
               Show Report
@@ -823,15 +818,15 @@ export function ProjectDetail({
             progress: { color: "text-blue-600", Icon: Target },
             tensions: { color: "text-blue-600", Icon: BarChart3 }
           };
-          
+
           const TargetDateIcon = cardThemes.targetDate.Icon;
           const TeamIcon = cardThemes.team.Icon;
           const ProgressIcon = cardThemes.progress.Icon;
           const TensionsIcon = cardThemes.tensions.Icon;
-          
+
           const progressValue = Math.round(displayProgress);
           const isProgressComplete = progressValue >= 100;
-          
+
           return (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               {/* Target Date Card */}
@@ -842,7 +837,7 @@ export function ProjectDetail({
                   <div className="text-sm font-medium text-gray-900">{new Date(project.targetDate).toLocaleDateString()}</div>
                 </div>
               </div>
-              
+
               {/* Team Card */}
               <div className="bg-white p-4 rounded-lg shadow-sm border flex items-center">
                 <TeamIcon className={`h-5 w-5 ${cardThemes.team.color} mr-3`} />
@@ -851,7 +846,7 @@ export function ProjectDetail({
                   <div className="text-sm font-medium text-gray-900">{assignedUserDetails.length} members</div>
                 </div>
               </div>
-              
+
               {/* Progress Card */}
               <div className="bg-white p-4 rounded-lg shadow-sm border flex items-center">
                 <ProgressIcon className={`h-5 w-5 ${cardThemes.progress.color} mr-3`} />
@@ -862,7 +857,7 @@ export function ProjectDetail({
                   </div>
                 </div>
               </div>
-              
+
               {/* Tensions Card */}
               <div className="bg-white p-4 rounded-lg shadow-sm border flex items-center">
                 <TensionsIcon className={`h-5 w-5 ${cardThemes.tensions.color} mr-3`} />
@@ -881,58 +876,58 @@ export function ProjectDetail({
           <div className="space-y-2">
             {assignedUserDetails.length > 0 ? (
               assignedUserDetails.map((u) => {
-                  // All roles can contact assigned members (except themselves)
-                  // Only use-case-owner has restriction: can only contact admin
-                  const canContact = u.id !== currentUser.id && 
-                    !(currentUser.role === 'use-case-owner' && u.role !== 'admin');
-                  
-                  const memberProgress = memberProgresses[u.id] ?? 0;
-                  const memberProgressDisplay = Math.max(0, Math.min(100, memberProgress));
-                  
-                  return (
-                    <div key={u.id} className="flex items-center justify-between p-3 rounded hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
-                      <div className="flex items-center flex-1">
-                        <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3 text-sm font-medium">
-                          {u.name?.charAt(0) || 'U'}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{u.name}</div>
-                              <div className="text-xs text-gray-500">{u.role}</div>
-                            </div>
-                            <div className="text-right ml-4">
-                              <div className="text-xs font-medium text-gray-700">{memberProgressDisplay}%</div>
-                            </div>
-                          </div>
-                          <div className="w-full bg-gray-200 h-1.5 rounded-full mt-2">
-                            <div
-                              className="h-1.5 rounded-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
-                              style={{
-                                width: `${memberProgressDisplay}%`,
-                                minWidth: memberProgressDisplay > 0 ? '4px' : '0',
-                              }}
-                            />
-                          </div>
-                        </div>
+                // All roles can contact assigned members (except themselves)
+                // Only use-case-owner has restriction: can only contact admin
+                const canContact = u.id !== currentUser.id &&
+                  !(currentUser.role === 'use-case-owner' && u.role !== 'admin');
+
+                const memberProgress = memberProgresses[u.id] ?? 0;
+                const memberProgressDisplay = Math.max(0, Math.min(100, memberProgress));
+
+                return (
+                  <div key={u.id} className="flex items-center justify-between p-3 rounded hover:bg-gray-50 border-b border-gray-100 last:border-b-0">
+                    <div className="flex items-center flex-1">
+                      <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3 text-sm font-medium">
+                        {u.name?.charAt(0) || 'U'}
                       </div>
-                      <div className="ml-3">
-                        {canContact && (
-                          <button
-                            onClick={() => {
-                              console.log('Contact button clicked for user:', u);
-                              handleContactUser(u);
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{u.name}</div>
+                            <div className="text-xs text-gray-500">{u.role}</div>
+                          </div>
+                          <div className="text-right ml-4">
+                            <div className="text-xs font-medium text-gray-700">{memberProgressDisplay}%</div>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 h-1.5 rounded-full mt-2">
+                          <div
+                            className="h-1.5 rounded-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                            style={{
+                              width: `${memberProgressDisplay}%`,
+                              minWidth: memberProgressDisplay > 0 ? '4px' : '0',
                             }}
-                            className="inline-flex items-center px-3 py-1.5 text-sm rounded text-blue-600 hover:bg-blue-50"
-                          >
-                            <MessageSquare className="w-4 h-4 mr-2" />
-                            Contact
-                          </button>
-                        )}
+                          />
+                        </div>
                       </div>
                     </div>
-                  );
-                })
+                    <div className="ml-3">
+                      {canContact && (
+                        <button
+                          onClick={() => {
+                            console.log('Contact button clicked for user:', u);
+                            handleContactUser(u);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 text-sm rounded text-blue-600 hover:bg-blue-50"
+                        >
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Contact
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <div className="text-sm text-gray-500">No members assigned.</div>
             )}
@@ -999,28 +994,28 @@ export function ProjectDetail({
                       Select 'Start Evaluation' to begin.
                     </div>
                   ) : userProgress < 100 ? (
-                  <div>
-                    <div className="text-gray-700 mb-2 font-medium">
-                      Continue your evaluation
+                    <div>
+                      <div className="text-gray-700 mb-2 font-medium">
+                        Continue your evaluation
+                      </div>
+                      <div className="text-sm text-gray-500 mb-4">
+                        Progress: {Math.round(userProgress)}%
+                      </div>
+                      <button
+                        onClick={onStartEvaluation}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                      >
+                        Continue Evaluation
+                      </button>
                     </div>
-                    <div className="text-sm text-gray-500 mb-4">
-                      Progress: {Math.round(userProgress)}%
+                  ) : (
+                    <div className="text-green-600">
+                      <div className="font-medium mb-2">✓ Evaluation Completed</div>
+                      <div className="text-sm text-gray-500">
+                        All questions have been answered. Admin has been notified.
+                      </div>
                     </div>
-                    <button
-                      onClick={onStartEvaluation}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                    >
-                      Continue Evaluation
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-green-600">
-                    <div className="font-medium mb-2">✓ Evaluation Completed</div>
-                    <div className="text-sm text-gray-500">
-                      All questions have been answered. Admin has been notified.
-                    </div>
-                  </div>
-                )}
+                  )}
                 </div>
               );
             })()}
@@ -1030,8 +1025,8 @@ export function ProjectDetail({
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-medium text-gray-900">Tensions Management</h3>
                   {canManageTensions && (
-                    <button 
-                      onClick={() => setShowAddTension(true)} 
+                    <button
+                      onClick={() => setShowAddTension(true)}
                       className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center shadow-sm"
                     >
                       <Plus className="h-4 w-4 mr-2" /> Add Tension
@@ -1042,8 +1037,8 @@ export function ProjectDetail({
                 {tensions.length > 0 ? (
                   <div className="space-y-4">
                     {tensions.map((tension) => (
-                      <TensionCard 
-                        key={tension.id} 
+                      <TensionCard
+                        key={tension.id}
                         tension={tension}
                         currentUser={currentUser}
                         users={users}
@@ -1062,160 +1057,152 @@ export function ProjectDetail({
                 )}
               </div>
             )}
-            
+
             {/* USE CASE SEKMESİ (GÜNCELLENDİ) */}
             {activeTab === 'usecase' && (
-               <div className="bg-white rounded-lg">
-                  {linkedUseCase ? (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-start border-b pb-4">
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-900">{linkedUseCase.title}</h2>
-                                <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                    {linkedUseCase.aiSystemCategory || 'General AI'}
-                                </span>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-sm text-gray-500">Status</div>
-                                <div className="font-medium text-gray-900 capitalize">{linkedUseCase.status.replace('-', ' ')}</div>
-                            </div>
-                        </div>
+              <div className="bg-white rounded-lg">
+                {linkedUseCase ? (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-start border-b pb-4">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">{linkedUseCase.title}</h2>
+                        <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                          {linkedUseCase.aiSystemCategory || 'General AI'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-500">Status</div>
+                        <div className="font-medium text-gray-900 capitalize">{linkedUseCase.status.replace('-', ' ')}</div>
+                      </div>
+                    </div>
 
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Description</h3>
-                            <p className="text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-lg border">
-                                {linkedUseCase.description}
-                            </p>
-                        </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Description</h3>
+                      <p className="text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-lg border">
+                        {linkedUseCase.description}
+                      </p>
+                    </div>
 
-                        {/* Questions and Answers */}
-                        {useCaseQuestions && useCaseQuestions.length > 0 && (
-                          <div>
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-lg font-semibold text-gray-900">Questions & Answers</h3>
+                    {/* Questions and Answers */}
+                    {useCaseQuestions && useCaseQuestions.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-gray-900">Questions & Answers</h3>
+                          <button
+                            onClick={() => {
+                              // Create a text file with Q&A
+                              let content = `USE CASE: ${linkedUseCase.title}\n`;
+                              content += `Category: ${linkedUseCase.aiSystemCategory}\n`;
+                              content += `Status: ${linkedUseCase.status}\n`;
+                              content += `Created: ${new Date(linkedUseCase.createdAt).toLocaleDateString()}\n\n`;
+                              content += `DESCRIPTION:\n${linkedUseCase.description}\n\n`;
+                              content += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
+
+                              useCaseQuestions.forEach((q, idx) => {
+                                content += `${idx + 1}. ${q.questionEn}\n`;
+                                content += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
+                              });
+
+                              const blob = new Blob([content], { type: 'text/plain' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `${linkedUseCase.title.replace(/[^a-z0-9]/gi, '_')}_Q&A.txt`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              URL.revokeObjectURL(url);
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50"
+                          >
+                            <Download className="w-4 h-4 mr-1" />
+                            Download Q&A as File
+                          </button>
+                        </div>
+                        <div className="space-y-4 max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+                          {useCaseQuestions.map((q, idx) => (
+                            <div key={q.id || idx} className="bg-white p-4 rounded-lg border border-gray-200">
+                              <div className="text-sm font-medium text-gray-900 mb-2">
+                                {idx + 1}. {q.questionEn}
+                              </div>
+                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mt-2">
+                                {q.answer || <span className="text-gray-400 italic">No answer provided</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {linkedUseCase.supportingFiles && linkedUseCase.supportingFiles.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Supporting Files</h3>
+                        <div className="space-y-2">
+                          {linkedUseCase.supportingFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                              <div className="flex items-center">
+                                <FileText className="h-5 w-5 text-gray-400 mr-3" />
+                                <span className="text-sm text-gray-900">{file.name}</span>
+                              </div>
                               <button
-                                onClick={() => {
-                                  // Create a text file with Q&A
-                                  let content = `USE CASE: ${linkedUseCase.title}\n`;
-                                  content += `Category: ${linkedUseCase.aiSystemCategory}\n`;
-                                  content += `Status: ${linkedUseCase.status}\n`;
-                                  content += `Created: ${new Date(linkedUseCase.createdAt).toLocaleDateString()}\n\n`;
-                                  content += `DESCRIPTION:\n${linkedUseCase.description}\n\n`;
-                                  content += `QUESTIONS & ANSWERS:\n${'='.repeat(50)}\n\n`;
-                                  
-                                  useCaseQuestions.forEach((q, idx) => {
-                                    content += `${idx + 1}. ${q.questionEn}\n`;
-                                    if (q.questionTr) {
-                                      content += `   (${q.questionTr})\n`;
-                                    }
-                                    content += `   Answer: ${q.answer || 'No answer provided'}\n\n`;
-                                  });
-                                  
-                                  const blob = new Blob([content], { type: 'text/plain' });
-                                  const url = URL.createObjectURL(blob);
-                                  const link = document.createElement('a');
-                                  link.href = url;
-                                  link.download = `${linkedUseCase.title.replace(/[^a-z0-9]/gi, '_')}_Q&A.txt`;
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  URL.revokeObjectURL(url);
-                                }}
-                                className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50"
+                                onClick={() => handleDownload(file as any)}
+                                className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center"
                               >
                                 <Download className="w-4 h-4 mr-1" />
-                                Download Q&A as File
+                                Download
                               </button>
                             </div>
-                            <div className="space-y-4 max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
-                              {useCaseQuestions.map((q, idx) => (
-                                <div key={q.id || idx} className="bg-white p-4 rounded-lg border border-gray-200">
-                                  <div className="text-sm font-medium text-gray-900 mb-2">
-                                    {idx + 1}. {q.questionEn}
-                                    {q.questionTr && (
-                                      <span className="block text-xs text-gray-500 mt-1 font-normal">
-                                        ({q.questionTr})
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg mt-2">
-                                    {q.answer || <span className="text-gray-400 italic">No answer provided</span>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {linkedUseCase.supportingFiles && linkedUseCase.supportingFiles.length > 0 && (
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-3">Supporting Files</h3>
-                            <div className="space-y-2">
-                              {linkedUseCase.supportingFiles.map((file, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                                  <div className="flex items-center">
-                                    <FileText className="h-5 w-5 text-gray-400 mr-3" />
-                                    <span className="text-sm text-gray-900">{file.name}</span>
-                                  </div>
-                                  <button
-                                    onClick={() => handleDownload(file as any)}
-                                    className="text-sm text-blue-600 hover:text-blue-800 inline-flex items-center"
-                                  >
-                                    <Download className="w-4 h-4 mr-1" />
-                                    Download
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-gray-50 p-4 rounded-lg border">
-                                <h4 className="text-sm font-bold text-gray-500 uppercase mb-2">Owner</h4>
-                                <div className="flex items-center">
-                                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3">
-                                        {useCaseOwnerName?.charAt(0) || 'U'}
-                                    </div>
-                                    <span className="text-gray-900 font-medium">{useCaseOwnerName || 'Unknown Owner'}</span>
-                                </div>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-lg border">
-                                <h4 className="text-sm font-bold text-gray-500 uppercase mb-2">Internal ID</h4>
-                                <code className="text-sm bg-gray-200 px-2 py-1 rounded">{linkedUseCase.id || (linkedUseCase as any)._id}</code>
-                            </div>
+                          ))}
                         </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-gray-50 p-4 rounded-lg border">
+                        <h4 className="text-sm font-bold text-gray-500 uppercase mb-2">Owner</h4>
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center mr-3">
+                            {useCaseOwnerName?.charAt(0) || 'U'}
+                          </div>
+                          <span className="text-gray-900 font-medium">{useCaseOwnerName || 'Unknown Owner'}</span>
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-lg border">
+                        <h4 className="text-sm font-bold text-gray-500 uppercase mb-2">Internal ID</h4>
+                        <code className="text-sm bg-gray-200 px-2 py-1 rounded">{linkedUseCase.id || (linkedUseCase as any)._id}</code>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-center py-12 text-gray-500 border rounded-lg">
-                        <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                        <p>No linked Use Case found.</p>
-                        <p className="text-xs text-gray-400">
-                          ID: {typeof project.useCase === 'string' ? project.useCase : project.useCase?.url || 'None'}
-                        </p>
-                    </div>
-                  )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 border rounded-lg">
+                    <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <p>No linked Use Case found.</p>
+                    <p className="text-xs text-gray-400">
+                      ID: {typeof project.useCase === 'string' ? project.useCase : project.useCase?.url || 'None'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
-            
+
             {activeTab === 'dashboard' && (
-              <AnalyticsDashboard 
-                projectId={project.id} 
+              <AnalyticsDashboard
+                projectId={project.id}
                 questionnaireKey="general-v1"
                 currentUser={currentUser}
               />
             )}
 
             {activeTab === 'dashboard' && (
-              <AnalyticsDashboard 
-                projectId={project.id} 
+              <AnalyticsDashboard
+                projectId={project.id}
                 questionnaireKey="general-v1"
                 currentUser={currentUser}
               />
             )}
 
             {activeTab === 'owners' && canViewOwners && onViewOwner && (
-               <UseCaseOwners currentUser={currentUser} projects={[project]} users={users} onViewOwner={onViewOwner} />
+              <UseCaseOwners currentUser={currentUser} projects={[project]} users={users} onViewOwner={onViewOwner} />
             )}
           </div>
         </div>
@@ -1239,7 +1226,7 @@ export function ProjectDetail({
       {showAddTension && canManageTensions && (
         <AddTensionModal onClose={() => setShowAddTension(false)} onSave={handleSaveTension} />
       )}
-      
+
       {chatPanelOpen && chatOtherUser && chatProject && (
         <>
           {/* Backdrop */}

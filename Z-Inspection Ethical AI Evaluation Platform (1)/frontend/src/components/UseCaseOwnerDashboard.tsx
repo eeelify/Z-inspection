@@ -92,11 +92,11 @@ export function UseCaseOwnerDashboard({
       if (!myUseCases.length || !projects.length || !users.length) return;
 
       const progresses: Record<string, number> = {};
-      
+
       await Promise.all(
         myUseCases.map(async (useCase) => {
           const useCaseId = ((useCase as any).id || (useCase as any)._id || '').toString();
-          
+
           // Find project linked to this use case
           const getProjectUseCaseId = (p: any): string | null => {
             const val = p?.useCase;
@@ -104,7 +104,7 @@ export function UseCaseOwnerDashboard({
             if (typeof val === 'string') return val;
             return (val.url || val._id || val.id || val.useCaseId || null) as string | null;
           };
-          
+
           const linkedProject = projects.find((p) => {
             const pid = getProjectUseCaseId(p as any);
             return pid && pid.toString() === useCaseId;
@@ -117,12 +117,12 @@ export function UseCaseOwnerDashboard({
 
           try {
             const { fetchUserProgress } = await import('../utils/userProgress');
-            
+
             // Calculate average progress from all assigned users
             const progressPromises = linkedProject.assignedUsers.map(async (userId: string) => {
               const user = users.find((u: any) => (u.id || (u as any)._id) === userId);
               if (!user) return 0;
-              
+
               try {
                 const progress = await fetchUserProgress(linkedProject, user);
                 return progress;
@@ -134,7 +134,7 @@ export function UseCaseOwnerDashboard({
 
             const progressesList = await Promise.all(progressPromises);
             const validProgresses = progressesList.filter(p => p > 0);
-            
+
             if (validProgresses.length > 0) {
               const average = validProgresses.reduce((sum, p) => sum + p, 0) / validProgresses.length;
               progresses[useCaseId] = Math.round(average);
@@ -147,7 +147,7 @@ export function UseCaseOwnerDashboard({
           }
         })
       );
-      
+
       setUseCaseProgresses(progresses);
     };
 
@@ -158,10 +158,10 @@ export function UseCaseOwnerDashboard({
       return () => clearInterval(interval);
     }
   }, [myUseCases, projects, users]);
-  
+
   // Find admin user
   const adminUser = users.find(u => u.role === 'admin');
-  
+
   // Fetch unread message count
   const fetchUnreadCount = async () => {
     try {
@@ -170,14 +170,14 @@ export function UseCaseOwnerDashboard({
         const data = await response.json();
         console.log('UseCaseOwner unread count fetched:', data);
         const conversations = data.conversations || [];
-        
+
         // Filter out notification-only messages - chat bubble should only show real user messages
         const realConversations = conversations.filter((conv: any) => {
           const lastMsg = String(conv.lastMessage || '');
           const isNotification = conv.isNotification === true || lastMsg.startsWith('[NOTIFICATION]');
           return !isNotification;
         });
-        
+
         // Calculate actual unread count from real conversations only
         const actualUnreadCount = realConversations.reduce((sum: number, conv: any) => sum + (conv.count || conv.unreadCount || 0), 0);
         // Only show badge if there are actual conversations with unread messages
@@ -195,12 +195,12 @@ export function UseCaseOwnerDashboard({
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000);
-    
+
     const handleMessageSent = () => {
       setTimeout(fetchUnreadCount, 1000);
     };
     window.addEventListener('message-sent', handleMessageSent);
-    
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('message-sent', handleMessageSent);
@@ -222,7 +222,7 @@ export function UseCaseOwnerDashboard({
   const handleNotificationClick = async (conversation: any) => {
     // Check if this is a notification-only message (starts with [NOTIFICATION])
     const isNotificationOnly = String(conversation.lastMessage || '').startsWith('[NOTIFICATION]');
-    
+
     // Mark messages as read
     try {
       await fetch(api('/api/messages/mark-read'), {
@@ -255,7 +255,7 @@ export function UseCaseOwnerDashboard({
           id: conversation.fromUserId,
           name: conversation.fromUserName || 'User',
         } as any);
-      
+
       if (project && otherUser) {
         if (onOpenChat) {
           onOpenChat(project, otherUser);
@@ -269,7 +269,7 @@ export function UseCaseOwnerDashboard({
       }
     }
   };
-  
+
   // Find or create a general project for admin communication
   const getAdminProject = async (): Promise<Project> => {
     // Try to find an existing admin communication project
@@ -420,7 +420,7 @@ export function UseCaseOwnerDashboard({
             </div>
             <div className="flex items-center space-x-4">
               {/* In-app Notifications Bell */}
-              <NotificationBell 
+              <NotificationBell
                 currentUser={currentUser}
                 onNavigate={(view, params) => {
                   // Use case owner might not have project detail view
@@ -428,10 +428,10 @@ export function UseCaseOwnerDashboard({
                   console.log('Notification navigation:', view, params);
                 }}
               />
-              
+
               {/* Legacy Message Notifications */}
               <div className="relative" ref={notificationRef}>
-                <button 
+                <button
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="relative p-2 text-gray-600 hover:text-gray-900"
                 >
@@ -442,7 +442,7 @@ export function UseCaseOwnerDashboard({
                     </span>
                   )}
                 </button>
-                
+
                 {showNotifications && (
                   <div
                     className="absolute left-auto right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden flex flex-col"
@@ -548,101 +548,101 @@ export function UseCaseOwnerDashboard({
                 const showStatusBadge = true;
 
                 // Use calculated progress if available, otherwise fallback to useCase.progress
-                const displayProgress = useCaseProgresses[useCaseId] !== undefined 
-                  ? useCaseProgresses[useCaseId] 
+                const displayProgress = useCaseProgresses[useCaseId] !== undefined
+                  ? useCaseProgresses[useCaseId]
                   : (useCase.progress || 0);
 
                 return (
-                <div
-                  key={useCase.id}
-                  className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
-                >
-                  {/* Status Badge */}
-                  <div className="px-6 pt-6 pb-4 border-b border-gray-100">
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="text-lg text-gray-900 flex-1 mr-2">{useCase.title}</h3>
-                      <div className="flex items-center space-x-2">
-                        {showStatusBadge && (
-                          <span
-                            className={`px-2 py-1 text-xs rounded-full ${statusColors[displayStatus]?.bg || statusColors['assigned'].bg} ${statusColors[displayStatus]?.text || statusColors['assigned'].text}`}
-                          >
-                            {statusLabels[displayStatus] || statusLabels['assigned']}
-                          </span>
-                        )}
-                        <button
-                          onClick={async () => {
-                            const confirmed = window.confirm(`Delete use case "${useCase.title}"?`);
-                            if (confirmed) {
-                              await onDeleteUseCase(useCase.id);
-                              // Refresh the list after deletion
-                              fetchMyUseCases();
-                            }
-                          }}
-                          className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 mr-1" />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-600 line-clamp-2">{useCase.description}</p>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-600">Progress</span>
-                      <span className="text-xs text-gray-900">{displayProgress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-green-600 h-2 rounded-full transition-all"
-                        style={{ width: `${displayProgress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Metadata + Experts */}
-                  <div className="px-6 py-4 bg-gray-50">
-                    <div className="flex items-center justify-between text-xs text-gray-600 mb-3">
-                      <div className="flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Last updated: {new Date(useCase.updatedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-
-                    {/* Assigned Experts */}
-                    {useCase.assignedExperts && useCase.assignedExperts.length > 0 && (
-                      <div className="flex items-center mb-3">
-                        <span className="text-xs text-gray-600 mr-2">Assigned Experts:</span>
-                        <div className="flex -space-x-2">
-                          {useCase.assignedExperts.slice(0, 3).map((expertId, idx) => (
-                            <div
-                              key={expertId}
-                              className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 border-2 border-white flex items-center justify-center text-white text-xs"
-                              title={`Expert ${idx + 1}`}
+                  <div
+                    key={useCase.id}
+                    className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                  >
+                    {/* Status Badge */}
+                    <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="text-lg text-gray-900 flex-1 mr-2">{useCase.title}</h3>
+                        <div className="flex items-center space-x-2">
+                          {showStatusBadge && (
+                            <span
+                              className={`px-2 py-1 text-xs rounded-full ${statusColors[displayStatus]?.bg || statusColors['assigned'].bg} ${statusColors[displayStatus]?.text || statusColors['assigned'].text}`}
                             >
-                              {String.fromCharCode(65 + idx)}
-                            </div>
-                          ))}
-                          {useCase.assignedExperts.length > 3 && (
-                            <div className="w-6 h-6 rounded-full bg-gray-300 border-2 border-white flex items-center justify-center text-gray-600 text-xs">
-                              +{useCase.assignedExperts.length - 3}
-                            </div>
+                              {statusLabels[displayStatus] || statusLabels['assigned']}
+                            </span>
                           )}
+                          <button
+                            onClick={async () => {
+                              const confirmed = window.confirm(`Delete use case "${useCase.title}"?`);
+                              if (confirmed) {
+                                await onDeleteUseCase(useCase.id);
+                                // Refresh the list after deletion
+                                fetchMyUseCases();
+                              }
+                            }}
+                            className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Delete
+                          </button>
                         </div>
                       </div>
-                    )}
+                      <p className="text-sm text-gray-600 line-clamp-2">{useCase.description}</p>
+                    </div>
 
-                    <button
-                      onClick={() => onViewUseCase(useCase)}
-                      className="w-full px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center justify-center"
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </button>
+                    {/* Progress Bar */}
+                    <div className="px-6 py-4 border-b border-gray-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-gray-600">Progress</span>
+                        <span className="text-xs text-gray-900">{displayProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-green-600 h-2 rounded-full transition-all"
+                          style={{ width: `${displayProgress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Metadata + Experts */}
+                    <div className="px-6 py-4 bg-gray-50">
+                      <div className="flex items-center justify-between text-xs text-gray-600 mb-3">
+                        <div className="flex items-center">
+                          <Clock className="h-3 w-3 mr-1" />
+                          Last updated: {new Date(useCase.updatedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+
+                      {/* Assigned Experts */}
+                      {useCase.assignedExperts && useCase.assignedExperts.length > 0 && (
+                        <div className="flex items-center mb-3">
+                          <span className="text-xs text-gray-600 mr-2">Assigned Experts:</span>
+                          <div className="flex -space-x-2">
+                            {useCase.assignedExperts.slice(0, 3).map((expertId, idx) => (
+                              <div
+                                key={expertId}
+                                className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 border-2 border-white flex items-center justify-center text-white text-xs"
+                                title={`Expert ${idx + 1}`}
+                              >
+                                {String.fromCharCode(65 + idx)}
+                              </div>
+                            ))}
+                            {useCase.assignedExperts.length > 3 && (
+                              <div className="w-6 h-6 rounded-full bg-gray-300 border-2 border-white flex items-center justify-center text-gray-600 text-xs">
+                                +{useCase.assignedExperts.length - 3}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => onViewUseCase(useCase)}
+                        className="w-full px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm flex items-center justify-center"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </button>
+                    </div>
                   </div>
-                </div>
                 );
               })}
             </div>
@@ -676,7 +676,7 @@ export function UseCaseOwnerDashboard({
           currentUser={currentUser}
         />
       )}
-      
+
       {/* CHAT PANEL - Modal in center */}
       {/* Expanded Notification Panel - Drawer style */}
       {expandedNotification && (
@@ -797,7 +797,6 @@ interface UseCaseQuestion {
   id: string;
   key?: string;
   questionEn: string;
-  questionTr: string;
   type: 'text' | 'multiple-choice';
   options?: string[];
   order?: number;
@@ -817,7 +816,7 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
   const [aiSystemLink, setAiSystemLink] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [files, setFiles] = useState<FileAttachment[]>([]);
-  
+
   // Questions answers - initialize with empty object
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
 
@@ -877,12 +876,12 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
         // Add timeout to prevent hanging
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
+
         const response = await fetch(api('/api/use-case-questions'), {
           signal: controller.signal
         });
         clearTimeout(timeoutId);
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data && data.length > 0) {
@@ -1097,89 +1096,89 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
               <h3 className="text-lg text-gray-900 mb-4">🩺 Basic Information</h3>
             </div>
 
-                        {/* Title */}
-                        <div>
-                          <label className="block text-sm mb-2 text-gray-700">Use Case Title *</label>
-                          <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            placeholder="e.g., Medical Image Analysis for Cancer Detection"
-                            required
-                          />
-                        </div>
+            {/* Title */}
+            <div>
+              <label className="block text-sm mb-2 text-gray-700">Use Case Title *</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="e.g., Medical Image Analysis for Cancer Detection"
+                required
+              />
+            </div>
 
-                        {/* Description */}
-                        <div>
-                          <label className="block text-sm mb-2 text-gray-700">Description *</label>
-                          <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[120px]"
-                            placeholder="Provide a detailed description of your use case..."
-                            required
-                          />
-                        </div>
+            {/* Description */}
+            <div>
+              <label className="block text-sm mb-2 text-gray-700">Description *</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[120px]"
+                placeholder="Provide a detailed description of your use case..."
+                required
+              />
+            </div>
 
-                        {/* AI System Category */}
-                        <div>
-                          <label className="block text-sm mb-2 text-gray-700">AI System Category *</label>
-                          <select
-                            value={aiSystemCategory}
-                            onChange={(e) => setAiSystemCategory(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            required
-                          >
-                            {categories.map((cat) => (
-                              <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                          </select>
-                        </div>
+            {/* AI System Category */}
+            <div>
+              <label className="block text-sm mb-2 text-gray-700">AI System Category *</label>
+              <select
+                value={aiSystemCategory}
+                onChange={(e) => setAiSystemCategory(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
+              >
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
 
-                    {/* File Upload */}
-                    <div className="mt-4">
-                      <label className="block text-sm mb-2 text-gray-700">Attach Files (optional)</label>
-                      <div
-                        onDragEnter={handleDrag}
-                        onDragOver={handleDrag}
-                        onDragLeave={handleDrag}
-                        onDrop={handleDrop}
-                        className={`border-2 border-dashed rounded-lg p-4 text-center ${dragActive ? 'border-green-400 bg-green-50' : 'border-gray-200'}`}
-                      >
-                        <input
-                          type="file"
-                          multiple
-                          onChange={handleFileInput}
-                          className="hidden"
-                          id="usecase-file-upload"
-                        />
-                        <label htmlFor="usecase-file-upload" className="cursor-pointer text-sm text-green-700 hover:underline flex items-center justify-center space-x-2">
-                          <Upload className="w-4 h-4" />
-                          <span>Click to upload or drag files here</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mt-2">Files will be shared with assigned experts.</p>
+            {/* File Upload */}
+            <div className="mt-4">
+              <label className="block text-sm mb-2 text-gray-700">Attach Files (optional)</label>
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-4 text-center ${dragActive ? 'border-green-400 bg-green-50' : 'border-gray-200'}`}
+              >
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleFileInput}
+                  className="hidden"
+                  id="usecase-file-upload"
+                />
+                <label htmlFor="usecase-file-upload" className="cursor-pointer text-sm text-green-700 hover:underline flex items-center justify-center space-x-2">
+                  <Upload className="w-4 h-4" />
+                  <span>Click to upload or drag files here</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-2">Files will be shared with assigned experts.</p>
+              </div>
+              {files.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {files.map((file) => (
+                    <div key={file.name} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-800">{file.name}</span>
                       </div>
-                      {files.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {files.map((file) => (
-                            <div key={file.name} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                              <div className="flex items-center space-x-2">
-                                <FileText className="w-4 h-4 text-gray-500" />
-                                <span className="text-gray-800">{file.name}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setFiles(prev => prev.filter(f => f.name !== file.name))}
-                                className="text-red-600 text-xs hover:underline"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setFiles(prev => prev.filter(f => f.name !== file.name))}
+                        className="text-red-600 text-xs hover:underline"
+                      >
+                        Remove
+                      </button>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* QUESTIONS SECTION */}
@@ -1235,56 +1234,53 @@ function NewUseCaseModal({ onClose, onSubmit, currentUser }: NewUseCaseModalProp
                 </button>
               </div>
             ) : (
-            <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
-              {questions.map((question) => (
-                <div key={question.id || question.key} className="border-b border-gray-100 pb-6 last:border-b-0">
-                  {/* Tag badge */}
-                  {question.tag && (
-                    <div className="mb-2">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                        {question.tag}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* Question text - English (bold) on top, Turkish (muted) below */}
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    {question.questionEn}
-                    {question.questionTr && (
-                      <span className="block text-sm text-gray-500 mt-1 font-normal">{question.questionTr}</span>
+              <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
+                {questions.map((question) => (
+                  <div key={question.id || question.key} className="border-b border-gray-100 pb-6 last:border-b-0">
+                    {/* Tag badge */}
+                    {question.tag && (
+                      <div className="mb-2">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                          {question.tag}
+                        </span>
+                      </div>
                     )}
-                  </label>
-                  
-                  {question.type === 'multiple-choice' && question.options ? (
-                    <select
-                      value={questionAnswers[question.id] || ''}
-                      onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value="">Select an option...</option>
-                      {question.options.map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div>
-                      <textarea
+
+                    {/* Question text */}
+                    <label className="block text-sm font-bold text-gray-900 mb-2">
+                      {question.questionEn}
+                    </label>
+
+                    {question.type === 'multiple-choice' && question.options ? (
+                      <select
                         value={questionAnswers[question.id] || ''}
                         onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[100px]"
-                        placeholder={question.placeholder || "Enter your answer..."}
-                      />
-                      {/* Helper text below textarea */}
-                      {question.helper && (
-                        <p className="mt-1 text-xs text-gray-400 italic">
-                          {question.helper}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                        className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        <option value="">Select an option...</option>
+                        {question.options.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div>
+                        <textarea
+                          value={questionAnswers[question.id] || ''}
+                          onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[100px]"
+                          placeholder={question.placeholder || "Enter your answer..."}
+                        />
+                        {/* Helper text below textarea */}
+                        {question.helper && (
+                          <p className="mt-1 text-xs text-gray-400 italic">
+                            {question.helper}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </form>
