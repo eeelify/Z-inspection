@@ -4520,6 +4520,7 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
+    console.log(`[FORGOT-PASSWORD] Request received for email: ${email}`);
     if (!email) return res.status(400).json({ message: 'Email address is required.' });
 
     // Wrap DB lookup in timeout to protect against Atlas connection issues
@@ -4535,9 +4536,12 @@ app.post('/api/forgot-password', async (req, res) => {
     });
 
     if (!user) {
+      console.log(`[FORGOT-PASSWORD] User NOT FOUND in database for email: ${email}`);
       // Return 200 to prevent email enumeration (also covers DB timeout)
       return res.status(200).json({ message: 'Password reset link has been sent to your email.' });
     }
+
+    console.log(`[FORGOT-PASSWORD] User found: ${user._id}`);
 
     const { randomBytes } = require('crypto');
     const token = randomBytes(32).toString('hex');
