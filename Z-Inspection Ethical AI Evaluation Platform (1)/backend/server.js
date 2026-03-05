@@ -112,7 +112,9 @@ const UserSchema = new mongoose.Schema({
   preconditionApproved: { type: Boolean, default: false },
   preconditionApprovedAt: { type: Date },
   profileImage: { type: String }, // Base64 image
-  isVerified: { type: Boolean, default: false }
+  isVerified: { type: Boolean, default: false },
+  resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date }
 });
 // Index for faster login queries
 UserSchema.index({ email: 1, password: 1, role: 1 });
@@ -4544,7 +4546,7 @@ app.post('/api/forgot-password', async (req, res) => {
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
-    const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || req.headers.origin || 'http://localhost:3000';
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
     const { sendPasswordResetEmail } = require('./services/emailService');
