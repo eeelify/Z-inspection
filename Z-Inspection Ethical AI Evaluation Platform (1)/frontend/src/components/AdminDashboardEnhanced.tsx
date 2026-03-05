@@ -196,6 +196,33 @@ export function AdminDashboardEnhanced({
   const [chatProject, setChatProject] = useState<Project | null>(null);
   const [allConversations, setAllConversations] = useState<any[]>([]);
   const [showProfile, setShowProfile] = useState(false);
+  // Local use-cases state for lazy loading
+  const [localUseCases, setLocalUseCases] = useState<any[]>(useCases || []);
+  const [useCasesLoading, setUseCasesLoading] = useState(false);
+  const useCasesFetchedRef = useRef(false);
+
+  // Sync prop changes (e.g. after create/delete from parent)
+  useEffect(() => {
+    if (useCases && useCases.length > 0) {
+      setLocalUseCases(useCases);
+    }
+  }, [useCases]);
+
+  // Lazy-load use cases when assignments tab is opened
+  useEffect(() => {
+    if (activeTab !== 'use-case-assignments') return;
+    // Refresh every time the tab is opened
+    setUseCasesLoading(true);
+    fetch(api('/api/use-cases'))
+      .then(res => res.ok ? res.json() : Promise.reject(res.status))
+      .then(data => {
+        const formatted = data.map((u: any) => ({ ...u, id: u._id }));
+        setLocalUseCases(formatted);
+        useCasesFetchedRef.current = true;
+      })
+      .catch(err => console.error('Failed to fetch use-cases:', err))
+      .finally(() => setUseCasesLoading(false));
+  }, [activeTab]);
 
   // Fetch all conversations (chats)
   const fetchConversations = async () => {
@@ -983,7 +1010,8 @@ export function AdminDashboardEnhanced({
 
           {activeTab === 'use-case-assignments' && (
             <UseCaseAssignmentsTab
-              useCases={useCases}
+              useCases={localUseCases}
+              loading={useCasesLoading}
               users={users}
               onAssignExperts={(useCase: UseCase) => {
                 setSelectedUseCaseForAssignment(useCase);
@@ -1002,14 +1030,14 @@ export function AdminDashboardEnhanced({
                       const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
                       window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
                     }
-                    alert('Use case başarıyla silindi!');
+                    alert('Use case deleted successfully!');
                   } else {
                     const errorData = await response.json().catch(() => ({}));
-                    alert(`Silme hatası: ${errorData.error || 'Bilinmeyen hata'}`);
+                    alert(`Delete error: ${errorData.error || 'Unknown error'}`);
                   }
                 } catch (error) {
                   console.error('Delete error:', error);
-                  alert('Use case silinirken bir hata oluştu.');
+                  alert('An error occurred while deleting the use case.');
                 }
               }}
             />
@@ -1371,9 +1399,9 @@ function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProj
   );
 }
 
-function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCase }: any) {
+function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCase, loading }: any) {
   const handleDelete = async (useCase: UseCase) => {
-    const confirmed = window.confirm(`"${useCase.title}" use case'ini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`);
+    const confirmed = window.confirm(`Are you sure you want to delete the use case "${useCase.title}"? This action cannot be undone.`);
     if (!confirmed) return;
 
     if (onDeleteUseCase) {
@@ -1401,7 +1429,18 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCa
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {useCases.length === 0 ? (
+              {loading ? (
+                // Loading skeleton
+                [1, 2, 3].map(i => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div><div className="h-3 bg-gray-100 rounded w-1/2"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    <td className="px-6 py-4"><div className="h-5 bg-gray-200 rounded-full w-20"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                    <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded w-24 ml-auto"></div></td>
+                  </tr>
+                ))
+              ) : useCases.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                     No use cases found. Use Case Owners need to create them first.
@@ -1861,11 +1900,11 @@ function CreatedReportsTab({ projects, currentUser }: any) {
         const data = await response.json();
         setSelectedReport(data);
       } else {
-        alert('Rapor yüklenemedi');
+        alert('Report could not be loaded');
       }
     } catch (error) {
       console.error('Error fetching report:', error);
-      alert('Rapor yüklenemedi');
+      alert('Report could not be loaded');
     }
   };
 
@@ -2203,11 +2242,11 @@ function ReportsTab({ projects, currentUser, users }: any) {
         const data = await response.json();
         setSelectedReport(data);
       } else {
-        alert('Rapor yüklenemedi');
+        alert('Report could not be loaded');
       }
     } catch (error) {
       console.error('Error fetching report:', error);
-      alert('Rapor yüklenemedi');
+      alert('Report could not be loaded');
     }
   };
 
@@ -2384,7 +2423,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 mb-1">AI Generated Reports</h1>
-            <p className="text-gray-600">Gemini AI ile oluşturulan analiz raporları</p>
+            <p className="text-gray-600">AI-generated analysis reports</p>
           </div>
           <select
             value={filterProjectId}
@@ -2423,7 +2462,7 @@ function ReportsTab({ projects, currentUser, users }: any) {
                 >
                   <h3 className="font-medium text-gray-900 mb-2 truncate">{project.title}</h3>
                   <p className="text-sm text-gray-500 mb-3 line-clamp-2">
-                    {project.shortDescription || project.fullDescription || 'Açıklama yok'}
+                    {project.shortDescription || project.fullDescription || 'No description'}
                   </p>
                   <div className="mb-3">
                     <div className="flex items-center justify-between text-xs text-gray-500 mb-1">

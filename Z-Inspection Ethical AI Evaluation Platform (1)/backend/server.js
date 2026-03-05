@@ -83,17 +83,17 @@ mongoose
     family: 4 // Use IPv4, skip trying IPv6
   })
   .then(() => {
-    console.log('✅ MongoDB Atlas Bağlantısı Başarılı');
+    console.log('✅ MongoDB Atlas Connected Successfully');
     // Set mongoose options for better performance
     mongoose.set('bufferCommands', false);
     mongoose.set('strictQuery', false);
   })
   .catch((err) => {
-    console.error('❌ Bağlantı Hatası:', err.message);
-    console.error('💡 İpucu: MongoDB Atlas bağlantısı için:');
-    console.error('   1. İnternet bağlantınızı kontrol edin');
-    console.error('   2. MongoDB Atlas IP whitelist\'inize IP adresinizi ekleyin (0.0.0.0/0 tüm IP\'ler için)');
-    console.error('   3. MongoDB kullanıcı adı ve şifresinin doğru olduğundan emin olun');
+    console.error('❌ Connection Error:', err.message);
+    console.error('💡 Tip: To fix MongoDB Atlas connection:');
+    console.error('   1. Check your internet connection');
+    console.error('   2. Add your IP to the Atlas IP whitelist (use 0.0.0.0/0 to allow all IPs)');
+    console.error('   3. Verify your MongoDB username and password are correct');
   });
 
 
@@ -577,12 +577,19 @@ app.get('/api/use-cases', async (req, res) => {
     }
 
     const useCases = await query
-      .select('-answers -extendedInfo -supportingFiles.data') // Don't fetch file data for list
+      .select('-answers -extendedInfo -supportingFiles.data') // Don't fetch file data or answers for list
       .lean()
-      .limit(1000) // Limit results for performance
+      .limit(500) // Reduced limit for better performance
+      .maxTimeMS(8000) // Fail fast if Atlas is slow
       .sort({ createdAt: -1 }); // Sort by newest first
+
+    // Set cache-control for quick re-fetches (5 second cache)
+    res.set('Cache-Control', 'private, max-age=5');
     res.json(useCases);
   } catch (err) {
+    if (err.name === 'MongooseError' && err.message.includes('maxTimeMS')) {
+      return res.status(503).json({ error: 'Database query timed out. Please try again.' });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -4472,7 +4479,7 @@ app.post('/api/login', async (req, res) => {
     if (mongoose.connection.readyState !== 1) {
       console.warn(`[login:${reqId}] mongo not ready`, { readyState: mongoose.connection.readyState });
       return res.status(503).json({
-        error: 'Veritabanı bağlantısı hazır değil. Lütfen birkaç saniye bekleyip tekrar deneyin.'
+        error: 'Database connection is not ready. Please wait a few seconds and try again.'
       });
     }
 
@@ -4499,11 +4506,83 @@ app.post('/api/login', async (req, res) => {
     }
   } catch (err) {
     if (err.message === 'Login timeout') {
-      res.status(504).json({ error: 'Giriş isteği zaman aşımına uğradı. Lütfen tekrar deneyin.' });
+      res.status(504).json({ error: 'Login request timed out. Please try again.' });
     } else {
       console.error('Login error:', err);
-      res.status(500).json({ error: 'Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.' });
+      res.status(500).json({ error: 'An error occurred during login. Please try again.' });
     }
+  }
+});
+
+// POST /api/forgot-password
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email address is required.' });
+
+    // Wrap DB lookup in timeout to protect against Atlas connection issues
+    const user = await Promise.race([
+      User.findOne({ email }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('DB_TIMEOUT')), 5000))
+    ]).catch(err => {
+      if (err.message === 'DB_TIMEOUT') {
+        console.warn('[forgot-password] DB lookup timed out, returning success anyway');
+        return null; // treat as user not found
+      }
+      throw err;
+    });
+
+    if (!user) {
+      // Return 200 to prevent email enumeration (also covers DB timeout)
+      return res.status(200).json({ message: 'Password reset link has been sent to your email.' });
+    }
+
+    const { randomBytes } = require('crypto');
+    const token = randomBytes(32).toString('hex');
+
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || 'http://localhost:3000';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    const { sendPasswordResetEmail } = require('./services/emailService');
+    await sendPasswordResetEmail(user.email, resetLink);
+
+    res.status(200).json({ message: 'Password reset link has been sent to your email.' });
+  } catch (err) {
+    console.error('Forgot password error:', err.message);
+    res.status(500).json({ message: 'A server error occurred.' });
+  }
+});
+
+// POST /api/reset-password
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token and new password are required.' });
+    }
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired token.' });
+    }
+
+    user.password = newPassword; // Password is plain text as per existing code
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.status(200).json({ message: 'Your password has been successfully updated.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ message: 'A server error occurred.' });
   }
 });
 
@@ -4548,18 +4627,19 @@ app.get('/api/projects', async (req, res) => {
       try {
         const user = await User.findById(userId).select('role').lean();
         if (user && user.role && user.role.toLowerCase().includes('admin')) {
-          // Admin users can see all projects
-          console.log('🔓 Admin user detected - showing all projects');
-          // No creator filter for admins
+          // Admin users only see their OWN projects (strict filter)
+          console.log('🔐 Admin user detected - strictly filtering to own projects only');
+          query.$or = [
+            { createdByAdmin: new mongoose.Types.ObjectId(userId) },
+            { createdByAdmin: userId } // string fallback for older records
+          ];
         }
       } catch (err) {
         console.warn('Could not verify user role:', err.message);
       }
 
-      // Filter out projects hidden for this user (soft delete) if hiddenForUsers field exists
-      // Note: hiddenForUsers field may not exist in all projects, so we check if it exists
-      if (!query.createdByAdmin) {
-        // Only apply hiddenForUsers filter if not already filtering by createdByAdmin
+      // Filter out projects hidden for this user (soft delete)
+      if (!query.$or) {
         query.$or = [
           { hiddenForUsers: { $exists: false } },
           { hiddenForUsers: { $nin: [new mongoose.Types.ObjectId(userId)] } }
@@ -4821,6 +4901,44 @@ app.post('/api/projects', async (req, res) => {
     await project.save();
     res.json(project);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/claim-projects - Stamp all unclaimed projects to a specific admin
+// Used to migrate legacy projects created before the createdByAdmin field was tracked
+app.post('/api/admin/claim-projects', async (req, res) => {
+  try {
+    const { adminId } = req.body;
+    if (!adminId || !isValidObjectId(adminId)) {
+      return res.status(400).json({ error: 'adminId is required and must be a valid ObjectId' });
+    }
+
+    // Verify the user is actually an admin
+    const user = await User.findById(adminId).select('role').lean();
+    if (!user || !user.role.toLowerCase().includes('admin')) {
+      return res.status(403).json({ error: 'User is not an admin' });
+    }
+
+    // Stamp all projects that have no createdByAdmin with this admin's ID
+    const result = await Project.updateMany(
+      {
+        $or: [
+          { createdByAdmin: { $exists: false } },
+          { createdByAdmin: null }
+        ]
+      },
+      { $set: { createdByAdmin: new mongoose.Types.ObjectId(adminId) } }
+    );
+
+    console.log(`[migrate] Claimed ${result.modifiedCount} unclaimed projects for admin ${adminId}`);
+    res.json({
+      success: true,
+      claimedCount: result.modifiedCount,
+      message: `${result.modifiedCount} project(s) are now owned by this admin.`
+    });
+  } catch (err) {
+    console.error('[migrate] Error:', err);
     res.status(500).json({ error: err.message });
   }
 });

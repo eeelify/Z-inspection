@@ -378,12 +378,12 @@ export function UserDashboard({
     try {
       const userId = currentUser?.id || (currentUser as any)?._id;
       if (!userId) {
-        alert('Kullanıcı ID bulunamadı. Lütfen tekrar giriş yapın.');
+        alert('User ID not found. Please log in again.');
         return;
       }
 
       if (!reportId) {
-        alert('Rapor ID bulunamadı.');
+        alert('Report ID not found.');
         return;
       }
 
@@ -404,9 +404,9 @@ export function UserDashboard({
           console.error('❌ Response is not PDF:', text.substring(0, 200));
           try {
             const error = JSON.parse(text);
-            alert('PDF indirilemedi: ' + (error.error || 'Sunucu PDF formatında yanıt döndürmedi'));
+            alert('PDF download failed: ' + (error.error || 'Server did not return a PDF response'));
           } catch {
-            alert('PDF indirilemedi: Sunucu PDF formatında yanıt döndürmedi');
+            alert('PDF download failed: Server did not return a PDF response');
           }
           return;
         }
@@ -415,7 +415,7 @@ export function UserDashboard({
         console.log(`📦 Blob size: ${blob.size} bytes, type: ${blob.type}`);
 
         if (blob.size === 0) {
-          alert('PDF dosyası boş. Lütfen tekrar deneyin.');
+          alert('PDF file is empty. Please try again.');
           return;
         }
 
@@ -431,7 +431,7 @@ export function UserDashboard({
 
         console.log('✅ PDF downloaded successfully');
       } else {
-        let errorMessage = 'Bilinmeyen hata';
+        let errorMessage = 'Unknown error';
         try {
           const error = await response.json();
           errorMessage = error.error || error.message || errorMessage;
@@ -441,11 +441,11 @@ export function UserDashboard({
           errorMessage = text.substring(0, 200) || errorMessage;
           console.error('❌ PDF download error (text):', text.substring(0, 200));
         }
-        alert(`PDF indirilemedi (${response.status}): ${errorMessage}`);
+        alert(`PDF download failed (${response.status}): ${errorMessage}`);
       }
     } catch (error: any) {
       console.error('❌ Error downloading PDF:', error);
-      alert('PDF indirilemedi: ' + (error.message || 'Bağlantı hatası'));
+      alert('PDF download failed: ' + (error.message || 'Connection error'));
     } finally {
       // Restore button state
       if (button) {

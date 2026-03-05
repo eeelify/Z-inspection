@@ -226,6 +226,19 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 </select>
               </div>
 
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Update URL to /forgot-password
+                    window.location.href = '/forgot-password';
+                  }}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                >
+                  Forgot Password
+                </button>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -234,7 +247,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                   backgroundColor: roleColors[role as keyof typeof roleColors] || '#1F2937'
                 }}
               >
-                {loading ? 'Loading...' : 'Sign In'}
+                {loading ? 'Connecting...' : 'Log In'}
               </button>
             </form>
           ) : step === 'email' ? (
@@ -304,7 +317,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                   backgroundColor: roleColors[role as keyof typeof roleColors] || '#1F2937'
                 }}
               >
-                {loading ? 'Loading...' : 'Continue / Send Code'}
+                {loading ? 'Connecting...' : 'Continue / Send Code'}
               </button>
             </form>
           ) : (
@@ -339,7 +352,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                   backgroundColor: roleColors[role as keyof typeof roleColors] || '#1F2937'
                 }}
               >
-                {loading ? 'Loading...' : 'Register / Verify'}
+                {loading ? 'Connecting...' : 'Register / Verify'}
               </button>
 
               <button

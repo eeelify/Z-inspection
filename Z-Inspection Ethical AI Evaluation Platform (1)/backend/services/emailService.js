@@ -1,8 +1,9 @@
-const { Resend } = require('resend');
+let Resend;
+try { Resend = require('resend').Resend; } catch (e) { Resend = null; }
 const { getGuideFilename, guideExists, readGuideAsBase64 } = require('../utils/guideSelector');
 
-// Initialize Resend client only if API key is present
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// Initialize Resend client only if API key and package are present
+const resend = (Resend && process.env.RESEND_API_KEY) ? new Resend(process.env.RESEND_API_KEY) : null;
 
 /**
  * Get the from email address
@@ -23,11 +24,11 @@ async function sendVerificationEmail(to, code) {
     throw new Error('Email service is not configured. Please set RESEND_API_KEY in environment variables.');
   }
 
-  console.log('[MAIL] env present:', { 
-    hasKey: !!process.env.RESEND_API_KEY, 
-    hasFrom: !!process.env.EMAIL_FROM 
+  console.log('[MAIL] env present:', {
+    hasKey: !!process.env.RESEND_API_KEY,
+    hasFrom: !!process.env.EMAIL_FROM
   });
-  
+
   console.log('[MAIL] Resend sending to:', to);
 
   const from = getFromEmail();
@@ -85,7 +86,7 @@ async function sendEmail(to, subject, html, text = null) {
   }
 
   const from = getFromEmail();
-  
+
   try {
     const result = await resend.emails.send({
       from,
@@ -187,9 +188,81 @@ async function sendWelcomeEmail(to, name, role) {
   }
 }
 
+/**
+ * Send password reset email using Gmail (nodemailer)
+ * Uses EMAIL_USER and EMAIL_PASS from environment variables
+ * @param {string} to - Recipient email address
+ * @param {string} resetLink - The full reset link containing the token
+ */
+async function sendPasswordResetEmail(to, resetLink) {
+  // Fallback: log to console if Gmail credentials not configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log('\n========================================================');
+    console.log('[MAIL] Gmail credentials not configured (EMAIL_USER / EMAIL_PASS missing)');
+    console.log(`[MAIL] Password reset requested for: ${to}`);
+    console.log(`[MAIL] Reset Link: ${resetLink}`);
+    console.log('========================================================\n');
+    return { status: 'simulated' };
+  }
+
+  const nodemailer = require('nodemailer');
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // STARTTLS
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+
+  const mailOptions = {
+    from: `"Z-Inspection Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Password Reset Request — Z-Inspection Platform',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1F2937; margin-bottom: 20px;">Password Reset</h2>
+        <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+          We received a request to reset your password for the Z-Inspection Platform.
+        </p>
+        <div style="margin: 30px 0; text-align: center;">
+          <a href="${resetLink}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+            Reset Password
+          </a>
+        </div>
+        <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+          Or copy and paste this link into your browser:<br>
+          <a href="${resetLink}" style="color: #4F46E5;">${resetLink}</a>
+        </p>
+        <p style="color: #6B7280; font-size: 14px; margin-top: 20px;">
+          This link will expire in 1 hour. If you didn't request a password reset, please ignore this email.
+        </p>
+        <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
+        <p style="color: #9CA3AF; font-size: 12px;">
+          This is an automated message from Z-Inspection Platform.
+        </p>
+      </div>
+    `,
+  };
+
+  try {
+    const result = await transporter.sendMail(mailOptions);
+    console.log('[MAIL] Password reset email sent successfully to:', to, 'messageId:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('[MAIL] Gmail send error:', error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   sendVerificationEmail,
   sendEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendPasswordResetEmail
 };
-

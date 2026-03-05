@@ -23,7 +23,8 @@ import {
 import { api } from "./api";
 import { saveUser, loadUser, clearUser } from "./utils/auth";
 import { saveViewState, loadViewState, clearViewState } from "./utils/persistence";
-
+import { ForgotPassword } from "./components/ForgotPassword";
+import { ResetPassword } from "./components/ResetPassword";
 function App() {
   // Load initial view state from storage if available
   const initialViewState = loadViewState();
@@ -197,78 +198,97 @@ function App() {
   }, []);
 
   // --- LOGIN ---
+  const [loginRetrying, setLoginRetrying] = useState(false);
+
   const handleLogin = async (
     email: string,
     password: string,
     role: string,
   ) => {
-    try {
-      const loginUrl = api('/api/login');
-      console.log('Login URL:', loginUrl);
-      console.log('Sending login request...');
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2500;
 
-      const response = await fetch(loginUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
-      });
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const loginUrl = api('/api/login');
+        console.log(`Login attempt ${attempt}/${MAX_RETRIES}...`);
 
-      console.log('Response status:', response.status, response.statusText);
+        const response = await fetch(loginUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, role }),
+        });
 
-      if (response.ok) {
-        const userDB = await response.json();
-        const userFrontend = {
-          ...userDB,
-          id: userDB._id
-        };
+        console.log('Response status:', response.status, response.statusText);
 
-        setCurrentUser(userFrontend);
-        saveUser(userFrontend);
-
-        // Fetch profile image separately (login response excludes profileImage for performance)
-        (async () => {
-          try {
-            const userId = userDB._id || userDB.id;
-            if (!userId) return;
-            const imgRes = await fetch(api(`/api/users/${userId}/profile-image`));
-            if (imgRes.ok) {
-              const img = await imgRes.json();
-              setCurrentUser((prev) => {
-                if (!prev) return prev;
-                const updated = { ...(prev as any), profileImage: img.profileImage || null } as any;
-                saveUser(updated);
-                return updated;
-              });
-            }
-          } catch (e) {
-            // ignore; avatar fallback will be used
-          }
-        })();
-
-        if (role !== "admin") {
-          // Server provides `preconditionApproved` flag on the user object
-          const approved = (userFrontend as any).preconditionApproved;
-          setNeedsPrecondition(!Boolean(approved));
+        // 503 = DB not ready yet → retry silently
+        if (response.status === 503 && attempt < MAX_RETRIES) {
+          setLoginRetrying(true);
+          console.warn(`DB not ready (attempt ${attempt}), retrying in ${RETRY_DELAY_MS}ms...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+          continue;
         }
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Bilinmeyen hata', message: 'Bilinmeyen hata' }));
-        const errorMessage = errorData.error || errorData.message || "Giriş başarısız! Bilgileri kontrol edin.";
-        alert(errorMessage);
-      }
-    } catch (error: any) {
-      console.error("Login hatası:", error);
-      console.error("Error details:", {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
 
-      if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed to fetch'))) {
-        alert("Sunucuya bağlanılamadı!\n\nLütfen kontrol edin:\n1. Backend http://localhost:5000 adresinde çalışıyor mu?\n2. Vite dev server çalışıyor mu?\n3. Backend terminal'inde hata var mı?");
-      } else {
-        alert(`Giriş hatası: ${error.message || 'Bilinmeyen hata'}\n\nBackend'in çalıştığından emin olun.`);
+        setLoginRetrying(false);
+
+        if (response.ok) {
+          const userDB = await response.json();
+          const userFrontend = {
+            ...userDB,
+            id: userDB._id
+          };
+
+          setCurrentUser(userFrontend);
+          saveUser(userFrontend);
+
+          // Fetch profile image separately (login response excludes profileImage for performance)
+          (async () => {
+            try {
+              const userId = userDB._id || userDB.id;
+              if (!userId) return;
+              const imgRes = await fetch(api(`/api/users/${userId}/profile-image`));
+              if (imgRes.ok) {
+                const img = await imgRes.json();
+                setCurrentUser((prev) => {
+                  if (!prev) return prev;
+                  const updated = { ...(prev as any), profileImage: img.profileImage || null } as any;
+                  saveUser(updated);
+                  return updated;
+                });
+              }
+            } catch (e) {
+              // ignore; avatar fallback will be used
+            }
+          })();
+
+          if (role !== "admin") {
+            // Server provides `preconditionApproved` flag on the user object
+            const approved = (userFrontend as any).preconditionApproved;
+            setNeedsPrecondition(!Boolean(approved));
+          }
+          return; // success
+        } else {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error', message: 'Unknown error' }));
+          const errorMessage = errorData.error || errorData.message || "Login failed! Please check your credentials.";
+          alert(errorMessage);
+          return; // don't retry on real errors (wrong password, etc.)
+        }
+      } catch (error: any) {
+        setLoginRetrying(false);
+        console.error("Login error:", error);
+
+        if (error.name === 'TypeError' && (error.message?.includes('fetch') || error.message?.includes('Failed to fetch'))) {
+          alert("Could not connect to the server!\n\nPlease check:\n1. Is the backend running at http://localhost:5000?\n2. Is the Vite dev server running?\n3. Are there any errors in the backend terminal?");
+        } else {
+          alert(`Login error: ${error.message || 'Unknown error'}\n\nPlease make sure the backend is running.`);
+        }
+        return;
       }
     }
+
+    // Exhausted all retries
+    setLoginRetrying(false);
+    alert("The server is still starting up. Please wait a few more seconds and try again.");
   };
 
   const handlePreconditionApproval = () => {
@@ -483,15 +503,15 @@ function App() {
           isNew: true,
         };
         setProjects([newProjectFrontend, ...projects]);
-        alert("Proje başarıyla oluşturuldu!");
+        alert("Project created successfully!");
         return newProjectFrontend;
       } else {
-        alert("Proje oluşturulurken bir hata oluştu.");
+        alert("An error occurred while creating the project.");
         return null;
       }
     } catch (error) {
       console.error("Proje oluşturma hatası:", error);
-      alert("Sunucuya bağlanılamadı.");
+      alert("Could not connect to the server.");
       return null;
     }
   };
@@ -539,15 +559,15 @@ function App() {
         };
         // Listeyi güncelle ki anında görebilelim
         setUseCases([newUseCaseFrontend, ...useCases]);
-        alert("Use Case başarıyla oluşturuldu!");
+        alert("Use Case created successfully!");
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         console.error("Use Case oluşturma hatası:", errorData);
-        alert(`Use Case oluşturulamadı: ${errorData.error || 'Bilinmeyen hata'}`);
+        alert(`Failed to create Use Case: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error("Use Case oluşturma hatası:", error);
-      alert("Sunucuya bağlanılamadı.");
+      alert("Could not connect to the server.");
     }
   };
 
@@ -586,15 +606,38 @@ function App() {
       if (response.ok) {
         console.log("Tension created successfully");
       } else {
-        alert("Gerilim eklenirken hata oluştu.");
+        alert("An error occurred while adding the tension.");
       }
     } catch (error) {
       console.error("Tension create error:", error);
-      alert("Sunucuya bağlanılamadı.");
+      alert("Could not connect to the server.");
     }
   };
 
+  // Check URL manually for forgot-password and reset-password routes
   if (!currentUser) {
+    const path = window.location.pathname;
+
+    if (path === '/forgot-password') {
+      return (
+        <ForgotPassword
+          onBackToLogin={() => {
+            window.location.href = '/';
+          }}
+        />
+      );
+    }
+
+    if (path === '/reset-password') {
+      return (
+        <ResetPassword
+          onBackToLogin={() => {
+            window.location.href = '/';
+          }}
+        />
+      );
+    }
+
     return <LoginScreen onLogin={handleLogin} />;
   }
 
