@@ -381,7 +381,7 @@ Return a RAW JSON OBJECT. No markdown formatting. No code blocks.
 }
 
 /* ============================================================
-   5. PROMPT BUILDER (Z-INSPECTION VERİ ODAKLI)
+   5. PROMPT BUILDER (ETHICAL AI ANALYSIS VERİ ODAKLI)
 ============================================================ */
 
 function buildUserPrompt(data) {
@@ -395,7 +395,7 @@ function buildUserPrompt(data) {
   const scoringDisclosure = reportMetrics.scoringDisclosure || null; // NEW: Question Breakdown
 
   let prompt = `# AI ETHICS EVALUATION DATA\n\n`;
-  prompt += `Analyze the following data using the Z-Inspection methodology.\n`;
+  prompt += `Analyze the following data using the Ethical AI Analysis methodology.\n`;
   prompt += `**CRITICAL: ALL expert answers and ALL tensions MUST be fully analyzed and explained in the report.**\n\n`;
 
   // NEW: Scoring Disclosure Injection

@@ -24,7 +24,7 @@ const PROJECT_ID = '6985dc9a9ff7bb6bcd9d528e'; // Tutor AI Project
 
 async function inspectProjectAnswers() {
     try {
-        const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/z-inspection';
+        const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
         await mongoose.connect(mongoUri);
 
         const Response = require('./models/response');

@@ -354,7 +354,7 @@ export function UseCaseOwnerDashboard({
         <div className="h-1 bg-gradient-to-r from-green-500 to-green-600" />
 
         <div className="p-6 border-b border-gray-200">
-          <div className="text-xl text-gray-900 mb-1">Z-Inspection</div>
+          <div className="text-xl text-gray-900 mb-1">Ethical AI Analysis</div>
           <div className="text-xs text-gray-600">Use-case Owner Portal</div>
         </div>
 

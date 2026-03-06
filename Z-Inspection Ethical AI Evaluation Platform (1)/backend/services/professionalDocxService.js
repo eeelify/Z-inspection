@@ -164,7 +164,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // 2) METHODOLOGY & DATA SOURCES
   // ============================================================
   children.push(createHeading('Methodology & Data Sources', 1));
-  children.push(createParagraph('This report is generated using the Z-Inspection methodology for ethical AI evaluation.'));
+  children.push(createParagraph('This report is generated using the Ethical AI Analysis methodology for ethical AI evaluation.'));
   children.push(createParagraph(''));
   children.push(createParagraph('Data Sources:', { bold: true }));
   children.push(createParagraph('• responses collection: All expert answers and qualitative context'));
@@ -645,7 +645,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   }
 
   // ============================================================
-  // 7) ETHICAL TENSIONS (Z-Inspection style)
+  // 7) ETHICAL TENSIONS (Ethical AI Analysis style)
   // ============================================================
   children.push(createHeading('Ethical Tensions', 1, 'tensions'));
   children.push(createInternalLink('Back to Dashboard', 'dashboard'));
@@ -1058,7 +1058,7 @@ async function generateProfessionalDOCX(reportMetrics, geminiNarrative, generate
   // BUILD DOCUMENT
   // ============================================================
   const doc = new Document({
-    creator: "Z-Inspection Platform",
+    creator: "Ethical AI Analysis Platform",
     title: reportMetrics.project.title || "Ethical AI Evaluation Report",
     sections: [
       {

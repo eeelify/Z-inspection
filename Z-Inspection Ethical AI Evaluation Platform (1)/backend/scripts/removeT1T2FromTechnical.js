@@ -6,7 +6,7 @@ const Response = require('../models/response');
 async function removeT1T2FromTechnical() {
   try {
     // MongoDB connection
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/z-inspection';
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
     await mongoose.connect(mongoUri);
     console.log('✅ Connected to MongoDB');
 

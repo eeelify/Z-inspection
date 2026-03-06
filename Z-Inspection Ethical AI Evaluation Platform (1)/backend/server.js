@@ -5158,14 +5158,14 @@ app.post('/api/messages', async (req, res) => {
 
           const html = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
+              <h2 style="color: #1F2937;">New Message on Ethical AI Analysis Platform</h2>
               <p>You have received a new message from <strong>${fromUser.name}</strong>${project ? ` regarding project <strong>"${project.title}"</strong>` : ''}.</p>
               <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
                 <p style="margin: 0; color: #374151;">${text.replace(/\n/g, '<br>')}</p>
               </div>
               <p style="color: #6B7280; font-size: 14px;">Please log in to the platform to respond.</p>
               <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
-              <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
+              <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Ethical AI Analysis Platform.</p>
             </div>
           `;
 
@@ -5201,14 +5201,14 @@ app.post('/api/messages/send-email', async (req, res) => {
         `New message from ${fromName}${projectTitle ? ` - ${projectTitle}` : ''} `,
         `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;" >
-            <h2 style="color: #1F2937;">New Message on Z-Inspection Platform</h2>
+            <h2 style="color: #1F2937;">New Message on Ethical AI Analysis Platform</h2>
             <p>You have received a new message from <strong>${fromName}</strong>${projectTitle ? ` regarding project <strong>"${projectTitle}"</strong>` : ''}.</p>
             <div style="background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 0; color: #374151;">${message.replace(/\n/g, '<br>')}</p>
             </div>
             <p style="color: #6B7280; font-size: 14px;">Please log in to the platform to respond.</p>
             <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;">
-            <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Z-Inspection Platform.</p>
+            <p style="color: #9CA3AF; font-size: 12px;">This is an automated notification from Ethical AI Analysis Platform.</p>
           </div>
           `,
         `You have received a new message from ${fromName}${projectTitle ? ` regarding project "${projectTitle}"` : ''}: \n\n${message} \n\nPlease log in to the platform to respond.`
@@ -6041,7 +6041,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 console.log(`📧 Email service: ${emailConfigured ? '✅ Configured (Resend)' : 'ℹ️  Not configured (email features disabled)'}`);
 if (emailConfigured) {
   console.log(`📧 Resend API Key: ${process.env.RESEND_API_KEY ? '***' + process.env.RESEND_API_KEY.slice(-4) : 'NOT SET'}`);
-  console.log(`📧 Email From: ${process.env.EMAIL_FROM || 'Z-Inspection <no-reply@resend.dev> (default)'}`);
+  console.log(`📧 Email From: ${process.env.EMAIL_FROM || 'Ethical AI Analysis <no-reply@resend.dev> (default)'}`);
 } else {
   // Silent notice - email service is optional
   console.log(`ℹ️  Email service disabled(RESEND_API_KEY not configured).Email notifications will be logged to console only.`);

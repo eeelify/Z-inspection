@@ -14,7 +14,7 @@ const mongoose = require('mongoose');
 const Response = require('../models/response');
 const Score = require('../models/score');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/z-inspection';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
 
 async function runAudit() {
     console.log('==============================================================');

@@ -7,13 +7,13 @@ const PROJECT_ID = '6964d4e9d7a6755353c39e4b';
 /**
  * CRITICAL DIAGNOSTIC: Duplicate Ethical-Expert Investigation
  * 
- * Z-Inspection Methodology requires EXACTLY ONE ethical-expert per project.
+ * Ethical AI Analysis Methodology requires EXACTLY ONE ethical-expert per project.
  * This script diagnoses why the system shows TWO ethical-experts.
  */
 
 async function diagnose() {
     try {
-        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/z-inspection';
+        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
         await mongoose.connect(mongoUri.replace(/&appName=[^&]*/i, ''));
         console.log('✅ Connected to MongoDB\n');
 

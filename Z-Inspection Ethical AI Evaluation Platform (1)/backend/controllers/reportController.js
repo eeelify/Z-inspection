@@ -919,7 +919,7 @@ exports.generateReport = async (req, res) => {
           longTerm: [
             "Establish a continuous monitoring framework for high-risk ethical areas, with automated alerting and periodic reassessment schedules built into governance processes.",
             "Integrate ethical risk checks into the development and deployment pipelines (CI/CD) to ensure proactive identification of emerging risks.",
-            "Conduct comprehensive annual re-evaluations using the Z-Inspection methodology to track ethical posture evolution and ensure sustained compliance.",
+            "Conduct comprehensive annual re-evaluations using the Ethical AI Analysis methodology to track ethical posture evolution and ensure sustained compliance.",
             "Develop training programs for stakeholders on ethical AI principles and risk management to build organizational capacity."
           ]
         },

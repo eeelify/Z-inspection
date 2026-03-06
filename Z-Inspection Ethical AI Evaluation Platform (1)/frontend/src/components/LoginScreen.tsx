@@ -153,7 +153,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       <div className="w-1/2 flex flex-col justify-center px-12 bg-white">
         <div className="max-w-md mx-auto w-full">
           <div className="mb-8">
-            <h1 className="text-4xl mb-2 text-gray-900 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Z-Inspection Platform</h1>
+            <h1 className="text-4xl mb-2 text-gray-900 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Ethical AI Analysis Platform</h1>
             <p className="text-xl text-gray-900 font-medium">Ethical AI Evaluation System</p>
           </div>
 
@@ -400,7 +400,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           {/* Tagline */}
           <h2 className="text-4xl mb-4 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Ethical AI Evaluation</h2>
           <p className="text-xl opacity-90 mb-10 leading-relaxed">
-            Comprehensive platform for conducting Z-Inspection methodology on AI systems.
+            Comprehensive platform for conducting Ethical AI Analysis methodology on AI systems.
           </p>
 
           {/* Feature Cards */}

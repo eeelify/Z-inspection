@@ -11,7 +11,7 @@
 
 module.exports = {
     version: 'erc-v1',
-    description: 'Z-Inspection ERC Thresholds - January 2026',
+    description: 'Ethical AI Analysis ERC Thresholds - January 2026',
 
     scale: {
         min: 0,

@@ -1836,8 +1836,8 @@ async function buildReportMetrics(projectId, questionnaireKey) {
         console.warn(`⚠️  Tension review state chart failed (skipped): ${reviewStateError.message}`);
       }
 
-      // TASK 7: Evidence coverage and evidence type charts REMOVED (invalid/misleading per Z-Inspection methodology)
-      // These charts are not aligned with Z-Inspection methodology and are weak/misleading
+      // TASK 7: Evidence coverage and evidence type charts REMOVED (invalid/misleading per Ethical AI Analysis methodology)
+      // These charts are not aligned with Ethical AI Analysis methodology and are weak/misleading
 
       if (tensionsList.length > 0) {
         try {

@@ -41,7 +41,7 @@ async function validateProjectForReporting(projectId) {
     if (ethicalExpertCount < ETHICAL_EXPERT_CARDINALITY.min) {
         validityStatus = 'invalid_evaluator_configuration';
         errors.push(`Expected at least ${ETHICAL_EXPERT_CARDINALITY.min} ethical-expert, found ${ethicalExpertCount}`);
-        errors.push('Z-Inspection methodology requires exactly ONE ethical-expert per project');
+        errors.push('Ethical AI Analysis methodology requires exactly ONE ethical-expert per project');
     } else if (ethicalExpertCount > ETHICAL_EXPERT_CARDINALITY.max) {
         validityStatus = 'invalid_evaluator_configuration';
         errors.push(`Expected exactly ${ETHICAL_EXPERT_CARDINALITY.max} ethical-expert, found ${ethicalExpertCount}`);

@@ -48,7 +48,7 @@ const User = mongoose.model('User', UserSchema);
 
 async function diagnose() {
   try {
-    console.log('🔍 Z-Inspection Use Case Diagnostics\n');
+    console.log('🔍 Ethical AI Analysis Use Case Diagnostics\n');
     console.log('Connecting to MongoDB...');
     
     const mongoUri = process.env.MONGO_URI;

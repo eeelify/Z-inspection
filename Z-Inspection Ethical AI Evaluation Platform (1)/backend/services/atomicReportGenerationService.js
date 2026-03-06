@@ -189,8 +189,8 @@ async function generateWordFromHtml(htmlContent, outputPath) {
       fontSize: 22, // 11pt (size is in half-points)
       lineHeight: 360, // 1.5 line spacing
       title: 'Ethical AI Assessment Report',
-      subject: 'Z-Inspection Report',
-      creator: 'Z-Inspection Platform',
+      subject: 'Ethical AI Analysis Report',
+      creator: 'Ethical AI Analysis Platform',
       keywords: ['ethical AI', 'assessment', 'governance'],
       description: 'Enterprise-grade ethical assessment report'
     });
@@ -233,7 +233,7 @@ async function generateWordFallback(htmlContent, outputPath) {
       .trim();
 
     const doc = new Document({
-      creator: 'Z-Inspection Platform',
+      creator: 'Ethical AI Analysis Platform',
       title: 'Ethical Assessment Report',
       description: 'Ethical AI Assessment Report',
       sections: [

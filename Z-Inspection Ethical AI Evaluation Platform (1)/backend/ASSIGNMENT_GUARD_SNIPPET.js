@@ -47,7 +47,7 @@ async function exampleAssignmentEndpoint(req, res) {
                 return res.status(400).json({
                     success: false,
                     error: 'ROLE_CARDINALITY_EXCEEDED',
-                    message: `Only ${ETHICAL_EXPERT_CARDINALITY.max} ethical-expert allowed per project (Z-Inspection methodology requirement)`,
+                    message: `Only ${ETHICAL_EXPERT_CARDINALITY.max} ethical-expert allowed per project (Ethical AI Analysis methodology requirement)`,
                     details: {
                         role: 'ethical-expert',
                         currentCount: existingCount,

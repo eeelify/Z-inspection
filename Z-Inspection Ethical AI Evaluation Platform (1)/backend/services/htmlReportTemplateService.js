@@ -456,7 +456,7 @@ function generateHTMLReport(reportMetrics, geminiNarrative, chartImages = {}, op
         ` : ''}
       </div>
 
-      <p>This report matches the Z-Inspection methodology for ethical AI evaluation.</p>
+      <p>This report matches the Ethical AI Analysis methodology for ethical AI evaluation.</p>
       
       <h3>Risk Calculation</h3>
       <ul>

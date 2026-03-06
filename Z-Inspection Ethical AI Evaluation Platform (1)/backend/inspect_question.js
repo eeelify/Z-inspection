@@ -5,7 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 async function inspect() {
     try {
-        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/z-inspection';
+        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
         await mongoose.connect(mongoUri.replace(/&appName=[^&]*/i, ''));
 
         const Question = require('./models/question');

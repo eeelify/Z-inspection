@@ -9,7 +9,7 @@ const resend = (Resend && process.env.RESEND_API_KEY) ? new Resend(process.env.R
  * Get the from email address
  */
 function getFromEmail() {
-  return process.env.EMAIL_FROM || 'Z-Inspection <no-reply@resend.dev>';
+  return process.env.EMAIL_FROM || 'Ethical AI Analysis <no-reply@resend.dev>';
 }
 
 /**
@@ -32,13 +32,13 @@ async function sendVerificationEmail(to, code) {
   console.log('[MAIL] Resend sending to:', to);
 
   const from = getFromEmail();
-  const subject = 'Your verification code for Z-Inspection Platform';
+  const subject = 'Your verification code for Ethical AI Analysis Platform';
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <h2 style="color: #1F2937; margin-bottom: 20px;">Verification Code</h2>
       <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-        Your verification code for Z-Inspection Platform is:
+        Your verification code for Ethical AI Analysis Platform is:
       </p>
       <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
         <p style="font-size: 32px; font-weight: bold; color: #1F2937; margin: 0; letter-spacing: 4px;">
@@ -50,7 +50,7 @@ async function sendVerificationEmail(to, code) {
       </p>
       <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
       <p style="color: #9CA3AF; font-size: 12px;">
-        This is an automated message from Z-Inspection Platform.
+        This is an automated message from Ethical AI Analysis Platform.
       </p>
     </div>
   `;
@@ -124,7 +124,7 @@ async function sendWelcomeEmail(to, name, role) {
   console.log(`[WELCOME] sending welcome mail to ${to} role=${role} attachment=${attachmentFilename}`);
 
   const from = getFromEmail();
-  const subject = 'Welcome to Z-Inspection Platform';
+  const subject = 'Welcome to Ethical AI Analysis Platform';
 
   // Build attachments array if enabled and guide exists
   let attachments = [];
@@ -149,15 +149,15 @@ async function sendWelcomeEmail(to, name, role) {
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <h2 style="color: #1F2937; margin-bottom: 20px;">Welcome!</h2>
       <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hello ${name},</p>
-      <p style="color: #374151; font-size: 16px; line-height: 1.6;">Welcome to Z-Inspection Ethical AI Evaluation Platform.</p>
+      <p style="color: #374151; font-size: 16px; line-height: 1.6;">Welcome to Ethical AI Analysis Ethical AI Evaluation Platform.</p>
       <p style="color: #374151; font-size: 16px; line-height: 1.6;">You can now sign in with your account and start adding your projects.</p>
       ${attachments.length > 0 ? '<p style="color: #374151; font-size: 16px; line-height: 1.6;">Attached is your role-specific User Guide (PDF).</p>' : ''}
       <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
-      <p style="color: #9CA3AF; font-size: 12px;">This is an automated message from Z-Inspection Platform.</p>
+      <p style="color: #9CA3AF; font-size: 12px;">This is an automated message from Ethical AI Analysis Platform.</p>
     </div>
   `;
 
-  const text = `Hello ${name},\n\nWelcome to Z-Inspection Ethical AI Evaluation Platform.\n\nYou can now sign in with your account and start adding your projects.${attachments.length > 0 ? '\n\nAttached is your role-specific User Guide (PDF).' : ''}\n\nThis is an automated message from Z-Inspection Platform.`;
+  const text = `Hello ${name},\n\nWelcome to Ethical AI Analysis Ethical AI Evaluation Platform.\n\nYou can now sign in with your account and start adding your projects.${attachments.length > 0 ? '\n\nAttached is your role-specific User Guide (PDF).' : ''}\n\nThis is an automated message from Ethical AI Analysis Platform.`;
 
   try {
     const emailPayload = {
@@ -199,13 +199,13 @@ async function sendPasswordResetEmail(to, resetLink) {
   }
 
   const from = getFromEmail();
-  const subject = 'Password Reset Request — Z-Inspection Platform';
+  const subject = 'Password Reset Request — Ethical AI Analysis Platform';
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <h2 style="color: #1F2937; margin-bottom: 20px;">Password Reset</h2>
       <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-        We received a request to reset your password for the Z-Inspection Platform.
+        We received a request to reset your password for the Ethical AI Analysis Platform.
       </p>
       <div style="margin: 30px 0; text-align: center;">
         <a href="${resetLink}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
@@ -221,7 +221,7 @@ async function sendPasswordResetEmail(to, resetLink) {
       </p>
       <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 30px 0;">
       <p style="color: #9CA3AF; font-size: 12px;">
-        This is an automated message from Z-Inspection Platform.
+        This is an automated message from Ethical AI Analysis Platform.
       </p>
     </div>
   `;

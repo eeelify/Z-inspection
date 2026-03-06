@@ -7,7 +7,7 @@ const PROJECT_ID = '6964d4e9d7a6755353c39e4b';
 
 async function diagnose() {
     try {
-        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/z-inspection';
+        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
         await mongoose.connect(mongoUri.replace(/&appName=[^&]*/i, ''));
 
         const Score = require('./models/score');

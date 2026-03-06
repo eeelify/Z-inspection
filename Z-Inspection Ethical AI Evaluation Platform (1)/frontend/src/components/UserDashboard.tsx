@@ -820,7 +820,7 @@ export function UserDashboard({
             {/* Left */}
             <div className="flex items-center space-x-6">
               <h1 className="text-xl font-semibold text-gray-900">
-                Z-Inspection Platform
+                Ethical AI Analysis Platform
               </h1>
 
             </div>

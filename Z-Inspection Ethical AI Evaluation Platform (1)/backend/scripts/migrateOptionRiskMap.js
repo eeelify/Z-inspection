@@ -28,7 +28,7 @@ const isValidObjectId = (id) => {
 async function migrateOptionRiskMap() {
   try {
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/z-inspection', {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ethical-ai-analysis', {
       useNewUrlParser: true,
       useUnifiedTopology: true
     });

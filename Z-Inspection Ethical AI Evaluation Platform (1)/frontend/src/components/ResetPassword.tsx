@@ -80,7 +80,7 @@ export function ResetPassword({ onBackToLogin }: ResetPasswordProps) {
             <div className="w-full flex flex-col justify-center px-12 bg-white lg:w-1/2 mx-auto">
                 <div className="max-w-md mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-4xl mb-2 text-gray-900 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Z-Inspection Platform</h1>
+                        <h1 className="text-4xl mb-2 text-gray-900 font-black tracking-tight" style={{ fontWeight: 900, fontFamily: 'Inter, sans-serif' }}>Ethical AI Analysis Platform</h1>
                         <p className="text-xl text-gray-900 font-medium">Set New Password</p>
                     </div>
 

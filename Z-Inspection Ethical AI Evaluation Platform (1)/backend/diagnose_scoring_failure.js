@@ -8,7 +8,7 @@ const PROJECT_ID = '6964d4e9d7a6755353c39e4b'; // "AI DESTEKLİ CV TARAMA SİSTE
 
 async function diagnose() {
     try {
-        const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/z-inspection';
+        const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/ethical-ai-analysis';
         await mongoose.connect(mongoUri.replace(/&appName=[^&]*/i, ''));
         console.log('✅ Connected to MongoDB');
 

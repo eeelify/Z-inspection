@@ -143,7 +143,7 @@ async function generateDOCXFromMarkdown(markdownContent, title = "Report") {
   const { paragraphs, numberingRef } = mdToParagraphs(markdownContent);
 
   const doc = new Document({
-    creator: "Z-Inspection",
+    creator: "Ethical AI Analysis",
     title,
     numbering: {
       config: [

@@ -21,7 +21,7 @@ const roleContent = {
   'ethical-expert': {
     title: 'Ethical Expert Guidelines',
     disclaimer:
-      'As an Ethical Expert on the Z-Inspection® platform, you contribute to the independent evaluation of AI systems from an ethical, legal and societal perspective. Your role requires a high level of integrity, impartiality and awareness of potential harms.',
+      'As an Ethical Expert on the Ethical AI Analysis platform, you contribute to the independent evaluation of AI systems from an ethical, legal and societal perspective. Your role requires a high level of integrity, impartiality and awareness of potential harms.',
     responsibilities: [
       'Review the ethical alignment of AI systems with relevant principles, norms and values',
       'Assess potential unfairness, bias and discrimination in data, models and system behaviour',
@@ -32,7 +32,7 @@ const roleContent = {
   'medical-expert': {
     title: 'Medical Expert Guidelines',
     disclaimer:
-      'As a Medical Expert on the Z-Inspection® platform, you contribute to the independent evaluation of AI systems used in healthcare and medicine. Your role requires clinical judgement, ethical awareness and patient-centred thinking.',
+      'As a Medical Expert on the Ethical AI Analysis platform, you contribute to the independent evaluation of AI systems used in healthcare and medicine. Your role requires clinical judgement, ethical awareness and patient-centred thinking.',
     responsibilities: [
       'Review compliance with medical ethics, clinical standards and patient safety requirements',
       'Assess clinical validity, reliability and limitations of the AI system in its intended setting',
@@ -43,7 +43,7 @@ const roleContent = {
   'use-case-owner': {
     title: 'Use Case Owner Guidelines',
     disclaimer:
-      'As a Use Case Owner on the Z-Inspection® platform, you provide contextual and domain-specific knowledge regarding the AI system and its real-world deployment environment.',
+      'As a Use Case Owner on the Ethical AI Analysis platform, you provide contextual and domain-specific knowledge regarding the AI system and its real-world deployment environment.',
     responsibilities: [
       'Provide accurate and complete information about the use case, stakeholders and context of use',
       'Review claims made about the AI system and help clarify expected outcomes and limitations',
@@ -54,7 +54,7 @@ const roleContent = {
   'education-expert': {
     title: 'Education Expert Guidelines',
     disclaimer:
-      'As an Education Expert on the Z-Inspection® platform, you evaluate AI systems that affect learning, teaching and educational environments.',
+      'As an Education Expert on the Ethical AI Analysis platform, you evaluate AI systems that affect learning, teaching and educational environments.',
     responsibilities: [
       'Review educational impact, learning outcomes and pedagogical soundness of the AI system',
       'Assess accessibility, inclusiveness and potential for reinforcing educational inequalities',
@@ -65,7 +65,7 @@ const roleContent = {
   'technical-expert': {
     title: 'Technical Expert Guidelines',
     disclaimer:
-      'As a Technical Expert on the Z-Inspection® platform, you are responsible for assessing the technical design, implementation and robustness of AI systems.',
+      'As a Technical Expert on the Ethical AI Analysis platform, you are responsible for assessing the technical design, implementation and robustness of AI systems.',
     responsibilities: [
       'Review system architecture, data pipelines, model design and deployment setup',
       'Assess security, privacy-by-design measures and resilience against failures or attacks',
@@ -76,7 +76,7 @@ const roleContent = {
   'legal-expert': {
     title: 'Legal Expert Guidelines',
     disclaimer:
-      'As a Legal Expert on the Z-Inspection® platform, you assess the compliance of AI systems with applicable laws, regulations and contractual obligations.',
+      'As a Legal Expert on the Ethical AI Analysis platform, you assess the compliance of AI systems with applicable laws, regulations and contractual obligations.',
     responsibilities: [
       'Review compliance with data protection, privacy and information-security laws',
       'Assess liability, accountability and allocation of responsibilities among actors',
@@ -88,9 +88,9 @@ const roleContent = {
 
 // Generic fallback if role content is not found
 const defaultContent = {
-  title: 'Z-Inspection® Platform Guidelines',
+  title: 'Ethical AI Analysis Platform Guidelines',
   disclaimer:
-    'You will contribute to the independent evaluation of AI systems on the Z-Inspection® platform. Please review the responsibilities below before proceeding.',
+    'You will contribute to the independent evaluation of AI systems on the Ethical AI Analysis platform. Please review the responsibilities below before proceeding.',
   responsibilities: [
     'Provide objective, well-reasoned and transparent assessments',
     'Respect data protection, privacy and confidentiality obligations at all times',
@@ -134,7 +134,7 @@ export function PreconditionApproval({
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back
           </button>
-          <h1 className="text-xl text-gray-900">Z-Inspection® Platform</h1>
+          <h1 className="text-xl text-gray-900">Ethical AI Analysis Platform</h1>
         </div>
       </div>
 
@@ -178,13 +178,13 @@ export function PreconditionApproval({
               </ul>
             </div>
 
-            {/* Conflict of Interest section (Z-Inspection rationale) */}
+            {/* Conflict of Interest section (Ethical AI Analysis rationale) */}
             <div className="border border-gray-200 rounded-lg p-5 bg-gray-50">
               <h3 className="text-lg font-semibold mb-3 text-gray-900">
                 Conflict of Interest and Impartiality Declaration
               </h3>
               <p className="text-gray-700 text-sm leading-relaxed mb-4">
-                The Z-Inspection® methodology requires independence and impartiality of inspectors. 
+                The Ethical AI Analysis methodology requires independence and impartiality of inspectors. 
                 All members of the inspection team must ensure that their participation does not 
                 compromise the objectivity, fairness, and integrity of the assessment process.
               </p>
@@ -205,7 +205,7 @@ export function PreconditionApproval({
               </ol>
 
               <p className="text-gray-700 text-sm leading-relaxed mb-4">
-                Within the Z-Inspection® methodology, the assessment of these three conditions 
+                Within the Ethical AI Analysis methodology, the assessment of these three conditions 
                 determines whether the inspection can proceed:
               </p>
               <ul className="list-disc ml-5 space-y-1 text-sm text-gray-700 mb-4">
@@ -285,7 +285,7 @@ export function PreconditionApproval({
                     evaluation of AI systems. All contributions should be made
                     with professional integrity, independence and respect for
                     affected individuals and communities. Your declarations and
-                    assessments form part of the formal Z-Inspection®
+                    assessments form part of the formal Ethical AI Analysis
                     documentation.
                   </p>
                 </div>
@@ -296,7 +296,7 @@ export function PreconditionApproval({
             <div className="flex items-center justify-between pt-2">
               <div className="text-xs text-gray-600 max-w-md">
                 By continuing, you formally confirm the above declarations and
-                agree to follow the Z-Inspection® methodology and its principles
+                agree to follow the Ethical AI Analysis methodology and its principles
                 of independence, impartiality and responsibility.
               </div>
               <button
