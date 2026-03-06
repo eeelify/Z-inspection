@@ -1322,25 +1322,37 @@ exports.generateReport = async (req, res) => {
 exports.getAllReports = async (req, res) => {
   try {
     const { projectId, status } = req.query;
-    const { roleCategory } = await loadRequestUser(req);
+    const { roleCategory, userIdObj } = await loadRequestUser(req);
     if (roleCategory !== 'admin') {
       return res.status(403).json({ error: 'Only Admin can list all reports.' });
     }
 
     const query = {};
 
-    // Explicitly do NOT filter by user for admins (as per Clean Patch requirements)
-    if (roleCategory === 'admin') {
-      console.log('🔓 Admin detected for getAllReports - listing all reports system-wide');
-      console.log('   Query Params:', req.query);
-      console.log('   User ID:', req.user ? req.user._id : 'N/A');
-    }
+    // For Admin: Ensure we only load reports for projects they created or are assigned to
+    const Project = mongoose.model('Project');
+    const userIdStr = String(userIdObj);
+    const visibleProjects = await Project.find({
+      $or: [
+        { assignedUsers: userIdObj },
+        { createdByAdmin: userIdObj },
+        { createdByAdmin: userIdStr }
+      ]
+    }).select('_id').lean();
+
+    const visibleProjectIds = visibleProjects.map(p => p._id);
 
     if (projectId) {
-      query.projectId = isValidObjectId(projectId)
-        ? new mongoose.Types.ObjectId(projectId)
-        : projectId;
+      const parsedProjectId = isValidObjectId(projectId) ? new mongoose.Types.ObjectId(projectId) : projectId;
+      // Force verify that the specific project is visible to this admin
+      if (!visibleProjectIds.some(id => String(id) === String(parsedProjectId))) {
+        return res.json([]); // The admin cannot view this project's reports
+      }
+      query.projectId = parsedProjectId;
+    } else {
+      query.projectId = { $in: visibleProjectIds };
     }
+
     if (status) {
       query.status = status;
     }
@@ -1564,7 +1576,8 @@ exports.deleteReport = async (req, res) => {
  */
 exports.getMyReports = async (req, res) => {
   try {
-    const { userIdObj } = await loadRequestUser(req);
+    const { userIdObj, roleCategory } = await loadRequestUser(req);
+    const userIdStr = String(userIdObj);
 
     // Find all projects where user is assigned (ProjectAssignment is the primary source)
     let projectIds = [];
@@ -1579,8 +1592,20 @@ exports.getMyReports = async (req, res) => {
       // ignore
     }
 
-    // Fallback: Project.assignedUsers
-    const projects = await Project.find({ assignedUsers: userIdObj }).select('_id title').lean();
+    // Determine query logic based on role
+    let projectQuery = { assignedUsers: userIdObj };
+    if (roleCategory === 'admin') {
+      projectQuery = {
+        $or: [
+          { assignedUsers: userIdObj }, // Projects they are assigned to
+          { createdByAdmin: userIdObj },
+          { createdByAdmin: userIdStr } // String fallback
+        ]
+      };
+    }
+
+    // Discover visible projects
+    const projects = await Project.find(projectQuery).select('_id title').lean();
     projectIds = Array.from(new Set([
       ...projectIds.map(String),
       ...projects.map(p => String(p._id))

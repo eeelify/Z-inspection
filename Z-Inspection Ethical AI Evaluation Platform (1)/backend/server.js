@@ -570,13 +570,16 @@ app.post('/api/use-case-questions/seed', async (req, res) => {
 // Use Cases - Optimize: don't fetch answers for list view
 app.get('/api/use-cases', async (req, res) => {
   try {
-    const { ownerId } = req.query;
+    const { ownerId, adminId } = req.query;
     let query = UseCase.find();
 
     // Filter by ownerId if provided (for performance)
     if (ownerId) {
       query = query.where('ownerId').equals(ownerId);
     }
+
+    // If an admin requests this, they need to see ALL use cases to create projects from them.
+    // The visual separation in the Admin Dashboard "Use Case Assignments" tab is handled strictly on the frontend.
 
     const useCases = await query
       .select('-answers -extendedInfo -supportingFiles.data') // Don't fetch file data or answers for list
@@ -636,6 +639,121 @@ app.delete('/api/use-cases/:id', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// NEW ARCHITECTURE: Assignments are tracked per-Project, not per-UseCase.
+// -------------------------------------------------------------
+app.put('/api/projects/:id/assign', async (req, res) => {
+  try {
+    const { assignedExperts = [] } = req.body;
+    const projectId = req.params.id;
+
+    if (!isValidObjectId(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Validate and filter assigned experts
+    let validAssignedExperts = [];
+    if (assignedExperts && Array.isArray(assignedExperts) && assignedExperts.length > 0) {
+      validAssignedExperts = assignedExperts
+        .map(id => {
+          if (!id) return null;
+          const idStr = id.toString();
+          return isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : null;
+        })
+        .filter(Boolean);
+
+      // Verify these are actual expert users (not admins)
+      if (validAssignedExperts.length > 0) {
+        const experts = await User.find({
+          _id: { $in: validAssignedExperts },
+          role: { $ne: 'admin' }
+        }).select('_id').lean();
+        validAssignedExperts = experts.map(e => e._id);
+      }
+    }
+
+    // Include the original Use Case Owner so they don't lose access
+    const usersToAssign = new Set();
+    const UseCase = mongoose.model('UseCase');
+    if (project.useCase) {
+      const uc = await UseCase.findById(project.useCase).select('ownerId').lean();
+      if (uc?.ownerId) {
+        usersToAssign.add(uc.ownerId.toString());
+      }
+    }
+
+    validAssignedExperts.forEach(expertId => {
+      usersToAssign.add(expertId.toString());
+    });
+
+    const newAssignedUsers = Array.from(usersToAssign).map(id => new mongoose.Types.ObjectId(id));
+
+    // Evaluate Project status
+    // A fresh project usually starts 'planning'. If it has experts, we consider it 'ongoing'.
+    let newStatus = project.status;
+    if (validAssignedExperts.length > 0 && (project.status === 'planning' || !project.status)) {
+      newStatus = 'ongoing';
+    } else if (validAssignedExperts.length === 0 && project.status === 'ongoing') {
+      newStatus = 'planning'; // Or 'created', depending on schema
+    }
+
+    // Update Project Document
+    const updatedProject = await Project.findByIdAndUpdate(
+      projectId,
+      { assignedUsers: newAssignedUsers, status: newStatus },
+      { new: true }
+    );
+
+    // Synchronize ProjectAssignment Collection
+    const ProjectAssignment = require('./models/projectAssignment');
+    const { calculateProjectProgress } = require('./services/evaluationService');
+
+    // Get currently assigned experts (ignoring the owner for the sake of task assignments)
+    const existingAssignmentsObj = await ProjectAssignment.find({ projectId }).lean();
+    const existingExpertIdsStrings = existingAssignmentsObj.map(pa => pa.userId.toString());
+
+    const newExpertIdsStrings = validAssignedExperts.map(id => id.toString());
+
+    // 1. Remove assignments for users who are no longer in validAssignedExperts
+    for (const existingId of existingExpertIdsStrings) {
+      if (!newExpertIdsStrings.includes(existingId)) {
+        // Did not check if it was UseCaseOwner because Owner shouldn't have an expert assignment record anyway, 
+        // but just in case, we only strip them if they were purely removed from the "experts" UI pool.
+        await ProjectAssignment.findOneAndDelete({ projectId: updatedProject._id, userId: existingId });
+      }
+    }
+
+    // 2. Create assignments for newly added users
+    for (const newId of newExpertIdsStrings) {
+      if (!existingExpertIdsStrings.includes(newId)) {
+        await ProjectAssignment.create({
+          projectId: updatedProject._id,
+          userId: newId,
+          status: 'assigned'
+        });
+      }
+    }
+
+    // Optional: Re-run global eval metrics
+    try {
+      await calculateProjectProgress(projectId);
+    } catch (err) {
+      console.warn('Progress calculation ignoring:', err);
+    }
+
+    res.json({ success: true, project: updatedProject });
+
+  } catch (err) {
+    console.error("Error updating project assignments:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -4639,17 +4757,26 @@ app.get('/api/projects', async (req, res) => {
             { createdByAdmin: new mongoose.Types.ObjectId(userId) },
             { createdByAdmin: userId } // string fallback for older records
           ];
+        } else {
+          // Non-admins: only see projects where they are assigned (or hide if needed)
+          console.log('👤 Non-admin user detected - seeing assigned/visible projects');
+          // For experts / owners, they should only see projects they are assigned to
+          query.assignedUsers = {
+            $in: [new mongoose.Types.ObjectId(userId), userId]
+          };
+
+          // Filter out projects hidden for this user (soft delete)
+          query.$and = [
+            {
+              $or: [
+                { hiddenForUsers: { $exists: false } },
+                { hiddenForUsers: { $nin: [new mongoose.Types.ObjectId(userId), userId] } }
+              ]
+            }
+          ];
         }
       } catch (err) {
         console.warn('Could not verify user role:', err.message);
-      }
-
-      // Filter out projects hidden for this user (soft delete)
-      if (!query.$or) {
-        query.$or = [
-          { hiddenForUsers: { $exists: false } },
-          { hiddenForUsers: { $nin: [new mongoose.Types.ObjectId(userId)] } }
-        ];
       }
     }
 
@@ -4893,10 +5020,10 @@ app.post('/api/projects', async (req, res) => {
           req.body.assignedUsers = Array.from(new Set([...currentAssigned, ownerId]));
         }
 
-        // Business rule: once a use case is linked to a project, move it from "assigned" to "in-review"
-        // (do not override completed/in-review).
-        if (uc?.status === 'assigned') {
-          await UseCase.findByIdAndUpdate(req.body.useCase, { status: 'in-review', updatedAt: new Date() });
+        // Business rule: Once a usecase is linked to a project, it is no longer UNASSIGNED in the global pool.
+        // We set it to 'ASSIGNED' (claimed) so that it shows up properly, but the experts are managed per-project.
+        if (!uc?.status || uc?.status.toUpperCase() === 'UNASSIGNED') {
+          await UseCase.findByIdAndUpdate(req.body.useCase, { status: 'ASSIGNED', updatedAt: new Date() });
         }
       } catch {
         // ignore; proceed with provided payload

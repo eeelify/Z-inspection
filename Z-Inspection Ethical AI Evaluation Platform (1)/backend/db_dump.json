@@ -1,0 +1,38 @@
+{
+  "otherAdminsProjects": [
+    {
+      "_id": "6985dc9a9ff7bb6bcd9d528e",
+      "useCase": "6985befe9ff7bb6bcd9d3e0a"
+    },
+    {
+      "_id": "69a5f53ed08f4b61965c27b4",
+      "useCase": "69a5f515d08f4b61965c2467"
+    },
+    {
+      "_id": "69aa0e84b3198d47f262b089",
+      "useCase": "69a5f515d08f4b61965c2467"
+    }
+  ],
+  "claimedByOthers": [
+    "6985befe9ff7bb6bcd9d3e0a",
+    "69a5f515d08f4b61965c2467",
+    "69a5f515d08f4b61965c2467"
+  ],
+  "query": {
+    "_id": {
+      "$nin": [
+        "6985befe9ff7bb6bcd9d3e0a",
+        "69a5f515d08f4b61965c2467",
+        "69a5f515d08f4b61965c2467"
+      ]
+    }
+  },
+  "useCasesLength": 1,
+  "useCases": [
+    {
+      "id": "69643dced7a6755353c3991a",
+      "title": "AI DESTEKLİ CV TARAMA SİSTEMİ",
+      "status": "ASSIGNED"
+    }
+  ]
+}
