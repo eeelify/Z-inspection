@@ -56,13 +56,13 @@ function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
-        // Only send userId for admin users (for project filtering)
-        const isAdmin = currentUser?.role?.toLowerCase().includes('admin');
-        const userId = isAdmin ? (currentUser?.id || (currentUser as any)?._id) : null;
+        // Pass userId for all users (for backend strict project filtering)
+        const userId = currentUser?.id || (currentUser as any)?._id;
+        const useCasesQuery = currentUser?.role === 'admin' ? `?adminId=${userId}` : (userId ? `?ownerId=${userId}` : '');
         const [projectsRes, usersRes, useCasesRes] = await Promise.all([
           fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`), { signal: controller.signal }),
           fetch(api('/api/users'), { signal: controller.signal }),
-          fetch(api('/api/use-cases'), { signal: controller.signal })
+          fetch(api(`/api/use-cases${useCasesQuery}`), { signal: controller.signal })
         ]);
 
         clearTimeout(timeoutId);
@@ -131,9 +131,8 @@ function App() {
     // Periodically refresh projects (every 10 seconds) to catch assignment updates
     const refreshInterval = setInterval(() => {
       if (currentUser) {
-        // Only send userId for admin users (for project filtering)
-        const isAdmin = currentUser?.role?.toLowerCase().includes('admin');
-        const userId = isAdmin ? (currentUser?.id || (currentUser as any)?._id) : null;
+        // Pass userId for all users (for strict backend project filtering)
+        const userId = currentUser?.id || (currentUser as any)?._id;
         fetch(api(`/api/projects${userId ? `?userId=${userId}` : ''}`))
           .then(res => res.ok ? res.json() : null)
           .then(data => {

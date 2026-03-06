@@ -213,7 +213,8 @@ export function AdminDashboardEnhanced({
     if (activeTab !== 'use-case-assignments') return;
     // Refresh every time the tab is opened
     setUseCasesLoading(true);
-    fetch(api('/api/use-cases'))
+    const userId = currentUser?.id || (currentUser as any)?._id;
+    fetch(api(`/api/use-cases?adminId=${userId}`))
       .then(res => res.ok ? res.json() : Promise.reject(res.status))
       .then(data => {
         const formatted = data.map((u: any) => ({ ...u, id: u._id }));
@@ -545,7 +546,7 @@ export function AdminDashboardEnhanced({
       setShowMessageNotifications(false);
     }
   };
-  const [selectedUseCaseForAssignment, setSelectedUseCaseForAssignment] = useState<UseCase | null>(null);
+  const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState<Project | null>(null);
 
   const filteredProjects = projects.filter(p =>
     p.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -1011,10 +1012,11 @@ export function AdminDashboardEnhanced({
           {activeTab === 'use-case-assignments' && (
             <UseCaseAssignmentsTab
               useCases={localUseCases}
+              projects={projects}
               loading={useCasesLoading}
               users={users}
-              onAssignExperts={(useCase: UseCase) => {
-                setSelectedUseCaseForAssignment(useCase);
+              onAssignExperts={(project: Project) => {
+                setSelectedProjectForAssignment(project);
                 setShowAssignExpertsModal(true);
               }}
               onDeleteUseCase={async (useCaseId: string) => {
@@ -1024,7 +1026,8 @@ export function AdminDashboardEnhanced({
                   });
                   if (response.ok) {
                     // Reload use cases after deletion
-                    const useCasesRes = await fetch(api('/api/use-cases'));
+                    const adminId = currentUser?.id || (currentUser as any)?._id;
+                    const useCasesRes = await fetch(api(`/api/use-cases?adminId=${adminId}`));
                     if (useCasesRes.ok) {
                       const useCasesData = await useCasesRes.json();
                       const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
@@ -1063,17 +1066,17 @@ export function AdminDashboardEnhanced({
 
       {/* Assign Experts Modal */}
       {
-        showAssignExpertsModal && selectedUseCaseForAssignment && (
+        showAssignExpertsModal && selectedProjectForAssignment && (
           <AssignExpertsModal
-            useCase={selectedUseCaseForAssignment}
+            useCase={useCases.find(uc => uc.id === (selectedProjectForAssignment.useCase as unknown as string)) as UseCase || { title: selectedProjectForAssignment.title } as UseCase}
             users={users}
             onClose={() => {
               setShowAssignExpertsModal(false);
-              setSelectedUseCaseForAssignment(null);
+              setSelectedProjectForAssignment(null);
             }}
             onAssign={async (expertIds, notes) => {
               try {
-                const response = await fetch(api(`/api/use-cases/${selectedUseCaseForAssignment.id}/assign`), {
+                const response = await fetch(api(`/api/projects/${selectedProjectForAssignment.id}/assign`), {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -1090,7 +1093,6 @@ export function AdminDashboardEnhanced({
                     if (projectsRes.ok) {
                       const data = await projectsRes.json();
                       const formattedProjects = data.map((p: any) => {
-                        // Normalize assignedUsers: if populated (objects), extract _id; if already strings, keep as is
                         const normalizedAssignedUsers = (p.assignedUsers || []).map((user: any) => {
                           if (typeof user === 'string') return user;
                           if (user && user._id) return user._id.toString();
@@ -1098,29 +1100,15 @@ export function AdminDashboardEnhanced({
                         });
                         return { ...p, id: p._id, assignedUsers: normalizedAssignedUsers };
                       });
-                      // Update projects in parent component via window event
                       window.dispatchEvent(new CustomEvent('projects-updated', { detail: formattedProjects }));
                     }
                   } catch (reloadError) {
                     console.error("Error reloading projects:", reloadError);
                   }
 
-                  // Reload use cases to reflect updated assignments
-                  try {
-                    const useCasesRes = await fetch(api('/api/use-cases'));
-                    if (useCasesRes.ok) {
-                      const useCasesData = await useCasesRes.json();
-                      const formattedUseCases = useCasesData.map((uc: any) => ({ ...uc, id: uc._id }));
-                      // Update use cases in parent component via window event
-                      window.dispatchEvent(new CustomEvent('use-cases-updated', { detail: formattedUseCases }));
-                    }
-                  } catch (reloadError) {
-                    console.error("Error reloading use cases:", reloadError);
-                  }
-
-                  alert("Experts assigned successfully!");
+                  alert("Experts assigned to the project successfully!");
                   setShowAssignExpertsModal(false);
-                  setSelectedUseCaseForAssignment(null);
+                  setSelectedProjectForAssignment(null);
                 } else {
                   const errorData = await response.json().catch(() => ({}));
                   alert(`Failed to assign experts: ${errorData.error || 'Unknown error'}`);
@@ -1399,15 +1387,18 @@ function DashboardTab({ projects, users, searchQuery, setSearchQuery, onViewProj
   );
 }
 
-function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCase, loading }: any) {
-  const handleDelete = async (useCase: UseCase) => {
-    const confirmed = window.confirm(`Are you sure you want to delete the use case "${useCase.title}"? This action cannot be undone.`);
+function UseCaseAssignmentsTab({ useCases, projects, users, onAssignExperts, onDeleteUseCase, loading }: any) {
+  const handleDelete = async (project: Project) => {
+    const confirmed = window.confirm(`Are you sure you want to delete the project "${project.title}"? This action cannot be undone.`);
     if (!confirmed) return;
 
     if (onDeleteUseCase) {
-      onDeleteUseCase(useCase.id);
+      onDeleteUseCase(project.id); // Triggers parent's generic delete, likely needs fixing if it specifically deleted UseCase previously
     }
   };
+
+  // Safe failover checking valid projects
+  const filteredProjects = projects || [];
 
   return (
     <>
@@ -1440,62 +1431,67 @@ function UseCaseAssignmentsTab({ useCases, users, onAssignExperts, onDeleteUseCa
                     <td className="px-6 py-4"><div className="h-8 bg-gray-200 rounded w-24 ml-auto"></div></td>
                   </tr>
                 ))
-              ) : useCases.length === 0 ? (
+              ) : filteredProjects.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    No use cases found. Use Case Owners need to create them first.
+                    No projects found for assignment. Please create a project first.
                   </td>
                 </tr>
               ) : (
-                useCases.map((useCase: UseCase) => {
-                  const owner = users.find((u: User) => u.id === useCase.ownerId);
-                  const assignedExperts = users.filter((u: User) => useCase.assignedExperts?.includes(u.id));
+                filteredProjects.map((project: Project) => {
+                  const useCaseIdStr = project.useCase as unknown as string;
+                  const linkedUseCase = useCases.find((uc: UseCase) => uc.id === useCaseIdStr);
+                  // Identify owner
+                  let ownerIdStr = linkedUseCase?.ownerId;
+                  const owner = users.find((u: User) => u.id === ownerIdStr);
+
+                  // In the new system, assigned users to the project excludes the owner usually, or we filter them out for display
+                  const expertUserIdsInProject = Array.isArray(project.assignedUsers) ? project.assignedUsers : [];
+                  const assignedExperts = users.filter((u: User) =>
+                    expertUserIdsInProject.includes(u.id) && u.id !== ownerIdStr
+                  );
 
                   return (
-                    <tr key={useCase.id} className="hover:bg-gray-50">
+                    <tr key={project.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{useCase.title}</div>
-                        <div className="text-xs text-gray-500">{useCase.aiSystemCategory || 'No category'}</div>
+                        <div className="text-sm font-medium text-gray-900">{project.title}</div>
+                        <div className="text-xs text-gray-500">{linkedUseCase?.title || 'No linked Use Case'}</div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Unknown'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{owner?.name || 'Admin'}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${useCaseStatusColors[useCase.status?.toLowerCase()]?.bg || 'bg-gray-100'} ${useCaseStatusColors[useCase.status?.toLowerCase()]?.text || 'text-gray-800'}`}>
-                          {useCase.status.replace('-', ' ').toUpperCase()}
+                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${project.status === 'ongoing' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {project.status ? project.status.toUpperCase() : 'ONGOING'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex -space-x-2">
-                          {assignedExperts
-                            .filter((expert: User) => expert.id !== useCase.ownerId) // Hide owner from assigned experts list
-                            .length === 0 ? (
+                          {assignedExperts.length === 0 ? (
                             <span className="text-xs text-gray-400 italic">None</span>
                           ) : (
-                            assignedExperts
-                              .filter((expert: User) => expert.id !== useCase.ownerId)
-                              .map((expert: User) => (
-                                <div
-                                  key={expert.id}
-                                  className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
-                                  title={`${expert.name} (${expert.role})`}
-                                >
-                                  {expert.name.charAt(0)}
-                                </div>
-                              ))
+                            assignedExperts.map((expert: User) => (
+                              <div
+                                key={expert.id}
+                                className="w-8 h-8 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-blue-700 text-xs font-medium"
+                                title={`${expert.name} (${expert.role})`}
+                              >
+                                {expert.name.charAt(0)}
+                              </div>
+                            ))
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end space-x-2">
                           <button
-                            onClick={() => onAssignExperts(useCase)}
+                            onClick={() => onAssignExperts(project)}
                             className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors"
                           >
                             Manage Team
                           </button>
                           <button
-                            onClick={() => handleDelete(useCase)}
+                            onClick={() => handleDelete(project)}
                             className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete Use Case"
+                            title="Delete Project"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

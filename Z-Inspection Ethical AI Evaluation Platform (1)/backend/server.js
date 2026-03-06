@@ -50,7 +50,7 @@ app.get('/api/health', (req, res) => {
 app.use(express.json({ limit: '300mb' }));
 app.use(express.urlencoded({ limit: '300mb', extended: true }));
 app.use(cors({
-  origin: '*',
+  origin: true, // Dynamically reflects request origin
   credentials: true
 }));
 
