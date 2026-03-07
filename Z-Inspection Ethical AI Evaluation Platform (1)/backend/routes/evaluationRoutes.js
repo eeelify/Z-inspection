@@ -174,7 +174,7 @@ router.get('/questions', async (req, res) => {
 
     // Return ALL questions for the questionnaire (no role filtering, no cache to avoid stale data)
     const questions = await Question.find(query)
-      .select('code principle text answerType options scoring required order')
+      .select('code principle principleLabel text answerType options scoring required order description appliesToRoles') // Added mostly useful fields for UI
       .sort({ order: 1 })
       .lean()
       .maxTimeMS(5000); // 5 second timeout for query
@@ -182,6 +182,104 @@ router.get('/questions', async (req, res) => {
     console.log(`📡 Returning ${questions.length} questions for ${questionnaireKey}. Codes: ${questions.map(q => q.code).join(', ')}`);
 
     res.json(questions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Add a new question to a questionnaire
+ * POST /api/evaluations/questions
+ */
+router.post('/questions', async (req, res) => {
+  try {
+    const questionData = req.body;
+
+    // Auto increment order if not provided
+    if (questionData.order === undefined || questionData.order === null) {
+      const highestOrderQ = await Question.findOne({ questionnaireKey: questionData.questionnaireKey })
+        .sort({ order: -1 })
+        .select('order');
+      questionData.order = highestOrderQ ? highestOrderQ.order + 1 : 1;
+    }
+
+    const newQuestion = new Question(questionData);
+    await newQuestion.save();
+
+    // Clear cache
+    const keysToDelete = [];
+    for (const key of questionsCache.keys()) {
+      if (key.startsWith(`${questionData.questionnaireKey}-`)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach(key => questionsCache.delete(key));
+
+    res.status(201).json(newQuestion);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'A question with this code already exists in the selected questionnaire.' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Update an existing question
+ * PUT /api/evaluations/questions/:id
+ */
+router.put('/questions/:id', async (req, res) => {
+  try {
+    const updatedQuestion = await Question.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedQuestion) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+
+    // Clear cache
+    const keysToDelete = [];
+    for (const key of questionsCache.keys()) {
+      if (key.startsWith(`${updatedQuestion.questionnaireKey}-`)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach(key => questionsCache.delete(key));
+
+    res.json(updatedQuestion);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'A question with this code already exists in the selected questionnaire.' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Delete a question
+ * DELETE /api/evaluations/questions/:id
+ */
+router.delete('/questions/:id', async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+
+    await Question.findByIdAndDelete(req.params.id);
+
+    // Clear cache
+    const keysToDelete = [];
+    for (const key of questionsCache.keys()) {
+      if (key.startsWith(`${question.questionnaireKey}-`)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach(key => questionsCache.delete(key));
+
+    res.json({ message: 'Question deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

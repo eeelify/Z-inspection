@@ -17,7 +17,8 @@ const QuestionSchema = new mongoose.Schema({
     index: true
   }, // e.g. "human_agency_oversight" - Machine stable key
   principleLabel: {
-    en: { type: String, required: true }
+    en: { type: String, required: true },
+    tr: { type: String, required: false }
   }, // Localized principle names
   principle: {
     type: String,
@@ -28,7 +29,8 @@ const QuestionSchema = new mongoose.Schema({
     default: ['any']
   },
   text: {
-    en: { type: String, required: true }
+    en: { type: String, required: true },
+    tr: { type: String, required: false }
   },
   answerType: {
     type: String,
@@ -38,7 +40,8 @@ const QuestionSchema = new mongoose.Schema({
   options: [{
     key: String,
     label: {
-      en: String
+      en: String,
+      tr: String
     },
     answerScore: { // NEW: 0.0-1.0 (1=Safe, 0=Risky)
       type: Number,
@@ -86,7 +89,8 @@ const QuestionSchema = new mongoose.Schema({
   },
   tags: [String],
   description: {
-    en: String
+    en: String,
+    tr: String
   },
   createdAt: {
     type: Date,

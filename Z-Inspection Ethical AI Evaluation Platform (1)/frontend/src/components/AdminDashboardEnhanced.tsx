@@ -5,6 +5,7 @@ import { Project, User, UseCase } from '../types';
 import { fetchUserProgress } from '../utils/userProgress';
 import { ChatPanel } from './ChatPanel';
 import { ProfileModal } from './ProfileModal';
+import { ExpertQuestionManager } from './ExpertQuestionManager';
 import { api } from '../api';
 
 interface AdminDashboardEnhancedProps {
@@ -171,8 +172,8 @@ export function AdminDashboardEnhanced({
   onLogout,
   onUpdateUser
 }: AdminDashboardEnhancedProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'>(() =>
-    loadAdminDashboardTab('dashboard') as 'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports'
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports' | 'expert-questions'>(() =>
+    loadAdminDashboardTab('dashboard') as 'dashboard' | 'use-case-assignments' | 'project-creation' | 'reports' | 'chats' | 'created-reports' | 'expert-questions'
   );
 
   // Persist tab changes
@@ -621,6 +622,14 @@ export function AdminDashboardEnhanced({
             Created Reports
           </button>
           <button
+            onClick={() => setActiveTab('expert-questions')}
+            className={`w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium transition-colors ${activeTab === 'expert-questions' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+          >
+            <FileText className="h-5 w-5 mr-3 text-pink-600" />
+            Expert Questions
+          </button>
+          <button
             onClick={() => onNavigate('other-members')}
             className="w-full px-4 py-3 flex items-center rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
           >
@@ -659,6 +668,7 @@ export function AdminDashboardEnhanced({
               {activeTab === 'use-case-assignments' && 'Use Case Assignments'}
               {activeTab === 'project-creation' && 'Create Project'}
               {activeTab === 'created-reports' && 'Created Reports'}
+              {activeTab === 'expert-questions' && 'Expert Questions'}
               {activeTab === 'chats' && 'Chats'}
             </h2>
           </div>
@@ -997,6 +1007,12 @@ export function AdminDashboardEnhanced({
 
         {/* Other Tabs */}
         <div className={`flex-1 min-h-0 overflow-y-auto ${activeTab === 'chats' ? 'hidden' : ''}`}>
+          {activeTab === 'expert-questions' && (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <ExpertQuestionManager />
+            </div>
+          )}
+
           {activeTab === 'dashboard' && (
             <DashboardTab
               projects={filteredProjects}
