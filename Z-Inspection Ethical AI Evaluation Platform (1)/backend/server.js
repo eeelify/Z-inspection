@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const compression = require('compression');
@@ -4622,7 +4622,7 @@ app.post('/api/login', async (req, res) => {
       res.json(user);
     } else {
       console.log(`[login:${reqId}] invalid credentials`);
-      res.status(401).json({ message: "Geçersiz kullanıcı adı, şifre veya rol." });
+      res.status(401).json({ message: "Invalid email, password, or role." });
     }
   } catch (err) {
     if (err.message === 'Login timeout') {

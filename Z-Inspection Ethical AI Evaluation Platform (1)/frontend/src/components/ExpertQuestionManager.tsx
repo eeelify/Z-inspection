@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { Plus, Edit2, Trash2, X, RefreshCw, Save } from 'lucide-react';
 
@@ -446,16 +446,8 @@ export function ExpertQuestionManager() {
                                     ) : (
                                         <div className="space-y-3">
                                             {editingOptions.map((opt, idx) => (
-                                                <div key={idx} className="flex flex-col space-y-2 p-3 bg-gray-50 border border-gray-200 rounded-lg relative group">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeOption(idx)}
-                                                        className="absolute top-2 right-2 text-gray-400 hover:text-red-600 transition-colors"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-
-                                                    <div className="grid grid-cols-12 gap-3 pr-6">
+                                                <div key={idx} className="flex items-end gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg group">
+                                                    <div className="grid grid-cols-12 gap-3 flex-1">
                                                         <div className="col-span-3">
                                                             <label className="block text-xs text-gray-500 mb-1">Option Key</label>
                                                             <input
@@ -492,6 +484,14 @@ export function ExpertQuestionManager() {
                                                             />
                                                         </div>
                                                     </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeOption(idx)}
+                                                        className="shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors mb-0.5"
+                                                        title="Remove option"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
